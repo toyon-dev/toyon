@@ -281,3 +281,33 @@ export const WS_CLOSE_UNAUTHORIZED = 4401;
 
 /** why the shell could not reach the daemon, decided from the close code and a /health probe */
 export type ConnectFailure = "unauthorized" | "blocked" | "down";
+
+/** `toyon send` from a terminal: the message the composer would send, from the row the
+ * terminal's directory is (POST /send). What the CLI posts and what the daemon answers. */
+export interface SendRequest {
+  /** the terminal's directory */
+  path: string;
+  text: string;
+  /** who was at the keyboard, when the terminal's environment named an agent */
+  by?: string;
+  /** move main's uncommitted changes into the worktree started for it */
+  carry?: boolean;
+}
+
+export interface SendReply {
+  /** `worktree`: a row started or taken over with the message as its first; `sent`: into the
+   * chat of a row Toyon already ran */
+  kind: "worktree" | "sent";
+  worktreeId: string;
+  title: string;
+  /** whether a shell up now selected the row; the terminal opens one otherwise */
+  delivered: boolean;
+  /** main's uncommitted files left where they were, when a worktree was started without carry */
+  stayed?: number;
+  /** the message reached the row, but something beside it did not go as asked: a carry that
+   * stayed on main; said in the terminal after the row's line */
+  notice?: string;
+}
+
+/** who may be named as at the keyboard: a short label, never prose */
+export const SENT_BY_MAX_CHARS = 64;

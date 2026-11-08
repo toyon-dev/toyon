@@ -233,6 +233,7 @@ function make() {
     turns,
     files,
     opens,
+    outside: { send: async () => ({ kind: "sent", worktreeId: "", title: "", delivered: false }) },
     design,
     routes,
     runtime,

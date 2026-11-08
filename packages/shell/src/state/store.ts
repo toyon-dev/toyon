@@ -1647,7 +1647,9 @@ export const isSubPicker = (o: Overlay) =>
  * dispatch (main.tsx) */
 export type StoreServerMsg = Exclude<
   ServerMsg,
-  TermServerMsg | FileServerMsg | { t: "open-path" | "open-loose" | "open-clone" | "open-refused" | "loose-written" }
+  | TermServerMsg
+  | FileServerMsg
+  | { t: "open-path" | "open-loose" | "open-clone" | "open-worktree" | "open-refused" | "loose-written" }
 >;
 
 export type Action =

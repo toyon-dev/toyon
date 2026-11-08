@@ -121,6 +121,31 @@ describe("parseArgs", () => {
   });
 });
 
+describe("parseArgs send", () => {
+  test("takes the message as one text, from a file, or from stdin when neither is given", () => {
+    expect(parseArgs(["send", "fix the flaky test"])).toEqual({
+      kind: "send",
+      text: "fix the flaky test",
+      file: null,
+      carry: false,
+    });
+    expect(parseArgs(["send", "--file", "brief.md"])).toEqual({
+      kind: "send",
+      text: null,
+      file: "brief.md",
+      carry: false,
+    });
+    expect(parseArgs(["send", "-f", "brief.md", "--carry"])).toMatchObject({ file: "brief.md", carry: true });
+    expect(parseArgs(["send"])).toEqual({ kind: "send", text: null, file: null, carry: false });
+  });
+  test("two texts, a text with a file, a file with no path, or an unknown option are errors", () => {
+    expect(parseArgs(["send", "one", "two"]).kind).toBe("error");
+    expect(parseArgs(["send", "one", "--file", "b.md"]).kind).toBe("error");
+    expect(parseArgs(["send", "--file"]).kind).toBe("error");
+    expect(parseArgs(["send", "--now", "x"]).kind).toBe("error");
+  });
+});
+
 describe("parseArgs uninstall", () => {
   test("asks unless told yes, and takes nothing else", () => {
     expect(parseArgs(["uninstall"])).toEqual({ kind: "uninstall", yes: false });

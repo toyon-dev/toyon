@@ -9,6 +9,7 @@ import {
   type FrameSource,
   frameAuthority,
   isLoopbackHost,
+  MESSAGE_MAX_CHARS,
   machineLabel,
   OFFLINE_SLOTS,
   type PreviewGrantMint,
@@ -16,6 +17,9 @@ import {
   RESTART_NOW,
   type Remote,
   type RestartWait,
+  SENT_BY_MAX_CHARS,
+  type SendReply,
+  type SendRequest,
   type Stamps,
   type TailscaleReadiness,
 } from "@toyon/shared";
@@ -119,6 +123,9 @@ export interface HttpOpts {
   /** a git URL from outside the shell (`toyon <url>`): the new-project view opens with it, to
    * clone into `parent`; a `UserError` is the person's to read */
   clone: (url: string, parent: string) => Promise<{ delivered: boolean }>;
+  /** a message from outside the shell (`toyon send`), for the row the terminal's directory is;
+   * a `UserError` is the person's to read */
+  send: (req: SendRequest) => Promise<SendReply>;
   /** ask for a restart; answers a refusal, or null having restarted or queued behind a reply.
    * `now` does not queue. */
   restart: (now: boolean) => Promise<string | null>;
@@ -139,6 +146,25 @@ export interface HttpOpts {
   /** the release notes shipped with this Toyon, read off disk each time so an install under the
    * running daemon is what the page gets; null when this copy carries none */
   changelog: () => Promise<string | null>;
+}
+
+/** the most a `/send` body may carry: a chat message's bound in characters, with room for the
+ * path and the JSON around it, and for a character that is more than one byte */
+const SEND_MAX_BYTES = MESSAGE_MAX_CHARS * 4 + 4 * 1024;
+
+/** A request body read no further than `max` bytes: null past it. Content-Length says nothing
+ * for a chunked body, so the stream is counted as it comes, the way an upload is. */
+async function readBounded(req: Request, max: number): Promise<string | null> {
+  if (Number(req.headers.get("content-length") ?? 0) > max) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (!req.body) return "";
+  for await (const chunk of req.body as unknown as AsyncIterable<Uint8Array>) {
+    size += chunk.byteLength;
+    if (size > max) return null;
+    chunks.push(chunk);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 /** a year, and never revalidate: for a name that cannot mean different bytes later */
@@ -408,6 +434,42 @@ export function createFetch(opts: HttpOpts) {
         if (e instanceof UserError) return new Response(e.message, { status: 400 });
         log.error("http", "clone failed", e);
         return new Response("clone failed; see daemon log", { status: 500 });
+      }
+    }
+
+    // CLI: a message for the row the terminal's directory is. Bounded as a chat message is, while
+    // the body is read, since a terminal can pipe anything in; `by` is a label the context
+    // paragraph vouches for, so it is held to a label's length.
+    if (url.pathname === "/send" && req.method === "POST") {
+      if (!authed(req)) return unauthorized();
+      const raw = await readBounded(req, SEND_MAX_BYTES).catch(() => "");
+      if (raw === null) return new Response("the message is too long", { status: 413 });
+      let body: { path?: string; text?: string; by?: string; carry?: boolean } = {};
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        // not JSON: the empty body is refused below as a missing path
+      }
+      if (!body.path || typeof body.text !== "string" || !body.text.trim()) {
+        return new Response("missing path or text", { status: 400 });
+      }
+      if (body.text.length > MESSAGE_MAX_CHARS) return new Response("the message is too long", { status: 413 });
+      if (body.by !== undefined && (typeof body.by !== "string" || body.by.length > SENT_BY_MAX_CHARS)) {
+        return new Response("by is a short label", { status: 400 });
+      }
+      try {
+        return Response.json(
+          await opts.send({
+            path: body.path,
+            text: body.text,
+            ...(body.by ? { by: body.by } : {}),
+            ...(body.carry === true ? { carry: true } : {}),
+          }),
+        );
+      } catch (e) {
+        if (e instanceof UserError) return new Response(e.message, { status: 400 });
+        log.error("http", "send failed", e);
+        return new Response("send failed; see daemon log", { status: 500 });
       }
     }
 

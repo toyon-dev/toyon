@@ -17,6 +17,7 @@ import { openCard } from "../surfaces/chat/cards.ts";
 import { openHandoff } from "../surfaces/chat/handoff.ts";
 import { addToChat, attachPick } from "./attach.ts";
 import { createStore } from "./context.tsx";
+import { openFromOutside } from "./openOutside.ts";
 import { outBoxId, outBoxOf, readyToGo } from "./outbox.ts";
 import { isUploading, settledInputs, toInput } from "./pending.ts";
 import { snapshotOf } from "./snapshot.ts";
@@ -4736,5 +4737,16 @@ describe("a picture the reply names", () => {
       }),
     ]);
     expect(s.local.a?.chat[0]).toMatchObject({ kind: "assistant", pictures: [{ file: "ab12.png" }] });
+  });
+});
+
+describe("a row told of from outside", () => {
+  test("`toyon send` selects the row it made or reached; a row this tab does not list is left alone", () => {
+    const store = createStore(run([hello(wt("main", "main"), wt("a"), wt("b"))]));
+    store.dispatch({ a: "activate", id: "a" });
+    openFromOutside(store, null, { t: "open-worktree", worktreeId: "b" });
+    expect(store.getState().activeId).toBe("b");
+    openFromOutside(store, null, { t: "open-worktree", worktreeId: "nope" });
+    expect(store.getState().activeId).toBe("b");
   });
 });

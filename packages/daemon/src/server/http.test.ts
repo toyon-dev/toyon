@@ -44,6 +44,8 @@ const shot = async (name = "shot.png") => ({
 });
 afterAll(() => rmSync(attachmentsDir, { recursive: true, force: true }));
 const learnedOrigins: (string | null)[] = [];
+/** what `/send` passed on, as the route shaped it */
+const sends: unknown[] = [];
 /** what the daemon answers a restart with: a refusal, or null having taken it */
 let restartRefusal: string | null = null;
 let restartsAsked = 0;
@@ -106,6 +108,11 @@ const opts: HttpOpts = {
   clone: async (url, parent) => {
     if (url === "nope") throw new UserError("nope is not a git URL");
     return { delivered: parent === "/shown" };
+  },
+  send: async (req) => {
+    if (req.path === "/nowhere") throw new UserError("/nowhere is not inside a git repository");
+    sends.push(req);
+    return { kind: "worktree", worktreeId: "w9", title: "Fix the thing", delivered: req.path === "/shown" };
   },
   restart: async (now) => {
     restartsAsked++;
@@ -975,6 +982,65 @@ describe("/clone", () => {
   });
 });
 
+describe("/send", () => {
+  const post = (body: unknown, auth = "Bearer secret") =>
+    req("/send", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
+  test("needs the bearer token, a path and a message with words in it", async () => {
+    expect((await fetch(post({ path: "/p", text: "hi" }, "Bearer nope"), srv()))?.status).toBe(401);
+    expect((await fetch(post({ text: "hi" }), srv()))?.status).toBe(400);
+    expect((await fetch(post({ path: "/p" }), srv()))?.status).toBe(400);
+    expect((await fetch(post({ path: "/p", text: "   " }), srv()))?.status).toBe(400);
+  });
+  test("a refusal is 400 in the daemon's words; the reply names the row and whether a shell has it", async () => {
+    const bad = await fetch(post({ path: "/nowhere", text: "hi" }), srv());
+    expect(bad?.status).toBe(400);
+    expect(await bad?.text()).toBe("/nowhere is not inside a git repository");
+    sends.length = 0;
+    const reply = await (
+      await fetch(post({ path: "/shown", text: "hi", by: "Claude Code", carry: true }), srv())
+    )?.json();
+    expect(reply).toEqual({ kind: "worktree", worktreeId: "w9", title: "Fix the thing", delivered: true });
+    expect(sends).toEqual([{ path: "/shown", text: "hi", by: "Claude Code", carry: true }]);
+    // an empty by and a carry that is not true are not passed on
+    await fetch(post({ path: "/p", text: "hi", by: "", carry: "yes" }), srv());
+    expect(sends.at(-1)).toEqual({ path: "/p", text: "hi" });
+  });
+  test("a body past the chat message's bound is refused, with or without a content-length to say so", async () => {
+    const headed = await fetch(
+      req("/send", {
+        method: "POST",
+        body: JSON.stringify({ path: "/p", text: "x" }),
+        headers: { authorization: "Bearer secret", "content-length": String(2_000_000) },
+      }),
+      srv(),
+    );
+    expect(headed?.status).toBe(413);
+    // streamed in with no length: counted as it arrives
+    const big = JSON.stringify({ path: "/p", text: "y".repeat(900_000) });
+    const chunked = await fetch(
+      new Request("http://127.0.0.1/send", {
+        method: "POST",
+        body: new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode(big));
+            c.close();
+          },
+        }),
+        headers: { authorization: "Bearer secret", host: "127.0.0.1" },
+        // @ts-expect-error bun takes the standard option for a streamed body
+        duplex: "half",
+      }),
+      srv(),
+    );
+    expect(chunked?.status).toBe(413);
+    // under the byte bound but over the chat's character bound
+    const long = await fetch(post({ path: "/p", text: "z".repeat(200_001) }), srv());
+    expect(long?.status).toBe(413);
+    // a label, not prose
+    expect((await fetch(post({ path: "/p", text: "hi", by: "x".repeat(65) }), srv()))?.status).toBe(400);
+  });
+});
+
 describe("/register", () => {
   const post = (body: unknown, auth = "Bearer secret") =>
     req("/register", { method: "POST", body: JSON.stringify(body), headers: { authorization: auth } });
@@ -1237,6 +1303,7 @@ describe("static shell", () => {
     looseFile: () => null,
     open: opts.open,
     clone: opts.clone,
+    send: opts.send,
     branded: () => false,
     noteShellOrigin: () => {},
     remote: () => null,

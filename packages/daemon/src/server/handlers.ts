@@ -40,6 +40,7 @@ import type { ChatSearch } from "../worktrees/chats.ts";
 import type { FixService } from "../worktrees/fix.ts";
 import type { HandoffService } from "../worktrees/handoff.ts";
 import type { LandingService } from "../worktrees/landing.ts";
+import type { OutsideSend } from "../worktrees/outside.ts";
 import type { PrService } from "../worktrees/prs.ts";
 import type { RefSearch } from "../worktrees/refs.ts";
 import type { WorktreeService } from "../worktrees/service.ts";
@@ -58,6 +59,8 @@ export interface Services {
   files: FileService;
   /** files opened from outside the shell: the grants on files in no worktree, and their saves */
   opens: Pick<OpenService, "open" | "clone" | "file" | "where" | "viewable" | "write" | "takePending" | "delivered">;
+  /** a message sent from a terminal (`toyon send`), for the row its directory is */
+  outside: Pick<OutsideSend, "send">;
   /** the worktree's own design system, scanned from its source */
   design: DesignService;
   /** the route bar's list: which preview pages each repo is used on */
@@ -984,18 +987,20 @@ function looseCwd(s: Services, id: string, stream: string): string | null {
 export const openedFrame = (o: OpenedOutside): ServerMsg =>
   o.kind === "file"
     ? { t: "open-path", worktreeId: o.worktreeId, path: o.path }
-    : o.kind === "clone"
-      ? { t: "open-clone", url: o.url, name: o.name, parent: o.parent, ...(o.branch ? { branch: o.branch } : {}) }
-      : {
-          t: "open-loose",
-          id: o.id,
-          name: o.name,
-          path: o.path,
-          text: o.text,
-          binary: o.binary,
-          tooLarge: o.tooLarge,
-          version: o.version,
-        };
+    : o.kind === "worktree"
+      ? { t: "open-worktree", worktreeId: o.worktreeId }
+      : o.kind === "clone"
+        ? { t: "open-clone", url: o.url, name: o.name, parent: o.parent, ...(o.branch ? { branch: o.branch } : {}) }
+        : {
+            t: "open-loose",
+            id: o.id,
+            name: o.name,
+            path: o.path,
+            text: o.text,
+            binary: o.binary,
+            tooLarge: o.tooLarge,
+            version: o.version,
+          };
 
 export async function dispatch(msg: ClientMsg, ctx: HandlerCtx, s: Services): Promise<void> {
   const h = handlers[msg.t] as Handler<typeof msg.t>;

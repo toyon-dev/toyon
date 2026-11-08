@@ -16,7 +16,7 @@ import type { FileServerMsg, ServerMsg, TermServerMsg } from "./ws.ts";
  * an unknown `t` there is a zod failure the person reads as a wall of discriminator values. The
  * same goes for a new required field on an existing kind.
  */
-export const PROTOCOL_VERSION = 146;
+export const PROTOCOL_VERSION = 147;
 
 /** the most of a page's error the shell forwards: the message and where it was thrown, not a
  * stack, which the agent reads off the source anyway */
@@ -28,6 +28,9 @@ export const PAGE_TITLE_MAX_CHARS = 1000;
  * fewer). A larger one opens read-only with nothing in it, and a save of more is refused before any
  * handler runs, so the shell never sends one: that refusal could not say which write it was. */
 export const FILE_MAX_CHARS = 5_000_000;
+
+/** the most a chat message carries in characters, typed into a box or sent from a terminal */
+export const MESSAGE_MAX_CHARS = 200_000;
 
 /** image formats the models accept; the shell re-encodes anything else (and anything too large) */
 export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;

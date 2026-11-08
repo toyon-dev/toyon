@@ -25,6 +25,7 @@ import {
   sandboxAdvice,
   userNamespacesRestricted,
 } from "./sandboxDeps.ts";
+import { send } from "./send.ts";
 import { stop } from "./stop.ts";
 import { uninstall } from "./uninstall.ts";
 import { update } from "./update.ts";
@@ -138,6 +139,8 @@ async function run(cmd: Command): Promise<number> {
       return remote(cmd);
     case "pair":
       return pair();
+    case "send":
+      return send(cmd);
     case "deploy":
       return deploy(cmd);
     case "open":

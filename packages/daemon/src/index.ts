@@ -85,6 +85,7 @@ import { FixService } from "./worktrees/fix.ts";
 import { HandoffService } from "./worktrees/handoff.ts";
 import { LandingService } from "./worktrees/landing.ts";
 import { WorktreeLookup } from "./worktrees/lookup.ts";
+import { OutsideSend } from "./worktrees/outside.ts";
 import { OwnTool } from "./worktrees/own.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
@@ -380,6 +381,19 @@ const opens = new OpenService({
   found: () => worktrees.discovered(),
   refused: refusedPaths,
 });
+// the door for a message from outside the shell: `toyon send` in a terminal
+const outside = new OutsideSend({
+  state,
+  register: (path) => repos.register(path),
+  worktrees: {
+    create: (repoId, prompt, opts) => worktrees.create(repoId, prompt, opts),
+    adopt: (id, createdBy, message) => worktrees.adopt(id, createdBy, message),
+    send: (id, msg) => worktrees.send(id, msg),
+    discovered: () => worktrees.discovered(),
+    invalidateDiscovered: () => worktrees.invalidateDiscovered(),
+  },
+  tell: (opened) => opens.tell(opened),
+});
 // rendered pages on an origin of their own: the tickets, and the listener that answers them
 const frameTickets = new FrameTickets({
   worktreeRoot: (id) => worktrees.readable(id)?.path ?? null,
@@ -541,6 +555,7 @@ const {
     turns,
     files,
     opens,
+    outside,
     design,
     routes,
     runtime,

@@ -299,6 +299,15 @@ export function handoffActedPrompt(
   return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
 }
 
+/** What rides behind a message sent with `toyon send` from a terminal: where the person was
+ * standing, and that an agent was at the keyboard when the terminal said so, since text an agent
+ * wrote is read as a task description rather than the person's own word. The directory is named
+ * so the agent can tell whether it is this worktree, the project's main checkout, or elsewhere. */
+export function sentFromLine(path: string, by?: string): string {
+  const who = by ? `, where ${by} was working` : "";
+  return `This message was sent from a terminal in ${path} with \`toyon send\`${who}.`;
+}
+
 /** The first message of a worktree born with a plan another agent wrote: a piece of the work
  * planned in a worktree of this project (`piece`) or work handed to this project from another
  * one (`project`), approved by the person. It points the agent at the plan rather than repeating

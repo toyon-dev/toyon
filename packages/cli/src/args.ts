@@ -21,6 +21,9 @@ export type Command =
    * `tailscale`: take the name from Tailscale and set up tailscale serve for it */
   | { kind: "remote"; to: string | null; ports: boolean; tailscale: boolean }
   | { kind: "pair" }
+  /** a message for the row the current directory is: the text, a file's, or stdin's when both
+   * are null; `carry` moves main's uncommitted changes into the worktree started for it */
+  | { kind: "send"; text: string | null; file: string | null; carry: boolean }
   | {
       kind: "deploy";
       provider: "fly";
@@ -45,6 +48,7 @@ const VERBS = new Set([
   "uninstall",
   "remote",
   "pair",
+  "send",
   "deploy",
   "help",
 ]);
@@ -101,6 +105,8 @@ export function parseArgs(argv: string[]): Command {
         }
         return { kind: "remote", to, ports, tailscale };
       }
+      case "send":
+        return parseSend(rest);
       case "deploy":
         return parseDeploy(rest);
     }
@@ -128,6 +134,26 @@ function parseLogs(rest: string[]): Command {
     } else return { kind: "error", message: `unknown option ${a}` };
   }
   return { kind: "logs", follow, lines };
+}
+
+function parseSend(rest: string[]): Command {
+  let text: string | null = null;
+  let file: string | null = null;
+  let carry = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (a === "--file" || a === "-f") {
+      const value = rest[++i];
+      if (!value) return { kind: "error", message: `${a} needs a path` };
+      file = value;
+    } else if (a === "--carry") carry = true;
+    else if (a.startsWith("-")) return { kind: "error", message: `unknown option ${a}` };
+    else if (text !== null) return { kind: "error", message: "toyon send takes one message; quote it" };
+    else text = a;
+  }
+  if (text !== null && file !== null)
+    return { kind: "error", message: "toyon send takes the message as text or from --file, not both" };
+  return { kind: "send", text, file, carry };
 }
 
 /** what Fly accepts as an app name, which is also the machine's public name under fly.dev */
@@ -176,6 +202,10 @@ usage
   toyon <git url>         open the shell with that repository ready to clone into the current
                           directory; a page on GitHub, GitLab or Codeberg is read back to its
                           repository, and to its branch
+  toyon send [text]       send a message to Toyon about the current directory: a new worktree
+                          of its project, a take-over of a worktree Toyon does not run, or the
+                          chat of one it does; the text, --file <path>, or stdin
+    --carry               move main's uncommitted changes into the worktree started for it
   toyon start             start the daemon if it is not running, and open nothing
   toyon stop              stop the daemon and every dev server and agent it runs
   toyon restart           stop the daemon and start it again from what is installed now; every

@@ -213,6 +213,8 @@ export interface ReadableWorktree {
 export interface RestoreMessage {
   text: string;
   attachments?: AttachmentInput[];
+  /** paragraphs Toyon attaches behind the text, out of the transcript */
+  context?: string[];
 }
 
 export interface CreateOpts {
@@ -1655,7 +1657,12 @@ export class WorktreeService {
     const live = running ? await running : this.d.state.worktree(archiveId);
     if (live) {
       if (message)
-        await this.send(live.id, { text: message.text, clientId: createdBy, attachments: message.attachments });
+        await this.send(live.id, {
+          text: message.text,
+          clientId: createdBy,
+          attachments: message.attachments,
+          context: message.context,
+        });
       return live;
     }
     const done = this.bringBack(archiveId, createdBy, message).finally(() => this.restoring.delete(archiveId));
@@ -1793,7 +1800,7 @@ export class WorktreeService {
     this.d.state.addWorktree(wt);
     const rt = this.d.runtime.ensureAgent(wt);
     const release = rt.agent.hold();
-    if (message) rt.agent.send(message.text, { attachments: message.attachments });
+    if (message) rt.agent.send(message.text, { attachments: message.attachments, context: message.context });
     return { rt, release };
   }
 
@@ -3311,7 +3318,11 @@ export class WorktreeService {
   ): Promise<void> {
     await this.archivingNow(worktreeId);
     if (!this.d.state.worktree(worktreeId) && this.hasArchived(worktreeId)) {
-      await this.restore(worktreeId, msg.clientId, { text: msg.text, attachments: msg.attachments });
+      await this.restore(worktreeId, msg.clientId, {
+        text: msg.text,
+        attachments: msg.attachments,
+        context: msg.context,
+      });
       return;
     }
     const wt = this.requireRun(worktreeId);

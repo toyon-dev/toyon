@@ -463,6 +463,7 @@ export function startServer(opts: ServerOpts): { server: Server<WsData>; branded
       manifestGround: () => s.themes.current().colors.surface1,
       open: (path) => s.opens.open(path),
       clone: (url, parent) => s.opens.clone(url, parent),
+      send: (req) => s.outside.send(req),
       restart: (now) => s.restarter.request({ now }),
       restartWait: () => ({ waiting: s.restarter.waitingOn(), asking: s.restarter.asking() }),
       grants: opts.grants,

@@ -42,8 +42,11 @@ export type OpenedFile = Exclude<Opened, { kind: "repo" }>;
  * filled in, to clone into `parent` on return. `branch` when the URL was a page on one. */
 export type OpenClone = { kind: "clone"; url: string; name: string; branch?: string; parent: string };
 
+/** a row a message from outside (`toyon send`) made or reached: the shell selects it */
+export type OpenRow = { kind: "worktree"; worktreeId: string };
+
 /** everything an open from outside tells a shell to show */
-export type OpenedOutside = OpenedFile | OpenClone;
+export type OpenedOutside = OpenedFile | OpenClone | OpenRow;
 
 /** the answer to an open from outside: what the path became, and whether a shell connected now
  * is showing it already. The launcher that asked opens a window only when none is, rather than
@@ -96,7 +99,7 @@ export class OpenService {
       return { kind: "repo", repoId: (await this.d.register(path)).id, delivered: false };
     }
     const opened = await this.openFile(raw, path, st);
-    return { ...opened, delivered: this.announce(opened) };
+    return { ...opened, delivered: this.tell(opened) };
   }
 
   /** A git URL from outside (`toyon <git url>`): nothing is cloned here. The shell opens on the
@@ -111,7 +114,7 @@ export class OpenService {
       const plan = planProject({ parent, name: src.name });
       const opened: OpenClone = { kind: "clone", url: src.url, name: src.name, parent: plan.parent };
       if (src.branch) opened.branch = src.branch;
-      return { delivered: this.announce(opened) };
+      return { delivered: this.tell(opened) };
     } catch (e) {
       if (e instanceof UserError) this.d.hub.emit("openRefused", e.message);
       throw e;
@@ -119,7 +122,7 @@ export class OpenService {
   }
 
   /** tell every shell up, or hold it for the next one; whether a shell has it now */
-  private announce(opened: OpenedOutside): boolean {
+  tell(opened: OpenedOutside): boolean {
     const entry = { opened, at: this.now() };
     this.pending.push(entry);
     // the socket server answers the emit in the same tick: with a shell up it broadcasts the open

@@ -16,6 +16,7 @@ import {
   procFixPrompt,
   SYSTEM_APPEND,
   selfContext,
+  sentFromLine,
   standingContext,
   tierContext,
   worktreeContext,
@@ -148,6 +149,17 @@ describe("prompts for work in another project", () => {
     // a wait recorded without its pieces still says what to do
     expect(pieceWakePrompt([{ title: "First", branch: "toyon/first", pieces: [] }])).toContain(
       'your own piece waited for, "First" (toyon/first), has landed on this project\'s main. Do the piece that waited here now, and only that.',
+    );
+  });
+});
+
+describe("sentFromLine", () => {
+  test("names the terminal's directory, and the agent at the keyboard when the terminal said so", () => {
+    expect(sentFromLine("/Users/k/app")).toBe(
+      "This message was sent from a terminal in /Users/k/app with `toyon send`.",
+    );
+    expect(sentFromLine("/Users/k/app", "Claude Code")).toBe(
+      "This message was sent from a terminal in /Users/k/app with `toyon send`, where Claude Code was working.",
     );
   });
 });

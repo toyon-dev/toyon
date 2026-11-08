@@ -50,6 +50,7 @@ import {
   IMAGE_MAX_BYTES,
   IMAGE_MAX_EDGE,
   IMAGE_MIME_TYPES,
+  MESSAGE_MAX_CHARS,
   PAGE_ERROR_MAX_CHARS,
   PAGE_TITLE_MAX_CHARS,
   PASTE_MAX_CHARS,
@@ -296,6 +297,9 @@ export type ServerMsg =
   /** a git URL from outside the shell (`toyon <url>`): the new-project view opens with the
    * repository filled in, to clone into `parent` on return; `branch` when the URL was a page on one */
   | { t: "open-clone"; url: string; name: string; branch?: string; parent: string }
+  /** a row a message from outside the shell (`toyon send`) made or reached: the rail selects it,
+   * as the tab that typed into the box would have */
+  | { t: "open-worktree"; worktreeId: string }
   /** the answer to an open-by-path the daemon could not do, read at the link that asked */
   | { t: "open-refused"; seq: number; message: string }
   /** the answer to write-loose, exactly one per write, as file-written answers a write-file */
@@ -378,7 +382,7 @@ const sha = z.string().regex(/^[0-9a-f]{4,40}$/);
 /** a request the shell pairs with its answer, which echoes it */
 const seq = z.number().int().min(0);
 /** a chat message */
-const prose = z.string().max(200_000);
+const prose = z.string().max(MESSAGE_MAX_CHARS);
 /** what rides behind a message out of the transcript, paragraph by paragraph: the page under the
  * user's eyes, what they ran, a new project's brief. The daemon adds its own and wraps them into
  * one block, so nothing here carries a wrapper of its own. */

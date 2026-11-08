@@ -257,6 +257,16 @@ describe("an open waiting for a shell", () => {
     expect((await opens.open(outside("b.md", "b"))).delivered).toBe(true);
     expect(opens.takePending()).toEqual([]);
   });
+
+  test("a row told of (`toyon send`) waits for a shell as a file does, and is delivered as one is", async () => {
+    const { opens, hub, emitted } = setup();
+    expect(opens.tell({ kind: "worktree", worktreeId: "w1" })).toBe(false);
+    expect(opens.takePending()).toEqual([{ kind: "worktree", worktreeId: "w1" }]);
+    hub.on("opened", () => opens.delivered());
+    expect(opens.tell({ kind: "worktree", worktreeId: "w2" })).toBe(true);
+    expect(opens.takePending()).toEqual([]);
+    expect(emitted.map((o) => (o.kind === "worktree" ? o.worktreeId : o.kind))).toEqual(["w1", "w2"]);
+  });
 });
 
 describe("a git URL from outside", () => {

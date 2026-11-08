@@ -7,7 +7,7 @@ import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { tierOf } from "../repos/config.ts";
 import { resolveRun } from "../runtime/run.ts";
-import { BackendShare, DEBOUNCE_MS, migrationMatch, rootMatch, touching } from "./backend.ts";
+import { BackendShare, DEBOUNCE_MS, migrationMatch, rootMatch, touched, touching, unheld } from "./backend.ts";
 
 let cleanup = () => {};
 afterEach(() => cleanup());
@@ -42,6 +42,13 @@ describe("touching", () => {
   });
   test("no paths never flips, whatever changed: the root and migration sets included", () => {
     expect(touching(["bun.lock", "migrations/2.sql", "server/x.ts", "lib/util.ts"], [])).toBeUndefined();
+  });
+  test("every touching file, in order; a hold keeps back the ones it names", () => {
+    const hits = touched(["src/App.tsx", "server/a.ts", "bun.lock", "server/b.ts"], ["server/**"]);
+    expect(hits).toEqual(["server/a.ts", "bun.lock", "server/b.ts"]);
+    expect(unheld(hits, undefined)).toEqual(hits);
+    expect(unheld(hits, { held: ["server/a.ts", "bun.lock"] })).toEqual(["server/b.ts"]);
+    expect(unheld(hits, { held: hits })).toEqual([]);
   });
 });
 
@@ -127,6 +134,23 @@ describe("BackendShare", () => {
     // nothing flips twice: the proc is its own now
     await share.check("a");
     expect(owned.length).toBe(1);
+  });
+
+  test("a hand move back to main holds on the files it was made over; a further file flips", async () => {
+    const files = ["server/index.js"];
+    const { share, hub, owned } = make(() => files, { sources: { api: { held: ["server/index.js"] } } });
+    // the signals that follow the move: the procs restarting, the agent's next tool
+    hub.emit("proc", "a", { name: "web", status: "running" } as never);
+    await Bun.sleep(DEBOUNCE_MS + 50);
+    hub.emit("agent", "a", 1, { type: "tool-end", toolId: "t" });
+    await Bun.sleep(DEBOUNCE_MS + 50);
+    expect(owned).toEqual([]);
+    // the same file edited again is still the file they moved it over
+    await share.check("a");
+    expect(owned).toEqual([]);
+    files.push("server/routes.js");
+    await share.check("a");
+    expect(owned).toEqual([["a", ["api"], { api: "server/routes.js" }]]);
   });
 
   test("a change under a sibling file of the command's folder flips it too: the folder is the proc's", async () => {

@@ -650,6 +650,30 @@ describe("the shared tier", () => {
     expect(names(a.id)).toContain("api");
   });
 
+  test("a hand move to main records the files that touch the proc, from here and from a remote; a move away drops it", async () => {
+    const repoId = await tiered([], { remotes: { stage: "https://api.stage.example.com" } });
+    const a = await w.worktrees.create(repoId, "a");
+    await settle();
+    mkdirSync(join(a.path, "server"), { recursive: true });
+    writeFileSync(join(a.path, "server/x.js"), "");
+    writeFileSync(join(a.path, "README.md"), "unrelated\n");
+    await w.worktrees.ownProcs(a.id, ["api"]);
+    expect(a.sources).toEqual({ api: { at: { by: "hand" } } });
+    await w.worktrees.setProcSource(a.id, "api", "main");
+    expect(a.sources).toEqual({ api: { held: ["server/x.js"] } });
+    expect(w.worktrees.tierStanding(a.id)?.procs[0]?.source).toBe("main");
+    // a pick of a remote ends the hold: the proc is not main's to hold
+    await w.worktrees.setProcSource(a.id, "api", { remote: "stage" });
+    await settle();
+    expect(a.sources).toEqual({ api: { at: { remote: "stage" } } });
+    await w.worktrees.setProcSource(a.id, "api", "main");
+    await settle();
+    expect(a.sources).toEqual({ api: { held: ["server/x.js"] } });
+    // the flip on a new file is the record's again, hold gone
+    await w.worktrees.ownProcs(a.id, ["api"], { by: "edit", files: { api: "server/y.js" } });
+    expect(a.sources).toEqual({ api: { at: { by: "edit", file: "server/y.js" } } });
+  });
+
   test("teardown runs a prepared proc's own steps before the repo's, and forgets what was prepared", async () => {
     const repoId = await tiered(["true"], { teardown: [`printf '%s\n' api >> "$TOYON_ROOT/TORN"`] });
     const repo = w.state.requireRepo(repoId);

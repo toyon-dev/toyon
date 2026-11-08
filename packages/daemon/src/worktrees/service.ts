@@ -139,6 +139,7 @@ import {
   WorktreeArchive,
 } from "./archive.ts";
 import { ArchivedGit } from "./archivedGit.ts";
+import { changedFiles, touched } from "./backend.ts";
 import type { ArtifactCache } from "./cache.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
@@ -1079,11 +1080,14 @@ export class WorktreeService {
   }
 
   /** one proc's entry on the record, merged; an entry with nothing left in it goes, and so does
-   * the map. `at: undefined` in the patch clears the source. */
+   * the map. `at: undefined` in the patch clears the source. A hold is main's alone: a patch that
+   * sets `at` ends it, and a later move back to main's records a new one. */
   private setSource(wt: WorktreeInfo, name: string, patch: Partial<ProcSource>) {
     const next: ProcSource = { ...wt.sources?.[name], ...patch };
     if (next.at === undefined) delete next.at;
+    else if (patch.at !== undefined) delete next.held;
     if (!next.prepared) delete next.prepared;
+    if (!next.held?.length) delete next.held;
     const sources = { ...wt.sources };
     if (Object.keys(next).length === 0) delete sources[name];
     else sources[name] = next;
@@ -1118,8 +1122,14 @@ export class WorktreeService {
       return;
     }
     if (source === "main") {
+      if (remote === undefined && !ownedBy(at)) return;
+      // the pick is made knowing the files that touch the proc as they stand, so the check does
+      // not flip it back on them; written before the procs move, since the first one coming up
+      // runs the check
+      const held = await this.touchedNow(wt, repo, name);
+      this.setSource(wt, name, { held });
       if (remote === undefined) {
-        if (ownedBy(at)) await this.shareProcs(worktreeId, [name]);
+        await this.shareProcs(worktreeId, [name]);
         return;
       }
       this.setSource(wt, name, { at: undefined });
@@ -1138,6 +1148,14 @@ export class WorktreeService {
     this.d.state.save();
     this.d.hub.emit("worktreesChanged");
     this.restartProcs(wt);
+  }
+
+  /** the worktree's changed files, committed ahead of main included, that would flip the named
+   * shared proc here now: what the check reads, read the same way */
+  private async touchedNow(wt: WorktreeInfo, repo: RepoInfo, name: string): Promise<string[]> {
+    const tier = repo.tier?.[name];
+    if (!tier) return [];
+    return touched(await changedFiles(wt, repo, true), tier.paths);
   }
 
   /** The shared tier as it stands for one worktree, for the paragraph behind every message: each
@@ -1703,8 +1721,8 @@ export class WorktreeService {
       ...(createdBy ? { createdBy } : {}),
     };
     // teardown ran when it went: what its procs' setup had made is gone, and the setup below
-    // makes it again
-    for (const n of Object.keys(wt.sources ?? {})) this.setSource(wt, n, { prepared: undefined });
+    // makes it again. A hold on main's goes too: the files it was made over are not in view
+    for (const n of Object.keys(wt.sources ?? {})) this.setSource(wt, n, { prepared: undefined, held: undefined });
     // the chat moves out of the archive now, since the live page reads it from where a running
     // worktree keeps it; the plans wait beside the archive until there is a tree to land in
     const chat: ChatFiles = { ...this.chatFiles(old.id), plans: this.plansScratch(old.id) };

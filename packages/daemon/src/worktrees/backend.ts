@@ -6,7 +6,7 @@
 // points at a remote is never taken over, since the pick was a person's; its touched files are
 // marked instead, so the chip can say the page is not talking to them.
 
-import { baseOf, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
+import { baseOf, type ProcSource, type RepoInfo, SHELL_STREAM, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -43,17 +43,30 @@ function matcher(patterns: string[]): (path: string) => boolean {
 export const rootMatch = matcher(ROOT_PATHS);
 export const migrationMatch = matcher(MIGRATION_DIRS.flatMap((d) => [`${d}/**`, `**/${d}/**`]));
 
-/** The changed file that calls for running a shared proc here, if any. `paths` are the proc's,
- * written or inferred; deps, env, containers and migrations flip every proc that has some. A proc
- * with none has nothing of its own to rebuild, so no change flips it. */
-export function touching(files: string[], paths: string[]): string | undefined {
-  if (paths.length === 0) return undefined;
+/** The changed files that call for running a shared proc here, in the order given. `paths` are
+ * the proc's, written or inferred; deps, env, containers and migrations flip every proc that has
+ * some. A proc with none has nothing of its own to rebuild, so no change flips it. */
+export function touched(files: string[], paths: string[]): string[] {
+  if (paths.length === 0) return [];
   const own = matcher(paths);
-  return files.find((f) => rootMatch(f) || migrationMatch(f) || own(f));
+  return files.filter((f) => rootMatch(f) || migrationMatch(f) || own(f));
+}
+
+/** the first of `touched`, if any */
+export function touching(files: string[], paths: string[]): string | undefined {
+  return touched(files, paths)[0];
+}
+
+/** The touching files a person has not seen since moving the proc back to main's by hand: all of
+ * them with no hold on the record, else those outside the hold. A hold is a pick made knowing the
+ * files as they stood, so the same files flip nothing; a file newly touching does. */
+export function unheld(hits: string[], src: ProcSource | undefined): string[] {
+  const held = src?.held;
+  return held ? hits.filter((f) => !held.includes(f)) : hits;
 }
 
 /** the worktree's changed files: uncommitted, and, when asked, committed ahead of main */
-async function changedFiles(wt: WorktreeInfo, repo: RepoInfo, committed: boolean): Promise<string[]> {
+export async function changedFiles(wt: WorktreeInfo, repo: RepoInfo, committed: boolean): Promise<string[]> {
   const files = new Set((await statusFiles(wt.path)).map((f) => f.path));
   if (committed) for (const f of await committedFiles(wt.path, baseOf(repo))) files.add(f.path);
   return [...files];
@@ -165,10 +178,14 @@ export class BackendShare {
     for (const name of [...run.borrowed, ...pointed]) {
       const tier = repo.tier?.[name];
       if (!tier) continue;
-      const hit = touching(files, tier.paths);
-      if (!hit) continue;
+      const hits = touched(files, tier.paths);
+      if (hits.length === 0) continue;
       if (name in run.pointed) behind.push(name);
       else {
+        // a borrowed proc a person moved back to main's by hand stays main's on the files they
+        // moved it over; the file that flips it is one they have not seen
+        const [hit] = unheld(hits, wt.sources?.[name]);
+        if (!hit) continue;
         take.push(name);
         why[name] = hit;
       }

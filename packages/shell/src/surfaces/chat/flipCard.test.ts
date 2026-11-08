@@ -17,7 +17,7 @@ const repo: Pick<RepoInfo, "config" | "tier"> = {
       db: { cmd: "d", paths: ["db/**"] },
     },
   },
-  tier: { api: { paths: ["server/**"], declared: false }, db: { paths: ["db/**"], declared: false } },
+  tier: { api: { paths: ["server/**"] }, db: { paths: ["db/**"] } },
 };
 const info: WorktreeInfo = {
   id: "w1",

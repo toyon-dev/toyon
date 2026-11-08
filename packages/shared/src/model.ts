@@ -59,6 +59,10 @@ export interface ProcSource {
   /** the proc's own `setup` ran here: its `teardown` runs when the worktree goes, a spare's refresh
    * runs the setup again, and a re-own skips it */
   prepared?: true;
+  /** the changed files under the proc's paths when a person last moved it back to main's by hand:
+   * the pick was made knowing these, so the flip fires again only on a file outside them. Dropped
+   * when `at` is set, and when the worktree comes back from the archive. */
+  held?: string[];
 }
 
 /** a shared proc a copy reaches on main, with main's state of it; "cold" while main has not

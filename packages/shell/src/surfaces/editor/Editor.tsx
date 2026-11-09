@@ -63,7 +63,7 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
 function shellType() {
   const s = getComputedStyle(document.documentElement);
   return {
-    fontFamily: s.getPropertyValue("--face-mono").trim() || "Menlo, \"DejaVu Sans Mono\", monospace",
+    fontFamily: s.getPropertyValue("--face-mono").trim() || 'Menlo, "DejaVu Sans Mono", monospace',
     fontSize: Number.parseFloat(s.getPropertyValue("--size-mono-sm")) || 11,
     // Monaco turns the font's contextual and ligature features off unless told otherwise, so
     // the shell's own face lost its comparison signs and its signature in the pane while the

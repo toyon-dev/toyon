@@ -47,8 +47,6 @@ export const STORAGE = {
   clipboardOffer: "toyon-clipboard-offer",
   /** "1" while the phone frame stands its dark theme on black, for an OLED panel */
   blackGround: "toyon-black",
-  /** the candidate mono face the shell is being read in (app/monoFace.ts); absent for system */
-  monoFace: "toyon-mono-face",
   /** "1" once the composer's one-time offer to install Toyon as an app was pressed or turned down */
   installOffered: "toyon-install-offered",
   /** every project's layout, keyed by repo id: {"<repo>":{changes,changesTab,chat,term,design}} */
@@ -85,7 +83,6 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.chatSide,
   STORAGE.clipboardOffer,
   STORAGE.blackGround,
-  STORAGE.monoFace,
   STORAGE.installOffered,
   STORAGE.layouts,
   STORAGE.token,
@@ -239,14 +236,15 @@ export function migrateStorage(
     }
   }
   // what a new worktree starts with (mode and profile per repo, model and effort per agent) is the
-  // daemon's memory now: what this browser kept under the old keys, scoped or not, is dead
+  // daemon's memory now, and the mono face is the shell's own with no pick to keep: what this
+  // browser kept under the old keys, scoped or not, is dead
   for (const k of keysOf(local)) {
     if (DEAD_PREFIXES.some((p) => k.startsWith(p))) remove(local, k);
   }
 }
 
-/** keys that were prefixes once, each completed by a repo or agent id, and read by nothing now */
-const DEAD_PREFIXES = ["toyon-profile-", "toyon-mode-", "toyon-model-", "toyon-effort-"];
+/** keys read by nothing now: prefixes once completed by a repo or agent id, and the mono face pick */
+const DEAD_PREFIXES = ["toyon-profile-", "toyon-mode-", "toyon-model-", "toyon-effort-", "toyon-mono-face"];
 
 function remove(store: KeyStore | null, key: string) {
   try {

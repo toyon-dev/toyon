@@ -1,6 +1,5 @@
 import { type KeepAwakeMode, resolveTheme, type ThemePrefs } from "@toyon/shared";
 import { clipboardOfferState, setClipboardOffer } from "../../app/clipboardOffer.ts";
-import { monoFaceLabel, monoFaceNow } from "../../app/monoFace.ts";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { darkNow, type State } from "../store.ts";
 import type { Deps } from "./deps.ts";
@@ -67,15 +66,6 @@ export function settingsItems(s: SettingsState, { sock, dispatch }: Deps): MenuE
         detail: appearanceLabel[prefs.mode],
         sub: true,
         onClick: () => dispatch({ a: "open", overlay: { kind: "appearance" } }),
-      },
-      // the shell read in a candidate mono face, served by the type project
-      {
-        id: "mono-face",
-        topic: "theme",
-        label: "mono face…",
-        detail: monoFaceLabel(monoFaceNow()),
-        sub: true,
-        onClick: () => dispatch({ a: "open", overlay: { kind: "mono-face" } }),
       },
     ],
     [

@@ -7,7 +7,6 @@ import {
   resolveTheme,
 } from "@toyon/shared";
 import { useEffect } from "react";
-import { monoFaceLabel, useMonoFace } from "../../app/monoFace.ts";
 import { CHECK_SETTLE_MS, versionRow } from "../../app/versionRow.ts";
 import { agentItems, notReady } from "../../state/actions/agent.ts";
 import { projectItems } from "../../state/actions/project.ts";
@@ -41,7 +40,6 @@ export function KeysHelp() {
   const themes = useStore((s) => s.themes);
   const chatSide = useStore((s) => s.chatSide);
   const keepAwake = useStore((s) => s.keepAwake);
-  const monoFace = useMonoFace();
   const dark = useDarkNow();
   const agents = useStore((s) => s.agents);
   // the worktree's project, not the rail's: a guest row's settings are its own project's
@@ -101,13 +99,6 @@ export function KeysHelp() {
             <span className="keys-d">theme</span>
             <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "theme", slot: "theme" } })}>
               {resolveTheme(prefs, themes, dark).name}
-            </Button>
-          </div>
-          {/* the shell read in a candidate mono face, served by the type project */}
-          <div className="keys-setting">
-            <span className="keys-d">mono face</span>
-            <Button variant="field" mono onClick={() => open({ a: "open", overlay: { kind: "mono-face" } })}>
-              {monoFaceLabel(monoFace)}
             </Button>
           </div>
           {/* two values, so the row is the switch: a press flips it and nothing opens */}

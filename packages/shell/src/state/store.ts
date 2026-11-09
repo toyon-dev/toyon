@@ -478,8 +478,6 @@ export type Overlay =
   | { kind: "theme"; slot: "theme" | "light" | "dark" }
   | { kind: "appearance" }
   | { kind: "keep-awake" }
-  /** the candidate mono face picker (app/monoFace.ts) */
-  | { kind: "mono-face" }
   /** default-agent picker */
   | { kind: "agent" }
   /** one agent's page in settings: who it is, the files it reads, the MCP servers it loads */
@@ -1636,7 +1634,6 @@ export const isSubPicker = (o: Overlay) =>
   o.kind === "theme" ||
   o.kind === "appearance" ||
   o.kind === "keep-awake" ||
-  o.kind === "mono-face" ||
   o.kind === "agent" ||
   o.kind === "agent-page" ||
   o.kind === "choose-folder" ||

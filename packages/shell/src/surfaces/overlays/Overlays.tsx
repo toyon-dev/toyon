@@ -11,7 +11,6 @@ import { FolderPicker } from "./FolderPicker.tsx";
 import { HandoffPicker } from "./HandoffPicker.tsx";
 import { KeepAwakePicker } from "./KeepAwakePicker.tsx";
 import { KeysHelp } from "./KeysHelp.tsx";
-import { MonoFacePicker } from "./MonoFacePicker.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import { RefPicker } from "./RefPicker.tsx";
@@ -42,7 +41,6 @@ export function Overlays() {
       {overlay?.kind === "theme" && <ThemePicker slot={overlay.slot} />}
       {overlay?.kind === "appearance" && <AppearancePicker />}
       {overlay?.kind === "keep-awake" && <KeepAwakePicker />}
-      {overlay?.kind === "mono-face" && <MonoFacePicker />}
       {overlay?.kind === "agent" && <AgentPicker />}
       {overlay?.kind === "agent-page" && <AgentPage agentId={overlay.agent} />}
       {overlay?.kind === "handoff" && <HandoffPicker worktreeId={overlay.worktreeId} />}

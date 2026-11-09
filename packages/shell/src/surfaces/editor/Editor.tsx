@@ -14,11 +14,10 @@ import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { useEffect, useRef, useState } from "react";
 import { selectedLines } from "../../app/copiedSource.ts";
-import { useMonoFaceApplied } from "../../app/monoFace.ts";
 import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
-import { passPinch, useKeepWheel, useOnChange, useWheelAxis } from "../../ui/hooks.ts";
+import { passPinch, useFontsReady, useKeepWheel, useOnChange, useWheelAxis } from "../../ui/hooks.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
@@ -755,10 +754,10 @@ export default function Editor({
     instance.current?.editor.updateOptions({ wordWrap: wrap ? "on" : "off" });
   });
 
-  // the face was switched under the token (a candidate being read): Monaco holds the
-  // family as a string and caches its glyph widths, so both are redone off the loaded face
-  const monoFaceApplied = useMonoFaceApplied();
-  useOnChange([monoFaceApplied], () => {
+  // the shell's own face has arrived: Monaco holds the family as a string and caches its glyph
+  // widths, so both are redone off the loaded face rather than the fallback it may have measured
+  const fontsReady = useFontsReady();
+  useOnChange([fontsReady], () => {
     instance.current?.editor.updateOptions({ fontFamily: shellType().fontFamily });
     monaco.editor.remeasureFonts();
   });

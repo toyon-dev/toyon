@@ -128,7 +128,6 @@ describe("buildCommands", () => {
       "theme: import a VS Code theme…",
       "theme: light or dark…",
       "theme: light slot override…",
-      "theme: mono face…",
       "theme: rescan editor themes",
       "theme…",
     ]);

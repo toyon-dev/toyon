@@ -7,11 +7,10 @@ import { type ISearchOptions, SearchAddon } from "@xterm/addon-search";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
-import { useMonoFaceApplied } from "../../app/monoFace.ts";
 import { useTerminalBus } from "../../state/context.tsx";
 import { FindBox } from "../../ui/FindBox.tsx";
 import { isFind } from "../../ui/find.ts";
-import { passPinch, useOnChange } from "../../ui/hooks.ts";
+import { passPinch, useFontsReady, useOnChange } from "../../ui/hooks.ts";
 import type { DaemonSocket } from "../../ws.ts";
 
 /** a paste arrives as one onData; the protocol caps a term-input frame at 64K */
@@ -267,11 +266,11 @@ export default function XTerm({
     };
   }, [worktreeId, stream, sock, terminalBus]);
 
-  // The face was switched under the token (a candidate being read). xterm holds the family
-  // as a string, so it is read again; a new family re-measures the cell, whose height is the face's
-  // own ascent and descent and not the one SF Mono gave, and the fit redoes cols and rows from it.
-  const monoFaceApplied = useMonoFaceApplied();
-  useOnChange([monoFaceApplied], () => {
+  // The shell's own face has arrived. xterm holds the family as a string and measured the cell
+  // when it was built, possibly off the fallback shown while the files were in flight; set again,
+  // the cell is re-measured in the face's own ascent and descent, and the fit redoes cols and rows.
+  const fontsReady = useFontsReady();
+  useOnChange([fontsReady], () => {
     const term = termRef.current;
     if (!term) return;
     term.options.fontFamily = monoFont();

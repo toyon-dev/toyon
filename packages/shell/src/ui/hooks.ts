@@ -131,6 +131,23 @@ export function useHeld<T>(value: T | undefined, ms: number): T | undefined {
   return held;
 }
 
+/** True once the faces the stylesheet asks for are in. An editor that holds its family as a string
+ * (Monaco, xterm) measures its glyphs when it is built, and built while the shell's own mono face
+ * is still in flight it measures the fallback the swap showed; it measures again when this flips. */
+export function useFontsReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    document.fonts?.ready.then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return ready;
+}
+
 /** how long a landing step runs before a shining line names it: a git call that is over inside
  * this is not a wait, and a name for it would be gone before it was read. One number for the
  * composer's line and the commit box's, so the two say the same step at the same moment. */

@@ -71,6 +71,7 @@ describe("migrateStorage", () => {
       "toyon-mode-r1": "ask",
       "toyon-model-claude": "opus",
       [`toyon-effort-claude@${HOME}`]: "high",
+      "toyon-mono-face": "menlo",
       "toyon-theme": "dark",
       "toyon-token": "secret",
       "toyon-layouts": "{}",

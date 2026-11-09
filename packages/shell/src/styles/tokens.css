@@ -11,6 +11,24 @@
    than by out-specifying it or by sitting lower in a longer file. */
 @layer tokens, base, surfaces;
 
+/* The shell's own mono face. Toyon Mono is Bitstream Vera Sans Mono by way of Hack, built by
+   rule in the toyon-mono-font repository; its two weights ship with the shell (src/fonts/, with
+   the licences beside them) and Vite fingerprints them into assets/. Regular and Bold only: a
+   request for 500 or 600 takes the nearer of the two. Declared outside the layers because an
+   @font-face is not a cascade rule; swap, so text is never invisible while the files arrive. */
+@font-face {
+  font-family: "Toyon Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/toyon-mono-regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Toyon Mono";
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/toyon-mono-bold.woff2") format("woff2");
+}
+
 @layer tokens {
   :root {
     color-scheme: dark;
@@ -199,7 +217,7 @@
    * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text" pins
    * the Text cut and defeats the switch to Display at larger sizes. */
     --face-ui: -apple-system, "Segoe UI", sans-serif;
-    --face-mono: ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    --face-mono: "Toyon Mono", ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
 
     /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
    * is a whole `font` shorthand, so family, weight, size and leading cannot be half-applied.

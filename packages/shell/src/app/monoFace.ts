@@ -1,7 +1,10 @@
 // A switch of the shell's mono face, so a candidate typeface is read in the running shell (the
-// chat's code, the editor, the terminal) rather than on a specimen page. The files come from the
-// Toyon Mono project's local server (tools/serve.py on 8765), which allows cross-origin font
-// loads; with it down a pick falls back to system. The pick is kept in this browser alone.
+// chat's code, the editor, the terminal) rather than on a specimen page. The shell's own face,
+// Toyon Mono, ships with it (styles/tokens.css) and is what "system" reads in; the candidates
+// here come from the Toyon Mono project's local server (tools/serve.py on 8765), which allows
+// cross-origin font loads, and the first of them is that project's current build, for reading a
+// change before it ships. With the server down a pick falls back to the shell's own. The pick
+// is kept in this browser alone.
 
 import { useSyncExternalStore } from "react";
 import { STORAGE } from "../state/keys.ts";
@@ -21,7 +24,7 @@ interface Face {
 const FACES: readonly Face[] = [
   {
     id: "toyon",
-    label: "Toyon Mono",
+    label: "Toyon Mono, dev build",
     files: { regular: "/fonts/toyon-mono-regular.woff2", bold: "/fonts/toyon-mono-bold.woff2" },
   },
   { id: "menlo", label: "Menlo", files: { regular: "/ref/menlo-regular.ttf", bold: "/ref/menlo-bold.ttf" } },
@@ -74,7 +77,7 @@ const FACES: readonly Face[] = [
   },
 ];
 
-/** "system" is the token's own stack, untouched */
+/** "system" is the token's own stack, untouched: Toyon Mono as shipped, then the platform's */
 export const MONO_FACE_IDS: readonly string[] = ["system", ...FACES.map((f) => f.id)];
 
 export function monoFaceLabel(id: string): string {
@@ -84,7 +87,7 @@ export function monoFaceLabel(id: string): string {
 /** what the row says under the name: where the face comes from, and in how many weights */
 export function monoFaceHint(id: string): string {
   const face = FACES.find((f) => f.id === id);
-  if (!face) return "the shell's own stack";
+  if (!face) return "Toyon Mono as shipped";
   return "variable" in face.files ? "one variable file" : "regular and bold";
 }
 
@@ -211,7 +214,12 @@ export async function setMonoFace(id: string): Promise<void> {
   set({ applied: snap.applied + 1 });
 }
 
-/** at boot: put the face this browser was reading in back on */
+/** at boot: put the face this browser was reading in back on, and once the shipped face has
+ * arrived let the editors measure again, since their first measure may have been of the
+ * fallback the swap showed while the files were in flight */
 export function restoreMonoFace(): void {
   if (snap.pick !== "system") setMonoFace(snap.pick);
+  else if (typeof document !== "undefined" && document.fonts?.ready) {
+    document.fonts.ready.then(() => set({ applied: snap.applied + 1 }));
+  }
 }

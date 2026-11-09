@@ -2,6 +2,34 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.23.0 (2026-11-10)
+
+The shell reads in Toyon Mono, a face of its own, and a worktree reaches main's servers by default instead of starting every command again.
+
+### New
+- Code, the terminal, the editor and every other mono line read in Toyon Mono, a monospaced face drawn for Toyon and shipped with the shell, so the same letters show on every machine. The face is new and still being tuned; a letter that reads wrong is worth an issue.
+- Main runs each command once, on its own working tree, and every worktree's page reaches it at its usual address. A worktree whose changes touch a command's files starts its own and the address quietly points there; one that only changes the page never pays for a server of its own. The page itself is never shared.
+- When a command flips to a worktree, a card in the chat names the command and the file that caused it and offers the other places it could run: main's, or a remote named in settings. The chip under the composer follows the choice. A command moved back to main's by hand stays there until a further file under it changes, and it shows as preparing while its setup runs.
+- `toyon send "fix the flaky test"` from a terminal inside a project sends that message into Toyon the way the chat box would: a new worktree from main, a take-over of a worktree Toyon does not run, or the chat of one it does. `--carry` brings main's uncommitted changes along, and an agent running in that terminal can run it too.
+- A handoff row opens the plan page it came from: the eye control and the row menu offer open preview, open file, reveal and copy path.
+- On a touch screen, a long press on plain transcript text selects it as the browser would. The message menu still opens on a link or a code block.
+
+### Changed
+- `"paths": []` in settings is refused; write `"from": "trunk"` alone, which means the same thing: main runs the command and no file change flips it.
+- The handoff going row lists each worktree by name as it is made, with its live dot once it exists, as the done row does. Handoff and worktrees tool rows read as a sentence, the piece titles or "the open ones and the newest archived", instead of a bare tool name.
+- Asking the agent to split off, spin off or break out part of the work, or to put it in its own worktree, starts a handoff.
+- Chat search ranks a hit that starts a word above one inside a longer word, so "rips" no longer sits level with "trips" and "strips", and the highlighted mark lands on the standalone word.
+- opt+left and opt+right step the panel tabs when the focused field is empty, as cmd+left and cmd+right do. A field with text keeps the word jump.
+- Under a picked option in your answer bubble, the option's description reads a step below the label and sits before the note you typed.
+- Skill rows have a slash icon of their own, and a web search row wears the globe from the start instead of swapping to it once the call arrives.
+
+### Fixed
+- The PR button offered create pr on a worktree whose branch already had a pull request. Toyon now finds the PR on GitHub when a turn settles and when the window returns; a merged one is taken only when its commits are in the worktree's own history, so a reused branch name cannot pull in a stranger's.
+- A landed worktree with a merged PR and uncommitted changes still said land in the composer, the rail menu and the changes tab.
+- The shine on a long running command's line was sized to the whole hidden command and flashed the entire visible line. It is now one glint of one width travelling at one speed.
+- Restoring an old worktree whose settings differed from main's crashed. Each worktree now reads its own settings file, and a config reload restarts only the rows whose command changed.
+- A row held open for a background command or a booked wakeup now keeps the machine awake and the worktree out of sleep, as a running turn does.
+
 ## 0.22.0 (2026-11-03)
 
 Your own messages and the agent's replies read the same way, with code, links and line breaks drawn as written, and the editor gains a split diff and an SVG preview.

@@ -51,6 +51,27 @@ const FACES: readonly Face[] = [
   },
   { id: "jetbrains-mono", label: "JetBrains Mono", files: { variable: "/ref/jetbrains-mono.ttf" } },
   { id: "fira-code", label: "Fira Code", files: { variable: "/ref/fira-code.ttf" } },
+  // Commit Mono ships static weights only, as OTF for Mac; the server hands the files out under
+  // their own extension, which FontFace does not care about.
+  {
+    id: "commit-mono",
+    label: "Commit Mono",
+    files: { regular: "/ref/commit-mono.otf", bold: "/ref/commit-mono-bold.otf" },
+  },
+  {
+    id: "geist-mono",
+    label: "Geist Mono",
+    files: { regular: "/ref/geist-mono.ttf", bold: "/ref/geist-mono-bold.ttf" },
+  },
+  { id: "roboto-mono", label: "Roboto Mono", files: { variable: "/ref/roboto-mono.ttf" } },
+  // Inconsolata's file carries a width axis as well; left at its default, only the weight moves.
+  { id: "inconsolata", label: "Inconsolata", files: { variable: "/ref/inconsolata.ttf" } },
+  { id: "red-hat-mono", label: "Red Hat Mono", files: { variable: "/ref/red-hat-mono.ttf" } },
+  {
+    id: "ubuntu-mono",
+    label: "Ubuntu Mono",
+    files: { regular: "/ref/ubuntu-mono.ttf", bold: "/ref/ubuntu-mono-bold.ttf" },
+  },
 ];
 
 /** "system" is the token's own stack, untouched */

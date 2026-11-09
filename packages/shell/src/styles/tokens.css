@@ -215,9 +215,13 @@
    *
    * Editor.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
    * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text" pins
-   * the Text cut and defeats the switch to Display at larger sizes. */
+   * the Text cut and defeats the switch to Display at larger sizes. The mono fallbacks are Toyon
+   * Mono's own family (Menlo is DejaVu Sans Mono with Apple's tweaks, DejaVu is Vera): the same
+   * cell and x-height, so the swap once the woff2 is in moves nothing. SF Mono shares the cell
+   * but not the x-height and reflowed every line, so it and ui-monospace, which is SF Mono on a
+   * Mac, are out. */
     --face-ui: -apple-system, "Segoe UI", sans-serif;
-    --face-mono: "Toyon Mono", ui-monospace, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+    --face-mono: "Toyon Mono", Menlo, "DejaVu Sans Mono", "Bitstream Vera Sans Mono", monospace;
 
     /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token
    * is a whole `font` shorthand, so family, weight, size and leading cannot be half-applied.

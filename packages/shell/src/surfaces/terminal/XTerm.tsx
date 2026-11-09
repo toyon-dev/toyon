@@ -72,7 +72,7 @@ const FIND_LIMIT = 1000;
 
 function monoFont(): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue("--face-mono").trim();
-  return v || "ui-monospace, Menlo, monospace";
+  return v || "Menlo, \"DejaVu Sans Mono\", monospace";
 }
 
 /* --type-mono is a `font` shorthand and xterm wants a number, so the size lives apart from it in

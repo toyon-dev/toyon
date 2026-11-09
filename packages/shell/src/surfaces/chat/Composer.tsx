@@ -1465,7 +1465,8 @@ export function Composer({
             {remarksLine.count}
           </Button>
           <span className="row-dim">
-            on PR #{prOpen.number}
+            {" on PR #"}
+            {prOpen.number}
             {remarksLine.rest}
             {prOpen.review === "changes_requested"
               ? ", changes requested"

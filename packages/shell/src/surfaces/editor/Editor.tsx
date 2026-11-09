@@ -66,6 +66,10 @@ function shellType() {
   return {
     fontFamily: s.getPropertyValue("--face-mono").trim() || "ui-monospace, monospace",
     fontSize: Number.parseFloat(s.getPropertyValue("--size-mono-sm")) || 11,
+    // Monaco turns the font's contextual and ligature features off unless told otherwise, so
+    // the shell's own face lost its comparison signs and its signature in the pane while the
+    // chat log beside it kept them; the browser's default for ordinary text is on
+    fontLigatures: true,
   };
 }
 

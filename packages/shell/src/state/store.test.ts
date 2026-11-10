@@ -29,6 +29,7 @@ import {
   bornFrom,
   changesTabShown,
   changesTabStep,
+  chatRepoOf,
   type Draft,
   type DropZone,
   type EditorDisk,
@@ -3070,6 +3071,14 @@ describe("an archived worktree's page", () => {
     expect(routeTarget(s)).toBeNull();
     // opened over a draft, it takes the draft's place
     expect(run([{ a: "open-draft" }, { a: "open-archived", id: "x" }], listed()).draft).toBeNull();
+  });
+
+  test("its chat belongs to the project that archived it, so a message there names that project's rows", () => {
+    const s = listed();
+    expect(chatRepoOf(s, "x")).toBe("r");
+    expect(chatRepoOf(s, "a")).toBe("r");
+    expect(chatRepoOf(s, "nope")).toBeUndefined();
+    expect(chatRepoOf(s, null)).toBeUndefined();
   });
 
   test("its changes panel is one list with no strip, and the kept tab is back when the page closes", () => {

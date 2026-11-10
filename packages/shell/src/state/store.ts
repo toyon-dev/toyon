@@ -1646,6 +1646,14 @@ export function viewedCurrent(s: Pick<State, "activeId" | "archivedPage">): stri
   return s.archivedPage ?? s.activeId;
 }
 
+/** The project a chat belongs to, by the id its log is kept under: a row's, or an archived
+ * worktree's, whose chat is read and written to with no row on the rail. What the chat's `@` can
+ * name is that project's other worktrees either way. */
+export function chatRepoOf(s: Pick<State, "rows" | "archived">, id: string | null | undefined): string | undefined {
+  if (!id) return undefined;
+  return (rowById(s, id) ?? archivedById(s, id))?.repoId;
+}
+
 /** the local without its mark, when the mark is of that kind */
 function withoutMark(l: WorktreeLocal, by: ChatMark["by"]): WorktreeLocal {
   if (l.mark?.by !== by) return l;

@@ -2,7 +2,7 @@ import { Fragment, type MouseEvent, useEffect, useMemo } from "react";
 import type { Deps } from "../../state/actions/deps.ts";
 import { listFiles } from "../../state/actions/file.ts";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
-import { worktreeById } from "../../state/store.ts";
+import { chatRepoOf, rowById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { openChatLink } from "./chatLink.ts";
 import { codeLink } from "./markdownGithub.ts";
@@ -61,7 +61,7 @@ export function MentionText({
   // resolves. A chat with no project resolves none.
   const rows = useStore((s) => s.visible);
   const shipping = useStore((s) => s.shipping);
-  const repoId = useStore((s) => worktreeById(s, worktreeId)?.worktree.repoId);
+  const repoId = useStore((s) => chatRepoOf(s, worktreeId));
   const archived = useStore((s) => (repoId ? s.archived[repoId] : undefined));
   const worktrees = useMemo(
     () => mentionableWorktrees(siblingWorktrees(rows, repoId, worktreeId, shipping), archived),
@@ -71,8 +71,10 @@ export function MentionText({
   const spans = useMemo(() => mentionSpans(text, index), [text, index]);
   // a reference with no list to check it against is prose until the list arrives, so the list is
   // asked for: the one cached list the @ menu and the files tab read, refreshed by whichever asks
-  // first and left alone by the rest
-  const wants = files === undefined && worktreeId && HAS_MENTION.test(text) ? worktreeId : null;
+  // first and left alone by the rest. An archived chat has no checkout to list, so nothing is
+  // asked for it.
+  const listed = useStore((s) => !!rowById(s, worktreeId));
+  const wants = files === undefined && worktreeId && listed && HAS_MENTION.test(text) ? worktreeId : null;
   useEffect(() => {
     if (wants) listFiles(wants, store.getState(), { sock, dispatch: store.dispatch });
   }, [wants, store, sock]);

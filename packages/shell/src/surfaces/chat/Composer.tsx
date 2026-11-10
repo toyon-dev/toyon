@@ -213,6 +213,7 @@ function emptyMenu(
   files: string[] | undefined,
   commandCount: number,
   source: boolean,
+  outside: boolean,
 ) {
   // an empty list means the agent has not run here yet; opening the menu starts it, so this is a
   // wait rather than a dead end. A draft whose agent has run in no worktree of the repo has nowhere
@@ -225,6 +226,8 @@ function emptyMenu(
       "no matching command"
     );
   }
+  // a chat toyon is not running has no checkout to list: the worktrees are all there is to name
+  if (outside) return "no worktree by that name; files can be named once this one runs here";
   return files ? "no matches" : <span className="live-text">listing files</span>;
 }
 
@@ -448,10 +451,16 @@ export function Composer({
   // another worktree did and offers the ones last sent to first
   const railRows = useStore((s) => s.visible);
   const shipping = useStore((s) => s.shipping);
-  const siblings = useMemo(() => siblingWorktrees(railRows, repoId, id, shipping), [railRows, repoId, id, shipping]);
+  // A chat toyon is not running names them too: its message goes to an agent of the same project
+  // once the worktree is back, and the rows it can point that agent at are the ones on the rail now.
+  const namesRepo = repoId ?? archived?.repoId ?? found?.repoId;
+  const siblings = useMemo(
+    () => siblingWorktrees(railRows, namesRepo, id, shipping),
+    [railRows, namesRepo, id, shipping],
+  );
   // the archive, which a reference written while the row was open still names, as does a paste
   // of its branch or its `wt-xxxx` directory copied from a terminal
-  const archivedRows = useStore((s) => (repoId ? s.archived[repoId] : undefined));
+  const archivedRows = useStore((s) => (namesRepo ? s.archived[namesRepo] : undefined));
   // what a `@` in the draft can name, read as the marks over the field read it (Mentions.tsx):
   // what the menu settles on, and what the send rewrites to a branch
   const siblingMentions = useMemo(() => mentionableWorktrees(siblings, archivedRows), [siblings, archivedRows]);
@@ -599,9 +608,10 @@ export function Composer({
   const listRef = useRef<HTMLDivElement>(null);
 
   // a chat toyon is not running has no session to take a command and no listing to name a file
-  // from: no menu there, and none on a project with no files yet
-  const trigger =
-    boxId && !outside && !project ? triggerAt(text, caret, (q) => siblings.some((w) => matchesSibling(q, w))) : null;
+  // from, so its menu is the `@` alone, over the project's other worktrees. None on a project
+  // with no files yet.
+  const opened = boxId && !project ? triggerAt(text, caret, (q) => siblings.some((w) => matchesSibling(q, w))) : null;
+  const trigger = outside && opened?.kind === "command" ? null : opened;
   // keyed on the query and the kind, not the trigger: triggerAt rebuilds that object on every keystroke
   const triggerKind = trigger?.kind;
   const triggerQuery = trigger?.query;
@@ -1637,7 +1647,7 @@ export function Composer({
           }
           nav={nav}
           listRef={listRef}
-          empty={emptyMenu(trigger.kind, files, commands.length, source !== null)}
+          empty={emptyMenu(trigger.kind, files, commands.length, source !== null, outside)}
           note={more > 0 ? `type to find ${more} more` : undefined}
           groupOf={(r) => (r.kind === "worktree" ? "worktrees" : r.kind === "cmd" ? "commands" : "files")}
           row={(r) => {
@@ -1817,14 +1827,14 @@ export function Composer({
               file list decides which words are references, so a sigil that names nothing shows
               nothing. Not in `!` mode, where a `@` is the shell's. Hidden from readers: the field
               already reads the text, and the links are the pointer's. */}
-          {id && shellCmd === null && text.includes("@") && (
+          {(id || outside) && shellCmd === null && text.includes("@") && (
             <div
               ref={marksRef}
               className="composer-ghost composer-marks"
               aria-hidden="true"
               onClick={(e) => openMention(e, active?.worktree.path, id, { sock, dispatch })}
             >
-              <MentionText text={text} worktreeId={id} root={active?.worktree.path} inField />
+              <MentionText text={text} worktreeId={id ?? boxId} root={active?.worktree.path} inField />
             </div>
           )}
           {/* present only while the box is empty, so typing and landing are never offered at once;

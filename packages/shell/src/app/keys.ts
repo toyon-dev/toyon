@@ -25,6 +25,8 @@ import {
   previewIdOf,
   previewReload,
   routeTarget,
+  viewedCurrent,
+  viewedReach,
 } from "../state/store.ts";
 import { viewedStep } from "../state/viewed.ts";
 import { isInstalledApp } from "../surfaces/util.ts";
@@ -175,12 +177,11 @@ export function useChords() {
           }
           case "wt-back":
           case "wt-forward": {
-            // back and forward through the rows chosen by hand, over any row since gone; the
-            // step moves the stand in the list rather than writing to it
-            const live = new Set(s.rows.map((w) => w.id));
-            const to = viewedStep(s.viewed, live, s.activeId, chord.id === "wt-forward" ? 1 : -1);
+            // back and forward through the rows and archived pages chosen by hand, over any
+            // entry since gone; the step moves the stand in the list rather than writing to it
+            const to = viewedStep(s.viewed, viewedReach(s), viewedCurrent(s), chord.id === "wt-forward" ? 1 : -1);
             if (to) {
-              land(to.activate, { a: "viewed-land", at: to.at });
+              land(to.id, { a: "viewed-land", at: to.at });
               heldRun.press(e);
             }
             // the peek shows the row landed on, as it does for the rail walk

@@ -3106,6 +3106,44 @@ describe("an archived worktree's page", () => {
     expect(run([archived("r", "x", "y")], s).archivedPage).toBe("x");
   });
 
+  test("opening a page by hand is a step in the viewed walk, and escape's close is the step back", () => {
+    const s = run([{ a: "open-archived", id: "x" }], listed());
+    expect(s.viewed).toEqual({ ids: ["main", "a", "x"], at: 2 });
+    const back = reducer(s, { a: "viewed-land", at: 1 });
+    expect([back.archivedPage, back.activeId]).toEqual([null, "a"]);
+    const again = reducer(back, { a: "viewed-land", at: 2 });
+    expect([again.archivedPage, again.activeId]).toEqual(["x", "a"]);
+    const closed = reducer(s, { a: "close-archived" });
+    expect(closed.viewed).toEqual({ ids: ["main", "a", "x", "a"], at: 3 });
+    // one the machine opened (a search hit landing in an archived chat) is not a place anyone went
+    expect(run([{ a: "open-archived", id: "nope" }], listed()).viewed).toEqual({ ids: ["main", "a"], at: 1 });
+  });
+
+  test("a row viewed and then archived stays in the walk, and a step back lands on its page", () => {
+    // the daemon lists the archive before the frame drops the row, as it does on the wire
+    const s = run([{ a: "activate", id: "main" }, archived("r", "a"), worktrees(wt("main", "main"))], listed());
+    expect(s.viewed).toEqual({ ids: ["main", "a", "main"], at: 2 });
+    const back = reducer(s, { a: "viewed-land", at: 1 });
+    expect([back.archivedPage, back.activeId]).toEqual(["a", "main"]);
+    expect(back.viewed.at).toBe(1);
+    // deleted from the archive, it is out of reach and leaves the walk
+    expect(run([archived("r")], s).viewed).toEqual({ ids: ["main"], at: 0 });
+  });
+
+  test("a step back onto another project's archived page switches to that project", () => {
+    const s = run([
+      helloIn([repo("r"), repo("q")], wt("main", "main"), wt("a"), wt("qm", "main", undefined, "q")),
+      { a: "activate", id: "a" },
+      archived("q", "z"),
+      { a: "activate", id: "qm" },
+      { a: "open-archived", id: "z" },
+      { a: "activate", id: "a" },
+    ]);
+    expect([s.activeRepoId, s.viewed]).toEqual(["r", { ids: ["main", "a", "qm", "z", "a"], at: 4 }]);
+    const back = reducer(s, { a: "viewed-land", at: 3 });
+    expect([back.activeRepoId, back.archivedPage, back.activeId]).toEqual(["q", "z", "qm"]);
+  });
+
   test("the release notes give way to it, and it to them", () => {
     const s = run([{ a: "open-release-notes" }, { a: "open-archived", id: "x" }], listed());
     expect([s.notesPage, s.archivedPage]).toEqual([false, "x"]);

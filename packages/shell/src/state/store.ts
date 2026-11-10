@@ -806,9 +806,10 @@ export interface State {
   /** an "open project" was sent: the next repo the daemon adds becomes the active one */
   pendingOpen: boolean;
   activeId: string | null;
-  /** the rows chosen by hand, in order, for ⌘←/→ to walk back and forward through (viewed.ts).
-   * Only a hand's choice is written: the selection a worktrees frame keeps valid is not a place
-   * anyone went. Not stored; the walk starts over with the page. */
+  /** the rows and archived pages chosen by hand, in order, for ⌘←/→ to walk back and forward
+   * through (viewed.ts). Only a hand's choice is written: the selection a worktrees frame keeps
+   * valid is not a place anyone went. A row archived stays, and a step onto it opens its page.
+   * Not stored; the walk starts over with the page. */
   viewed: Viewed;
   /** the row a send moved the selection onto without a hand choosing it: the lead the plus opened,
    * or the worktree this tab's send made. The centre keeps the app that was on screen over that
@@ -1623,6 +1624,28 @@ export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | 
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
 }
 
+/** an archived worktree by id, whichever project's archive lists it */
+function archivedById(s: Pick<State, "archived">, id: string): ArchivedWorktree | null {
+  for (const items of Object.values(s.archived)) {
+    const hit = items.find((a) => a.id === id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** where the viewed walk can land: every row, and every archived worktree, since a row archived
+ * keeps its id into the archive and its page is the place to come back to */
+export function viewedReach(s: Pick<State, "rows" | "archived">): Set<string> {
+  const reach = new Set(s.rows.map((w) => w.id));
+  for (const items of Object.values(s.archived)) for (const a of items) reach.add(a.id);
+  return reach;
+}
+
+/** what the walk stands on now: the archived page over the row, else the row */
+export function viewedCurrent(s: Pick<State, "activeId" | "archivedPage">): string | null {
+  return s.archivedPage ?? s.activeId;
+}
+
 /** the local without its mark, when the mark is of that kind */
 function withoutMark(l: WorktreeLocal, by: ChatMark["by"]): WorktreeLocal {
   if (l.mark?.by !== by) return l;
@@ -2084,17 +2107,27 @@ function reduce(s: State, action: Action): State {
       // pull the phone off the list at the moment it is being read.
       return {
         ...activate(s, action.id),
-        viewed: pushViewed(s.viewed, s.activeId, action.id),
+        viewed: pushViewed(s.viewed, viewedCurrent(s), action.id),
         carryTo: null,
         screen: action.id ? "chat" : "home",
       };
     }
     case "viewed-land": {
       const id = s.viewed.ids[action.at];
-      // a row that went while the walk stood still is stepped over by the key (viewedStep); one
+      if (id === undefined) return s;
+      const viewed = { ...s.viewed, at: action.at };
+      if (s.rows.some((w) => w.id === id)) return { ...activate(s, id), viewed, carryTo: null, screen: "chat" };
+      // an entry that went while the walk stood still is stepped over by the key (viewedStep); one
       // that went between the step and this frame is nowhere to land
-      if (id === undefined || !s.rows.some((w) => w.id === id)) return s;
-      return { ...activate(s, id), viewed: { ...s.viewed, at: action.at }, carryTo: null, screen: "chat" };
+      const arch = archivedById(s, id);
+      if (!arch) return s;
+      // an archived worktree lands on its page, over its own project's landing row: a step back into
+      // another project switches to it, as a step onto one of its rows does
+      const under =
+        arch.repoId === s.activeRepoId
+          ? s
+          : { ...activate(s, landingIn(s, arch.repoId)), activeRepoId: arch.repoId, lent: null, carryTo: null };
+      return { ...openArchivedPage(under, id), viewed };
     }
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
@@ -2106,7 +2139,7 @@ function reduce(s: State, action: Action): State {
       // pressed over would sit in front of it. The launcher rule in `reducer` makes the draft itself.
       return revealChat({
         ...activate(s, lead),
-        viewed: pushViewed(s.viewed, s.activeId, lead),
+        viewed: pushViewed(s.viewed, viewedCurrent(s), lead),
         carryTo: lead,
         overlay: null,
         paletteReturn: null,
@@ -2118,10 +2151,19 @@ function reduce(s: State, action: Action): State {
       return s.draft ? { ...s, draft: { ...s.draft, carry: action.v } } : s;
     case "draft-agent":
       return s.draft ? { ...s, draft: { ...s.draft, agent: action.id } } : s;
-    case "open-archived":
-      return openArchivedPage(s, action.id);
-    case "close-archived":
-      return s.archivedPage ? closeArchivedPage(s) : s;
+    case "open-archived": {
+      // a page opened by hand is a place in the viewed walk, like a row chosen: one step back is
+      // the row it opened over
+      const opened = openArchivedPage(s, action.id);
+      return opened === s ? s : { ...opened, viewed: pushViewed(s.viewed, viewedCurrent(s), action.id) };
+    }
+    case "close-archived": {
+      if (!s.archivedPage) return s;
+      // escape's close goes back to the row underneath, which is a step of its own: a step back
+      // from there reopens the page
+      const closed = closeArchivedPage(s);
+      return s.activeId ? { ...closed, viewed: pushViewed(s.viewed, s.archivedPage, s.activeId) } : closed;
+    }
     case "open-release-notes": {
       // the new-project view stands for every pane, and its draft is not dropped for a chip
       if (s.newProject) return s;
@@ -2922,7 +2964,7 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
       pruneLocal(withAttachments(withDrafts(s.local, msg.drafts), msg.attachments), rows, s.archivedPage),
     ),
     lastActive: pruneLastActive(s.lastActive, rows),
-    viewed: pruneViewed(s.viewed, new Set(rows.map((w) => w.id))),
+    viewed: pruneViewed(s.viewed, viewedReach({ rows, archived: pruneByRepo(s.archived, repos) })),
     treeOpen: pruneByRow(s.treeOpen, rows),
     discoveredOpen: pruneByRepo(s.discoveredOpen, repos),
     archivedOpen: pruneByRepo(s.archivedOpen, repos),
@@ -3093,7 +3135,9 @@ function onServer(s: State, msg: StoreServerMsg): State {
       const mine = (s.archived[msg.repoId] ?? []).filter(
         (a) => s.archiving.includes(a.id) && !msg.items.some((i) => i.id === a.id),
       );
-      return { ...s, archived: { ...s.archived, [msg.repoId]: mine.length ? [...mine, ...msg.items] : msg.items } };
+      const archived = { ...s.archived, [msg.repoId]: mine.length ? [...mine, ...msg.items] : msg.items };
+      // a worktree deleted from the archive leaves the walk here, where its going is first known
+      return { ...s, archived, viewed: pruneViewed(s.viewed, viewedReach({ rows: s.rows, archived })) };
     }
     case "draft":
       // this tab wrote it and already has it, maybe with keystrokes since; a walk is showing a sent
@@ -3195,7 +3239,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
               s.archivedPage,
             ),
             treeOpen: pruneByRow(s.treeOpen, rows),
-            viewed: pruneViewed(s.viewed, new Set(rows.map((w) => w.id))),
+            // the archive is listed before the frame drops a row archived, so the row stays in reach
+            viewed: pruneViewed(s.viewed, viewedReach({ rows, archived: s.archived })),
           },
           activeId,
         ),

@@ -28,19 +28,19 @@ describe("pushViewed", () => {
 describe("viewedStep", () => {
   const v = { ids: ["main", "a", "b"], at: 2 };
   test("back and forward move one entry", () => {
-    expect(viewedStep(v, live("main", "a", "b"), "b", -1)).toEqual({ at: 1, activate: "a" });
-    expect(viewedStep({ ...v, at: 1 }, live("main", "a", "b"), "a", 1)).toEqual({ at: 2, activate: "b" });
+    expect(viewedStep(v, live("main", "a", "b"), "b", -1)).toEqual({ at: 1, id: "a" });
+    expect(viewedStep({ ...v, at: 1 }, live("main", "a", "b"), "a", 1)).toEqual({ at: 2, id: "b" });
   });
   test("the walk's ends have nowhere to go", () => {
     expect(viewedStep(v, live("main", "a", "b"), "b", 1)).toBeNull();
     expect(viewedStep({ ...v, at: 0 }, live("main", "a", "b"), "main", -1)).toBeNull();
     expect(viewedStep(EMPTY_VIEWED, live("main"), "main", -1)).toBeNull();
   });
-  test("a row that is gone, or the one on screen, is stepped over", () => {
-    expect(viewedStep(v, live("main", "b"), "b", -1)).toEqual({ at: 0, activate: "main" });
+  test("an entry out of reach, or the one on screen, is stepped over", () => {
+    expect(viewedStep(v, live("main", "b"), "b", -1)).toEqual({ at: 0, id: "main" });
     expect(viewedStep({ ids: ["main", "a", "a"], at: 2 }, live("main", "a"), "a", -1)).toEqual({
       at: 0,
-      activate: "main",
+      id: "main",
     });
   });
 });

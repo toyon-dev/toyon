@@ -10,12 +10,13 @@ export const sentAt = (w: WorktreeInfo) => w.promptedAt ?? w.lastTurn?.at ?? w.c
 const tierOf = (w: WorktreeInfo) => (isLead(w) ? 0 : 1);
 
 /** The rail's order: the lead, then the rows most recently sent to. A row moves when a hand puts
- * work into it or through it: a send, or a land press that did something (created a PR, pushed to
- * one, landed on main). A landed row at the top reads as the next thing to archive, and the ones
- * below it are the live work. Nothing else moves a row, not an agent finishing or asking and not
- * the poll landing a PR merged on GitHub: nothing slides out from under the pointer on its own,
- * and what needs you is the dot's and the jump chord's to say. Rows that tie keep the daemon's
- * order. */
+ * work into it or through it: a send, or a land press, whatever came of it (created a PR, pushed
+ * to one, merged one, landed on main, or was refused and the agent is fixing why). A landed row
+ * at the top reads as the next thing to archive, a refused one as the row being fixed, and the
+ * ones below are the live work. Nothing else moves a row, not an agent finishing or asking and
+ * not the poll landing a PR merged on GitHub: nothing slides out from under the pointer on its
+ * own, and what needs you is the dot's and the jump chord's to say. Rows that tie keep the
+ * daemon's order. */
 export function railOrder<T extends { worktree: WorktreeInfo }>(rows: readonly T[]): T[] {
   // stable, so a tie is the daemon's order
   return [...rows].sort((a, b) => tierOf(a.worktree) - tierOf(b.worktree) || sentAt(b.worktree) - sentAt(a.worktree));

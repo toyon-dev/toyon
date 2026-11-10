@@ -2311,13 +2311,12 @@ export class WorktreeService {
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
-    if (out.result.ok && out.landed) {
-      this.noteLanded(wt, out.result.message, out);
-      // the press put the row's work on main, so the row goes to the top of the rail like a
-      // send's, where it reads as the next thing to archive. The poll's landing of a PR merged on
-      // GitHub stays put: nobody pressed anything, and a row should not move on its own.
-      this.markPrompted(wt.id);
-    }
+    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out);
+    // the press is a hand on this row, so it goes to the top of the rail like a send's, whatever
+    // came of it: landed, it reads as the next thing to archive; refused, it is the row whose
+    // failure is now being fixed. The poll's landing of a PR merged on GitHub stays put: nobody
+    // pressed anything, and a row should not move on its own.
+    this.markPrompted(wt.id);
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
@@ -2513,8 +2512,6 @@ export class WorktreeService {
         if (!pushed.ok) return { result: pushed };
         await this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
-        // the press sent work out, so its row moves up the rail like a send's
-        this.markPrompted(wt.id);
         const did = committed ? "committed and pushed" : "pushed";
         // GitHub drops a PR from the merge queue when its head moves: the row says so now rather
         // than "in the merge queue" until the poll, and the land word comes back with it
@@ -2568,8 +2565,6 @@ export class WorktreeService {
       if (result.ok) {
         this.setLanding(wt.id, undefined);
         if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
-        // creating the PR sent the work out for review, so the row moves up the rail like a send's
-        this.markPrompted(wt.id);
       }
       return { result };
     }

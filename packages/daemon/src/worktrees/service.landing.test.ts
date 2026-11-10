@@ -470,8 +470,9 @@ describe("landing", () => {
     const { result } = await w.worktrees.land(wt.id);
     expect(result.ok).toBe(false);
     expect(result.conflict).toBe("rebase");
-    // nothing landed, so the row stays where it was on the rail
-    expect(w.state.worktree(wt.id)?.promptedAt).toBe(1);
+    // nothing landed, but a hand pressed land on this row: it moves to the top of the rail like a
+    // send's, where the conflict the agent is fixing is the first thing on it
+    expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
     // resolving them is the agent's, so it is sent the turn and the composer is left alone
     expect(result.asked).toBe(true);
     expect(sent(wt.id)).toEqual([

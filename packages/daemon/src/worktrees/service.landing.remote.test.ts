@@ -489,6 +489,40 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
   });
 
+  test("with a PR open and nothing missing, the land press merges it and moves the row up the rail", async () => {
+    const repoId = await registered();
+    const origin = join(w.repo, "..", "origin.git");
+    sh(w.repo, "git", "init", "-q", "--bare", "-b", "main", origin);
+    sh(w.repo, "git", "remote", "add", "origin", origin);
+    sh(w.repo, "git", "push", "-q", "-u", "origin", "main");
+    await setRoute(repoId, "pr");
+    // gh as GitHub would answer it: no queue facts, no method facts, and the merge taken
+    const bin = join(w.repo, "..", "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "gh"), "#!/bin/sh\necho merged\n", { mode: 0o755 });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const wt = await w.worktrees.create(repoId, "feature");
+      writeFileSync(join(wt.path, "feature.txt"), "x\n");
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+      sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+      w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ unpushed: 0 });
+      w.state.worktree(wt.id)!.promptedAt = 1;
+      const { result } = await w.worktrees.land(wt.id);
+      expect(result.ok).toBe(true);
+      expect(result.message).toBe("PR #7 merged");
+      // GitHub has the merge; the landing here is the poll's, and the row is still open
+      expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+      // a hand pressed land on this row, so it moves up the rail like a send's
+      expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
+    } finally {
+      process.env.PATH = path;
+    }
+  });
+
   test("creating a PR moves the row up the rail like a send: the work went out and the row stays open", async () => {
     const repoId = await registered();
     await withOrigin(repoId);

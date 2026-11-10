@@ -2305,18 +2305,13 @@ export class WorktreeService {
   async land(worktreeId: string, message?: string): Promise<{ result: ShipOutcome }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
-    const out = await this.ship(wt.id, "land", async (): Promise<Landed> => {
+    const out = await this.ship(wt.id, "land", "press", async (): Promise<Landed> => {
       await this.followBranch(wt);
       const moved = await this.movedMidTurn(wt);
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
     if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out);
-    // the press is a hand on this row, so it goes to the top of the rail like a send's, whatever
-    // came of it: landed, it reads as the next thing to archive; refused, it is the row whose
-    // failure is now being fixed. The poll's landing of a PR merged on GitHub stays put: nobody
-    // pressed anything, and a row should not move on its own.
-    this.markPrompted(wt.id);
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
@@ -2422,13 +2417,19 @@ export class WorktreeService {
   /** Run a landing op as the one out on the row: on every frame while it runs, with the agent's
    * queue held so a chat sent meanwhile waits rather than run under a rebase, and a second press
    * refused. The refusal is by id, so a found row and a trunk count too; a row with no agent (a
-   * found worktree, main) has nothing to hold. */
-  private async ship<T>(id: string, op: ShipOp, run: () => Promise<T>): Promise<T> {
+   * found worktree, main) has nothing to hold. A press is a hand on the row, so the row goes to
+   * the top of the rail like a send's, at the press and whatever comes of it: a commit hook can
+   * hold the op for minutes, and the row should not wait for it. Landed, it reads as the next
+   * thing to archive; refused, it is the row whose failure is being fixed. An op nobody pressed
+   * (a sync that waited for the turn, the trunk's pull) moves nothing. */
+  private async ship<T>(id: string, op: ShipOp, by: "press" | "auto", run: () => Promise<T>): Promise<T> {
     const out = this.ops.get(id);
     if (out) throw new UserError(`${shipNoun(out.op)} is already running here`);
     // held before the frame says so: a send that reads the frame must find the queue held
     const release = this.d.runtime.agentFor(id)?.hold();
     this.ops.set(id, { op });
+    // on the op's first frame, with the word it shows
+    if (by === "press") this.stampPrompted(id);
     this.d.hub.emit("worktreesChanged");
     // an op out longer than a git call may run is waiting on the repo lock, the fetch lock or a
     // turn, and the row shows only the shining word: the log names the wait every ceiling
@@ -2801,7 +2802,7 @@ export class WorktreeService {
     // landed once: a second poll, or one that raced the first, records nothing more
     if (wt && prTaken(wt)) return { ok: true, message: `${pr} merged; landed already` };
     log.info(worktreeId, `${pr} merged on GitHub; landing it`);
-    const { mark, held, ...result } = await this.ship(worktreeId, "land", () => this.prMergedOp(worktreeId));
+    const { mark, held, ...result } = await this.ship(worktreeId, "land", "auto", () => this.prMergedOp(worktreeId));
     if (result.ok) log.info(worktreeId, `landed: ${result.message}`);
     else log.warn(worktreeId, `landing failed: ${result.message}`);
     if (result.ok && wt) this.noteLanded(wt, result.message, { mark, url: wt.pr?.url, held });
@@ -2847,8 +2848,10 @@ export class WorktreeService {
    * branch, a merge for one it found or adopted. The one git write allowed without take-over,
    * because there both refuse a dirty tree before touching it and abort on a conflict, so the
    * directory is left as it was found in every case but success. A worktree toyon runs is dirty as
-   * a rule (its agent never commits), so there the uncommitted work is carried across the sync. */
-  async sync(worktreeId: string): Promise<{ result: ShipOutcome; base: string }> {
+   * a rule (its agent never commits), so there the uncommitted work is carried across the sync.
+   * `by` says whose it is: a press moves the row up the rail, at the press, even when the sync
+   * itself waits for the turn; the run after the turn is nobody's hand and moves nothing. */
+  async sync(worktreeId: string, by: "press" | "auto" = "press"): Promise<{ result: ShipOutcome; base: string }> {
     const r = this.readable(worktreeId);
     if (!r) throw new UserError("that worktree is gone");
     if (r.wt && isMain(r.wt)) throw new UserError("sync from a worktree, not main");
@@ -2865,12 +2868,13 @@ export class WorktreeService {
     const busy = isBusy(this.d.runtime.agentFor(worktreeId)?.status);
     if (carry && busy && (await statusFiles(r.path)).length > 0) {
       this.syncQueued.add(worktreeId);
+      if (by === "press") this.stampPrompted(worktreeId);
       this.d.hub.emit("worktreesChanged");
       return { result: { ok: true, message: `${r.name} syncs from ${r.base} once the turn ends` }, base: r.base };
     }
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
-    const result = await this.ship(worktreeId, "sync-main", async () => {
+    const result = await this.ship(worktreeId, "sync-main", by, async () => {
       // the base as it is now, not as of the last fetch: outside the lock, since the fetch
       // holds the network for seconds and touches no checkout
       if (r.wt) {
@@ -2912,7 +2916,7 @@ export class WorktreeService {
       worktreeId,
       (async () => {
         try {
-          const { result } = await this.sync(worktreeId);
+          const { result } = await this.sync(worktreeId, "auto");
           if (!result.ok && !result.asked) this.d.hub.emit("failed", worktreeId, result.message);
         } catch (e) {
           this.d.hub.emit("failed", worktreeId, e instanceof Error ? e.message : String(e));
@@ -2935,7 +2939,7 @@ export class WorktreeService {
     const repo = this.d.state.requireRepo(wt.repoId);
     // main has no chat for git's rows, so the pull's steps are named and nothing more
     const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
-    return this.ship(worktreeId, "pull-main", async () => {
+    return this.ship(worktreeId, "pull-main", "auto", async () => {
       const result = await this.trunk.pull(repo.id, w);
       // main moved under every row: the op's closing frame carries all of them read again
       if (result.ok && result.moved) await this.recountAll();
@@ -2948,7 +2952,7 @@ export class WorktreeService {
     const m = message.trim();
     if (!m) throw new UserError("commit message required");
     const base = baseOf(this.d.state.requireRepo(wt.repoId));
-    return this.fixShip(wt, await this.ship(wt.id, "commit", () => this.commitRecorded(wt, m)), base);
+    return this.fixShip(wt, await this.ship(wt.id, "commit", "press", () => this.commitRecorded(wt, m)), base);
   }
 
   /** stored, not cached: the first frame of a page load reads it before git has been asked */
@@ -3353,12 +3357,17 @@ export class WorktreeService {
 
   /** someone sent something here, a chat message or a `!` command: the rail sorts on it */
   markPrompted(worktreeId: string) {
+    if (this.stampPrompted(worktreeId)) this.d.hub.emit("worktreesChanged");
+  }
+
+  /** the stamp alone, for a caller whose own frame carries it */
+  private stampPrompted(worktreeId: string): boolean {
     const wt = this.d.state.worktree(worktreeId);
     // a discovered worktree has no record, and the rail keeps those in a section of their own
-    if (!wt) return;
+    if (!wt) return false;
     wt.promptedAt = Date.now();
     this.d.state.save();
-    this.d.hub.emit("worktreesChanged");
+    return true;
   }
 
   /** The frame's worth: every row the rail shows, toyon's own worktrees in state order then the

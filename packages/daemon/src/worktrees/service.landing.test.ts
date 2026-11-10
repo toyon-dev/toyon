@@ -215,7 +215,7 @@ describe("landing", () => {
   test("a commit git itself refuses asks nobody; a hook's refusal is the agent's, as Toyon's own message", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
-    const before = w.state.worktree(wt.id)?.promptedAt;
+    w.state.worktree(wt.id)!.promptedAt = 1;
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     // no hook here: an index someone else holds is git's own refusal, with nothing to fix
     const lock = join((await git(wt.path, "rev-parse", "--absolute-git-dir")).out, "index.lock");
@@ -234,8 +234,8 @@ describe("landing", () => {
         asked: { kind: "hook", why: "the pre-commit hook refused the commit", toolId: row },
       },
     ]);
-    // not the person's send: the rail sorts on theirs
-    expect(w.state.worktree(wt.id)?.promptedAt).toBe(before);
+    // the commit was pressed on this row, so it moved up the rail like a send's
+    expect(w.state.worktree(wt.id)?.promptedAt).toBeGreaterThan(1);
   });
 
   test("a commit-msg hook's refusal is answered with a new message, not a turn", async () => {

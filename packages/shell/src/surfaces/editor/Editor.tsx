@@ -18,6 +18,7 @@ import type { EditorSync, SyncBuffer } from "../../state/fileSync.ts";
 import type { EditorBlame, EditorDisk, EditorView, FileRef } from "../../state/store.ts";
 import { Float } from "../../ui/Float.tsx";
 import { passPinch, useFontsReady, useKeepWheel, useOnChange, useWheelAxis } from "../../ui/hooks.ts";
+import { openOut } from "../../ui/links.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
@@ -622,7 +623,7 @@ export default function Editor({
       const r = noteRect(el);
       if (!r || x < r.left || x > r.right || y < r.top || y > r.bottom) return;
       const url = noteCommit()?.url;
-      if (url) window.open(url, "_blank");
+      if (url) openOut(url);
     });
 
     // Both views copy out of `code`: the file view is that editor, and the diff view's deleted lines

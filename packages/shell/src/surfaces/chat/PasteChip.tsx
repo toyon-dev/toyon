@@ -4,6 +4,7 @@ import { pasteItems } from "../../state/actions/message.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { holdLinks } from "../../ui/links.ts";
 import { AttachmentChip } from "./AttachmentChip.tsx";
 import { renderMarkdown } from "./markdown.ts";
 import { pasteReading } from "./pasteReading.ts";
@@ -137,10 +138,7 @@ function PasteMarkdown({ text }: { text: string }) {
       className="paste-doc-body md md-preview"
       // a link out opens beside the shell; any other would navigate the shell itself, and a paste
       // names no folder for a relative one to be read from
-      onClick={(e) => {
-        const link = (e.target as Element).closest("a");
-        if (link && link.target !== "_blank") e.preventDefault();
-      }}
+      onClick={holdLinks}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
       dangerouslySetInnerHTML={{ __html: html }}
     />

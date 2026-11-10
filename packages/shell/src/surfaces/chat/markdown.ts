@@ -1,5 +1,5 @@
 import type { ReplyPicture } from "@toyon/shared";
-import createDOMPurify from "dompurify";
+import createDOMPurify, { type Config } from "dompurify";
 import { marked } from "marked";
 import { useEffect, useRef, useState } from "react";
 import { STREAM_TICK_MS } from "../../state/coalesce.ts";
@@ -8,7 +8,7 @@ import { closePendingLink, PENDING_LINK } from "./linkTail.ts";
 import { dunder } from "./markdownDunder.ts";
 import { githubRef, linkedCodespan } from "./markdownGithub.ts";
 import { escapeHtml, htmlAsText } from "./markdownHtml.ts";
-import { assetPath, codePath, fromFileUrl, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, fromFileUrl, outsidePath, relativeLink, worktreeLink } from "./markdownPaths.ts";
 import { table } from "./markdownTable.ts";
 import { type WorktreeNamer, worktreeMention } from "./markdownWorktree.ts";
 import { cutAt, nextPace, type Pace, shownAt } from "./pace.ts";
@@ -108,10 +108,38 @@ const purify = createDOMPurify(window);
 let rendering: MarkdownOptions | null = null;
 // the text of the render in progress, for the code renderer to tell the fence at its end
 let source = "";
-// a `file://` link is read as the path it names, before the sanitizer measures the href against
-// the schemes it allows (file: is not one) and drops it
+// A document's own HTML lands in the shell's DOM, beside the shell's controls and under its
+// stylesheets, so it keeps what a README is written with (a centred paragraph, a sized image,
+// `<details>`) and none of what reaches past the page: a stylesheet or a `style` restyles the app
+// and can lay a transparent link over the window, a class borrows a rule of the shell's that does
+// the same, a form or an image map navigates the tab without a link to catch, an id or a `data-`
+// attribute passes for the shell's own, and SVG carries links and styles of its own kind.
+const DOCUMENT: Config = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["style", "form", "button", "textarea", "select", "map", "area"],
+  FORBID_ATTR: ["style", "id"],
+  ALLOW_DATA_ATTR: false,
+};
+/** the classes the renderers above write, which are all a document's markup may wear */
+const OWN_CLASS = /^(?:sy-[\w-]+|md-table)$/;
+// the one input a document keeps is a task list's box, which marked writes and nothing presses
+purify.addHook("uponSanitizeElement", (node) => {
+  if (!rendering?.keepHtml || node.nodeName !== "INPUT") return;
+  const input = node as Element;
+  if (input.getAttribute("type")?.toLowerCase() === "checkbox") input.setAttribute("disabled", "");
+  else input.remove();
+});
 purify.addHook("uponSanitizeAttribute", (node, data) => {
+  // a `file://` link is read as the path it names, before the sanitizer measures the href against
+  // the schemes it allows (file: is not one) and drops it
   if (node.tagName === "A" && data.attrName === "href") data.attrValue = fromFileUrl(data.attrValue);
+  if (rendering?.keepHtml && data.attrName === "class") {
+    data.attrValue = data.attrValue
+      .split(/\s+/)
+      .filter((name) => OWN_CLASS.test(name))
+      .join(" ");
+    if (!data.attrValue) data.keepAttr = false;
+  }
 });
 purify.addHook("afterSanitizeAttributes", (node) => {
   const href = node.tagName === "A" ? (node.getAttribute("href") ?? "") : "";
@@ -126,7 +154,8 @@ purify.addHook("afterSanitizeAttributes", (node) => {
     node.setAttribute("target", "_blank");
     node.setAttribute("rel", "noreferrer");
   }
-  const file = rendering?.fileRoot ? worktreeLink(rendering.fileRoot, href) : null;
+  // a reply sits in no folder, so a relative link in one is read from the checkout root
+  const file = rendering?.fileRoot ? (worktreeLink(rendering.fileRoot, href) ?? relativeLink(href)) : null;
   const outside = file ? null : outsidePath(href);
   // a file anywhere on the daemon's disk is a place in Toyon: in this worktree it opens as the
   // file, elsewhere the daemon grants it, and both wear the same link
@@ -160,7 +189,8 @@ export function renderMarkdown(text: string, options?: MarkdownOptions): string 
   rendering = options ?? null;
   source = options?.streaming ? closePendingLink(text) : text;
   try {
-    return purify.sanitize(marked.parse(source, { async: false, breaks: !options?.keepHtml }) as string);
+    const html = marked.parse(source, { async: false, breaks: !options?.keepHtml }) as string;
+    return options?.keepHtml ? purify.sanitize(html, DOCUMENT) : purify.sanitize(html);
   } finally {
     rendering = null;
     source = "";

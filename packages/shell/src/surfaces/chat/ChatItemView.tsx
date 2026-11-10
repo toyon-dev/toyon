@@ -22,6 +22,7 @@ import { Field } from "../../ui/Field.tsx";
 import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { openOut } from "../../ui/links.ts";
 import { grouped, type MenuEntry, type MenuFrom, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
@@ -1491,7 +1492,7 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   // the pull request it went through, offered the way the handoff row offers its list: in the
   // sentence, after the thing it belongs to
   const pr = item.url && (
-    <Button variant="inline" onClick={() => window.open(item.url, "_blank")}>
+    <Button variant="inline" onClick={() => openOut(item.url)}>
       the PR
     </Button>
   );

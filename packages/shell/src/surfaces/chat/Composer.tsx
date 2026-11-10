@@ -61,6 +61,7 @@ import { TextArea } from "../../ui/Field.tsx";
 import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
+import { openOut } from "../../ui/links.ts";
 import { useListNav } from "../../ui/listNav.ts";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
@@ -876,7 +877,7 @@ export function Composer({
               line: verbLine(said ?? prLine(pr)),
               tip: `${prLine(pr)} Open the PR on GitHub.`,
               ...prLinked,
-              run: () => window.open(pr.url, "_blank"),
+              run: () => openOut(pr.url),
             }
         : pr?.state === "closed"
           ? {
@@ -1898,11 +1899,11 @@ export function Composer({
                                 className="composer-verb-tail"
                                 {...tip(part.tip, undefined, { placement: "top" })}
                                 onClick={() => {
-                                  window.open(part.url, "_blank");
+                                  openOut(part.url);
                                   if (!touch) composerRef.current?.focus();
                                 }}
                                 {...cm.contextMenu(() => [
-                                  { id: "open-link", label: part.open, onClick: () => window.open(part.url, "_blank") },
+                                  { id: "open-link", label: part.open, onClick: () => openOut(part.url) },
                                   { id: "copy-link", label: "copy link", onClick: () => copyText(part.url) },
                                 ])}
                               >

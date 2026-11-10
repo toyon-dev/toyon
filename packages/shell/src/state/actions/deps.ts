@@ -1,4 +1,5 @@
 import { isInstalledApp } from "../../surfaces/util.ts";
+import { openOut } from "../../ui/links.ts";
 import type { MenuItem } from "../../ui/menu.ts";
 import type { DaemonSocket } from "../../ws.ts";
 import type { Action } from "../store.ts";
@@ -12,7 +13,7 @@ export type Deps = { sock: DaemonSocket | null; dispatch: (a: Action) => void };
 export const openOutItem = (url: string): MenuItem => ({
   id: "open-out",
   label: isInstalledApp() ? "open in the browser" : "open in a new tab",
-  onClick: () => window.open(url, "_blank"),
+  onClick: () => openOut(url),
 });
 
 /** best effort: a denied clipboard permission is not worth a word over text you can read */

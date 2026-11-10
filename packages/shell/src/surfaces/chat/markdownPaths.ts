@@ -57,6 +57,15 @@ export function worktreeLink(root: string, ref: string): WorktreeLink | null {
   return line && line > 0 ? { path, line } : { path };
 }
 
+/** A link the agent wrote from the checkout root (`packages/shell/src/App.tsx:42`), as the
+ * worktree file it names. A reply sits in no folder, so the root is what a relative path is read
+ * from. Null for a URL, a page anchor, a root-absolute or protocol-relative address, and a path
+ * that climbs: the browser would resolve any relative link against the shell's own address. */
+export function relativeLink(ref: string): WorktreeLink | null {
+  if (!ref || /^[/\\#?]/.test(ref) || /^[a-z][a-z\d+.-]*:/i.test(ref)) return null;
+  return worktreeLink("/root", `/root/${ref.replace(/^(?:\.\/+)+/, "")}`);
+}
+
 export interface OutsideLink {
   /** the path on the daemon's disk, with any line suffix taken off */
   path: string;

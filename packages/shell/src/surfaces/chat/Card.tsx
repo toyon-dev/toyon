@@ -11,6 +11,7 @@
 
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef } from "react";
 import { useOnChange } from "../../ui/hooks.ts";
+import { holdLinks } from "../../ui/links.ts";
 import { useCodeCopy } from "./useCodeCopy.tsx";
 
 export type Root = RefObject<HTMLDivElement>;
@@ -137,8 +138,10 @@ export function CardBand(props: { code: string } | { html: string }) {
     return (
       // the markup goes into a child of the band so the band keeps a child of its own beside it
       <div ref={band} className="card-band md">
+        {/* a link out opens beside the shell; a card names no folder for any other */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the div only routes their clicks */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown */}
-        <div dangerouslySetInnerHTML={{ __html: props.html }} />
+        <div onClick={holdLinks} dangerouslySetInnerHTML={{ __html: props.html }} />
         {copy}
       </div>
     );

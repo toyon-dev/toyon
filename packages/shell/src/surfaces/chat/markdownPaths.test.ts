@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assetPath, codePath, dirOf, fromFileUrl, outsidePath, worktreeLink } from "./markdownPaths.ts";
+import { assetPath, codePath, dirOf, fromFileUrl, outsidePath, relativeLink, worktreeLink } from "./markdownPaths.ts";
 
 describe("a markdown file's relative references", () => {
   test("resolve against the file's folder", () => {
@@ -44,11 +44,31 @@ describe("a file link in chat", () => {
     expect(worktreeLink(root, "/Users/me/project/")).toBeNull();
   });
 
-  test("leaves web, relative and out-of-worktree links to the browser", () => {
+  test("is not a web, relative or out-of-worktree link", () => {
     expect(worktreeLink(root, "https://example.com/App.tsx")).toBeNull();
     expect(worktreeLink(root, "src/App.tsx")).toBeNull();
     expect(worktreeLink(root, "/Users/me/project-two/App.tsx")).toBeNull();
     expect(worktreeLink(root, "/Users/me/project/../outside.ts")).toBeNull();
+  });
+});
+
+describe("a relative link in chat", () => {
+  test("is the worktree file it names from the root, with the line or the folder", () => {
+    expect(relativeLink("packages/shell/src/Composer.tsx")).toEqual({ path: "packages/shell/src/Composer.tsx" });
+    expect(relativeLink("./src/App.tsx:42")).toEqual({ path: "src/App.tsx", line: 42 });
+    expect(relativeLink("docs/hello%20there.md#L8")).toEqual({ path: "docs/hello there.md", line: 8 });
+    expect(relativeLink("src/ui/")).toEqual({ path: "src/ui", folder: true });
+  });
+
+  test("is not a URL, an anchor, an absolute or protocol-relative address, or a climb", () => {
+    expect(relativeLink("https://example.com/a")).toBeNull();
+    expect(relativeLink("mailto:someone@example.com")).toBeNull();
+    expect(relativeLink("#usage")).toBeNull();
+    expect(relativeLink("/Users/me/a.ts")).toBeNull();
+    expect(relativeLink("//example.com/a")).toBeNull();
+    expect(relativeLink("\\\\example.com/a")).toBeNull();
+    expect(relativeLink("../outside.ts")).toBeNull();
+    expect(relativeLink("")).toBeNull();
   });
 });
 

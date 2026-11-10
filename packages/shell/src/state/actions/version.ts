@@ -1,4 +1,5 @@
 import { LATEST_RELEASE_URL, REPO_URL, releaseUrl, SITE_URL } from "../../app/versionRow.ts";
+import { openOut } from "../../ui/links.ts";
 import { grouped, type MenuEntry } from "../../ui/menu.ts";
 import { copyText } from "./deps.ts";
 
@@ -11,7 +12,7 @@ export function versionItems(
   check: { run: () => void; off?: string } | null,
   notes?: () => void,
 ): MenuEntry[] {
-  const out = (url: string) => () => window.open(url, "_blank");
+  const out = (url: string) => () => openOut(url);
   return grouped([
     check
       ? [

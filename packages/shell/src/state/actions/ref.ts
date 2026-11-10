@@ -1,4 +1,5 @@
 import type { RefHit } from "@toyon/shared";
+import { openOut } from "../../ui/links.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { copyText } from "./deps.ts";
 
@@ -7,7 +8,7 @@ export function refItems(h: RefHit): MenuEntry[] {
   const pr: MenuItem[] = [];
   if (h.pr) {
     const url = h.pr.url;
-    pr.push({ id: "open-pr", label: "open on GitHub", onClick: () => window.open(url, "_blank") });
+    pr.push({ id: "open-pr", label: "open on GitHub", onClick: () => openOut(url) });
     pr.push({ id: "copy-link", label: "copy link", onClick: () => copyText(url) });
   }
   const name: MenuItem[] = [

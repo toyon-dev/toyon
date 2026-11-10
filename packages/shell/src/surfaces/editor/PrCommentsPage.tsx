@@ -7,6 +7,7 @@ import { composerBoxOf, localOf, worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Document } from "../../ui/Document.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
+import { holdLinks, openOut } from "../../ui/links.ts";
 import { renderMarkdown } from "../chat/markdown.ts";
 import { commentsLine, type PrThread, prPage, remarkLines, reviewVerb, threadName, threadText } from "./prComments.ts";
 import "./prComments.css";
@@ -52,7 +53,7 @@ export function PrCommentsPage({
         {pr && (
           <>
             {" · "}
-            <Button variant="inline" tone="quiet" onClick={() => window.open(pr.url, "_blank")}>
+            <Button variant="inline" tone="quiet" onClick={() => openOut(pr.url)}>
               on GitHub
             </Button>
           </>
@@ -136,7 +137,7 @@ function Thread({ thread, worktreeId }: { thread: PrThread; worktreeId: string }
 
 function GitHub({ url }: { url: PrComment["url"] }) {
   return (
-    <Button variant="inline" tone="quiet" onClick={() => window.open(url, "_blank")}>
+    <Button variant="inline" tone="quiet" onClick={() => openOut(url)}>
       GitHub
     </Button>
   );
@@ -145,8 +146,11 @@ function GitHub({ url }: { url: PrComment["url"] }) {
 function Body({ text }: { text: string }) {
   const html = useMemo(() => renderMarkdown(text), [text]);
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div
       className="pr-page-body"
+      // a reviewer's link out opens beside the shell; a comment names no folder for any other
+      onClick={holdLinks}
       // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
       dangerouslySetInnerHTML={{ __html: html }}
     />

@@ -8,6 +8,7 @@ import { useFileDrop } from "../surfaces/chat/useIntake.ts";
 import { PhoneFrame } from "../surfaces/phone/PhoneFrame.tsx";
 import { applyTheme, bridgeThemeMsg, rememberDaylight } from "../theme.ts";
 import { floats } from "../ui/floats.ts";
+import { openOut } from "../ui/links.ts";
 import { DeskFrame } from "./DeskFrame.tsx";
 import { useChords } from "./keys.ts";
 import { previewBus } from "./previewBus.ts";
@@ -320,7 +321,7 @@ export function App() {
   useEffect(() => {
     if (!openUrl || openedRef.current === openUrl) return;
     openedRef.current = openUrl;
-    window.open(openUrl, "_blank");
+    openOut(openUrl);
     dispatch({ a: "opened-url" });
   }, [openUrl, dispatch]);
 

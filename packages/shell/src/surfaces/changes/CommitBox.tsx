@@ -19,6 +19,7 @@ import { Button, IconButton } from "../../ui/Button.tsx";
 import { TextArea } from "../../ui/Field.tsx";
 import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
+import { openOut } from "../../ui/links.ts";
 import { useContextMenu } from "../../ui/menu.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { behindNote } from "../chips/baseNote.ts";
@@ -349,10 +350,10 @@ export function CommitBox({
           {pr && (
             <Button
               data-tip={`Open PR #${pr.number} on GitHub`}
-              onClick={() => window.open(pr.url, "_blank")}
+              onClick={() => openOut(pr.url)}
               // the button opens the PR; one level in is the PR as a link
               {...cm.contextMenu(() => [
-                { id: "open-pr", label: "open on GitHub", onClick: () => window.open(pr.url, "_blank") },
+                { id: "open-pr", label: "open on GitHub", onClick: () => openOut(pr.url) },
                 { id: "copy-link", label: "copy link", onClick: () => copyText(pr.url) },
               ])}
             >
@@ -364,9 +365,9 @@ export function CommitBox({
           {pr?.preview && (
             <Button
               data-tip={`Open the branch on ${new URL(pr.preview).hostname}`}
-              onClick={() => window.open(pr.preview, "_blank")}
+              onClick={() => openOut(pr.preview)}
               {...cm.contextMenu(() => [
-                { id: "open-preview", label: "open the preview", onClick: () => window.open(pr.preview, "_blank") },
+                { id: "open-preview", label: "open the preview", onClick: () => openOut(pr.preview) },
                 { id: "copy-preview", label: "copy link", onClick: () => copyText(pr.preview ?? "") },
               ])}
             >

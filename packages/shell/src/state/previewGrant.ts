@@ -6,6 +6,7 @@
 
 import { PREVIEW_GRANT_PARAM } from "@toyon/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openOut } from "../ui/links.ts";
 import { mintPreviewGrant } from "../ws.ts";
 import type { Machine } from "./machine.ts";
 
@@ -112,13 +113,15 @@ export function useGrantedUrl(machine: Machine, url: string | null, gated: boole
  * landed; an ungated address needs no code. */
 export function openPreview(machine: Machine, url: string, gated: boolean) {
   if (!gated) {
-    window.open(url, "_blank");
+    openOut(url);
     return;
   }
   const tab = window.open("", "_blank");
+  // the handle is kept to set the address; the page that loads there gets none on the shell
+  if (tab) tab.opener = null;
   void mintPreviewGrant(machine.sock.urls).then((g) => {
     const target = g ? withGrant(url, g.code) : url;
     if (tab) tab.location.href = target;
-    else window.open(target, "_blank");
+    else openOut(target);
   });
 }

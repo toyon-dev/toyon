@@ -10,6 +10,7 @@ import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
+import { openOut } from "../../ui/links.ts";
 import { DaemonRow } from "./DaemonRow.tsx";
 import { type HandoffItem, startingPieces } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
@@ -175,7 +176,7 @@ export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piec
           <>
             {" "}
             ·{" "}
-            <Button variant="inline" onClick={() => window.open(item.url, "_blank")}>
+            <Button variant="inline" onClick={() => openOut(item.url)}>
               the PR
             </Button>
           </>

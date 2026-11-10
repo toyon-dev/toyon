@@ -13,7 +13,7 @@ import {
 import type { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
-import { git } from "../git/exec.ts";
+import { gitRaw, nulSplit } from "../git/exec.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import { fileRoutes, frameworksOf, isManifest, isSkipped, type Manifest, mergeRoutes } from "./fileRouters.ts";
 import { bump, entries, retitle } from "./frecency.ts";
@@ -317,12 +317,12 @@ export class RouteService {
 
   /** never rejects: a worktree whose files cannot be listed has no routes to offer, not an error */
   private async scan(scan: Scan): Promise<RouteInfo[]> {
-    const listed = await git(scan.root, "ls-files", "-co", "--exclude-standard");
+    const listed = await gitRaw(scan.root, "ls-files", "-z", "-co", "--exclude-standard");
     if (!listed.ok) {
       log.warn("routes", `could not list the files in ${scan.root}: ${listed.err}`);
       return [];
     }
-    const paths = listed.out.split("\n").filter(Boolean);
+    const paths = nulSplit(listed.out);
     const manifests: Manifest[] = [];
     const keptManifests = new Map<string, Cached<string[] | null>>();
     for (const p of paths.filter(isManifest).slice(0, MAX_MANIFESTS)) {

@@ -83,6 +83,29 @@ export const NO_PROMPT: Record<string, string> = {
  */
 const SPAWN_ENV: Record<string, string> = { GIT_OPTIONAL_LOCKS: "0" };
 
+/**
+ * The environment a spawn starts from: the daemon's own with messages pinned to English. Landing
+ * reads git's stderr for what went wrong ("CONFLICT", "would be overwritten", "stale info"), and a
+ * translated git says none of those words, so a conflicted merge was never aborted. Only the
+ * message category is pinned: `LC_ALL=C` would also take UTF-8 from every hook git runs, and a
+ * hook in Ruby or Python then fails on the first accented byte it reads. `LC_ALL` outranks
+ * `LC_MESSAGES`, so one the person set is handed down as `LANG`, where it still names the other
+ * categories; `LANGUAGE` goes because gettext reads it ahead of both.
+ */
+export function spawnEnv(
+  base: Record<string, string | undefined> = process.env,
+  ...over: Array<Record<string, string> | undefined>
+): Record<string, string | undefined> {
+  const { LC_ALL: all, LANGUAGE: _language, ...rest } = base;
+  return Object.assign(rest, all ? { LANG: all } : {}, { LC_MESSAGES: "C" }, SPAWN_ENV, ...over);
+}
+
+/** the records of a `-z` read. Read those with `gitRaw`: without `-z` git quotes and escapes a
+ * path that holds anything past ASCII, and a trim would eat a first name's leading space. */
+export function nulSplit(out: string): string[] {
+  return out.split("\0").filter(Boolean);
+}
+
 export interface GitResult {
   ok: boolean;
   out: string;
@@ -122,7 +145,7 @@ export async function run(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: { ...process.env, ...SPAWN_ENV, ...env },
+      env: spawnEnv(process.env, env),
     });
     const done = (async () => {
       const [rawOut, err, status] = await Promise.all([
@@ -180,7 +203,7 @@ export async function runLive(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: { ...process.env, ...SPAWN_ENV, ...opts.env },
+      env: spawnEnv(process.env, opts.env),
     });
     const stop = () => p.kill();
     opts.signal?.addEventListener("abort", stop, { once: true });
@@ -250,7 +273,7 @@ export async function runRows(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: { ...process.env, ...SPAWN_ENV },
+      env: spawnEnv(),
     });
     const reader = (p.stdout as ReadableStream<Uint8Array>).getReader();
     const stop = () => {
@@ -418,7 +441,7 @@ export function runWatched(
         cwd,
         stdio: opts.onHook ? ["ignore", "pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
         detached: true,
-        env: { ...process.env, ...SPAWN_ENV, ...opts.env, ...(opts.onHook ? { GIT_TRACE2_EVENT: "3" } : {}) },
+        env: spawnEnv(process.env, opts.env, opts.onHook ? { GIT_TRACE2_EVENT: "3" } : undefined),
       });
     } catch (e) {
       failed(e instanceof Error ? e.message : String(e));

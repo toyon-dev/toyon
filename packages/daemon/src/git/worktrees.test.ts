@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { parseWorktreeList } from "./worktrees.ts";
+import { parseWorktreeList, unquote } from "./worktrees.ts";
+
+describe("unquote", () => {
+  test("reads git's C-style quoting: octal bytes as UTF-8, letter escapes, a quote and a backslash", () => {
+    expect(unquote('"/Users/k/caf\\303\\251/wt"')).toBe("/Users/k/caf\u00e9/wt");
+    expect(unquote('"a\\tb\\nc\\"d\\\\e"')).toBe('a\tb\nc"d\\e');
+    expect(unquote("/Users/k/plain")).toBe("/Users/k/plain");
+    expect(unquote('"')).toBe('"');
+  });
+});
 
 describe("parseWorktreeList", () => {
   test("main checkout, linked worktree and detached", () => {

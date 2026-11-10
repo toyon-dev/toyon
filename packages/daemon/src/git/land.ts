@@ -13,7 +13,7 @@ import {
   type RepoInfo,
   type TrunkStatus,
 } from "@toyon/shared";
-import { GIT, git, NO_PROMPT, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
+import { GIT, git, gitRaw, NO_PROMPT, nulSplit, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
 import { githubRepoUrl } from "./forge.ts";
 import { enqueuePr, gh, ghMethod, prNumberOf, viewQueue } from "./gh.ts";
 import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
@@ -238,8 +238,8 @@ async function putBack(
       await git(worktreePath, "update-ref", "-d", CARRIED);
       return taken;
     }
-    const unmerged = await git(worktreePath, "diff", "--name-only", "--diff-filter=U");
-    clash = unmerged.out.split("\n").filter(Boolean);
+    const unmerged = await gitRaw(worktreePath, "diff", "--name-only", "-z", "--diff-filter=U");
+    clash = nulSplit(unmerged.out);
     await git(worktreePath, "reset", "--hard", "-q", aside.head);
   }
   const back = await git(worktreePath, "stash", "apply", "--index", aside.sha);

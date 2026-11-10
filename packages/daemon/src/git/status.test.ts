@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
@@ -7,13 +7,17 @@ import {
   aheadUpstream,
   changedRanges,
   countEntries,
+  filesBetween,
   foldDropped,
+  parseNameStatus,
+  parseNumstat,
   parsePorcelain,
   reaches,
   remoteHead,
   statusEntries,
   statusFiles,
   statusFilesWithCounts,
+  treeFingerprint,
 } from "./status.ts";
 
 describe("statusFiles", () => {
@@ -37,22 +41,25 @@ describe("statusFiles", () => {
 
 describe("parsePorcelain", () => {
   test("plain modified / added / untracked", () => {
-    expect(parsePorcelain(" M src/a.ts\nA  src/b.ts\n?? src/c.ts\n")).toEqual([
+    expect(parsePorcelain(" M src/a.ts\0A  src/b.ts\0?? src/c.ts\0")).toEqual([
       { xy: " M", path: "src/a.ts" },
       { xy: "A ", path: "src/b.ts" },
       { xy: "??", path: "src/c.ts" },
     ]);
   });
   test("renames report the new path, not the old one", () => {
-    expect(parsePorcelain("R  old.ts -> new.ts\n")).toEqual([{ xy: "R ", path: "new.ts" }]);
-    expect(parsePorcelain("RM old/dir/a.ts -> new/dir/b.ts\n")).toEqual([{ xy: "RM", path: "new/dir/b.ts" }]);
+    expect(parsePorcelain("R  new.ts\0old.ts\0")).toEqual([{ xy: "R ", path: "new.ts" }]);
+    expect(parsePorcelain("RM new/dir/b.ts\0old/dir/a.ts\0 M c.ts\0")).toEqual([
+      { xy: "RM", path: "new/dir/b.ts" },
+      { xy: " M", path: "c.ts" },
+    ]);
   });
-  test("a non-rename path containing ' -> ' is left alone", () => {
-    expect(parsePorcelain(" M notes/a -> b.md\n")).toEqual([{ xy: " M", path: "notes/a -> b.md" }]);
-  });
-  test("quoted paths are unquoted (spaces, unicode escapes)", () => {
-    expect(parsePorcelain('?? "with space.ts"\n')).toEqual([{ xy: "??", path: "with space.ts" }]);
-    expect(parsePorcelain('R  "a b.ts" -> "c d.ts"\n')).toEqual([{ xy: "R ", path: "c d.ts" }]);
+  test("a path is taken whole: an arrow, a space, a quote, a newline", () => {
+    expect(parsePorcelain(' M notes/a -> b.md\0?? with space.ts\0?? a"b\nc.ts\0')).toEqual([
+      { xy: " M", path: "notes/a -> b.md" },
+      { xy: "??", path: "with space.ts" },
+      { xy: "??", path: 'a"b\nc.ts' },
+    ]);
   });
   test("empty output", () => {
     expect(parsePorcelain("")).toEqual([]);
@@ -61,7 +68,7 @@ describe("parsePorcelain", () => {
 
 describe("foldDropped", () => {
   test("a path listed as deleted and untracked is one modified entry", () => {
-    expect(foldDropped(parsePorcelain("D  a.ts\n M b.ts\n?? a.ts\n?? c.ts\n"))).toEqual({
+    expect(foldDropped(parsePorcelain("D  a.ts\0 M b.ts\0?? a.ts\0?? c.ts\0"))).toEqual({
       files: [
         { xy: " M", path: "a.ts" },
         { xy: " M", path: "b.ts" },
@@ -71,8 +78,74 @@ describe("foldDropped", () => {
     });
   });
   test("a deletion on its own, or an untracked file on its own, is left as it is", () => {
-    const entries = parsePorcelain("D  a.ts\n?? b.ts\n");
+    const entries = parsePorcelain("D  a.ts\0?? b.ts\0");
     expect(foldDropped(entries)).toEqual({ files: entries, dropped: [] });
+  });
+});
+
+describe("parseNumstat and parseNameStatus", () => {
+  test("a rename is counted and listed under its new path", () => {
+    expect([...parseNumstat("1\t2\ta.ts\0-\t-\tb.bin\x003\t0\t\0old.ts\0new.ts\x004\t4\tc.ts\0")]).toEqual([
+      ["a.ts", { add: 1, del: 2 }],
+      ["b.bin", {}],
+      ["new.ts", { add: 3, del: 0 }],
+      ["c.ts", { add: 4, del: 4 }],
+    ]);
+    expect(parseNameStatus("M\0a.ts\0R087\0old.ts\0new.ts\0D\0c.ts\0")).toEqual([
+      { status: "M", path: "a.ts" },
+      { status: "R", path: "new.ts" },
+      { status: "D", path: "c.ts" },
+    ]);
+  });
+});
+
+// git quotes a name that holds anything past ASCII and writes its bytes in octal, unless it is
+// asked for NUL-separated records: one such file in the tree made every status read throw
+describe("names git would quote", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+  const accent = "caf\u00e9.txt";
+  const odd = 'a"b\nc d.txt';
+  const moved = "docs/na\u00efve \u2192 name.txt";
+
+  test("an untracked file with an accent, a quote or a newline in its name is listed as named", async () => {
+    writeFileSync(join(repo, accent), "one\n");
+    writeFileSync(join(repo, odd), "one\ntwo\n");
+    expect(await statusFilesWithCounts(repo)).toEqual([
+      { xy: "??", path: odd, add: 2, del: 0 },
+      { xy: "??", path: accent, add: 1, del: 0 },
+    ]);
+    expect(await statusFiles(repo, accent)).toEqual([{ xy: "??", path: accent }]);
+  });
+
+  test("the fingerprint moves when such a file is edited, at the same size", async () => {
+    const before = await treeFingerprint(repo);
+    writeFileSync(join(repo, accent), "two\n");
+    expect(await treeFingerprint(repo)).not.toBe(before);
+  });
+
+  test("a tracked edit is counted under the name, and so is a commit's", async () => {
+    const from = sh(repo, GIT, "rev-parse", "HEAD");
+    sh(repo, GIT, "add", "-A");
+    sh(repo, GIT, "commit", "-q", "-m", "names");
+    expect(await filesBetween(repo, from, "HEAD")).toEqual([
+      { xy: "A ", path: odd, add: 2, del: 0 },
+      { xy: "A ", path: accent, add: 1, del: 0 },
+    ]);
+    writeFileSync(join(repo, accent), "two\nthree\n");
+    expect(await statusFilesWithCounts(repo)).toEqual([{ xy: " M", path: accent, add: 1, del: 0 }]);
+    expect(await changedRanges(repo, "main", accent)).toEqual([[2, 2]]);
+    sh(repo, GIT, "checkout", "-q", "--", accent);
+  });
+
+  test("a rename reports the new name, in status and between commits", async () => {
+    mkdirSync(join(repo, "docs"));
+    sh(repo, GIT, "mv", accent, moved);
+    expect(await statusFiles(repo)).toEqual([{ xy: "R ", path: moved }]);
+    const from = sh(repo, GIT, "rev-parse", "HEAD");
+    sh(repo, GIT, "commit", "-q", "-m", "move");
+    // the counts are read without rename detection, so the new name carries the whole file
+    expect(await filesBetween(repo, from, "HEAD")).toEqual([{ xy: "R ", path: moved, add: 1, del: 0 }]);
   });
 });
 

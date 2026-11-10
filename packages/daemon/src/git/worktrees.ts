@@ -70,16 +70,33 @@ export function parseWorktreeList(out: string): GitWorktree[] {
   return entries;
 }
 
-/** git quotes a path or a lock reason only when it holds unusual characters (core.quotePath), and
- * the escaping it uses is C-style, which JSON's happens to cover for everything git emits here. */
-function unquote(s: string): string {
-  if (!s.startsWith('"') || !s.endsWith('"')) return s;
-  try {
-    return JSON.parse(s);
-  } catch {
-    // a quoting scheme JSON cannot read is still better shown raw than dropped
-    return s;
+const C_ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 };
+
+/** git quotes a path or a lock reason only when it holds unusual characters (core.quotePath), in
+ * C style: a letter escape for a control character, and three octal digits for each byte of
+ * anything past ASCII, so the bytes are collected first and read as UTF-8 together. The list has a
+ * `-z` form that quotes nothing, but only from git 2.36, and this read has to answer on any git. */
+export function unquote(s: string): string {
+  if (s.length < 2 || !s.startsWith('"') || !s.endsWith('"')) return s;
+  const bytes: number[] = [];
+  const body = Buffer.from(s.slice(1, -1), "utf8");
+  for (let i = 0; i < body.length; i++) {
+    const b = body[i] as number;
+    if (b !== 0x5c) {
+      bytes.push(b);
+      continue;
+    }
+    const octal = /^[0-3][0-7]{2}/.exec(body.subarray(i + 1, i + 4).toString("latin1"));
+    if (octal) {
+      bytes.push(Number.parseInt(octal[0], 8));
+      i += 3;
+      continue;
+    }
+    // a quote or a backslash stands for itself
+    const next = String.fromCharCode(body[++i] ?? 0x5c);
+    bytes.push(C_ESCAPES[next] ?? next.charCodeAt(0));
   }
+  return Buffer.from(bytes).toString("utf8");
 }
 
 /** Every worktree git knows about for this repo, the main checkout included. Any worktree of the

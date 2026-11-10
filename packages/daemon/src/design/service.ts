@@ -7,7 +7,7 @@
 import { join } from "node:path";
 import type { DesignClass, DesignComponent, DesignIndex, DesignLiteral, DesignToken } from "@toyon/shared";
 import { UserError } from "../core/errors.ts";
-import { git } from "../git/exec.ts";
+import { gitRaw, nulSplit } from "../git/exec.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import {
   appliedClasses,
@@ -47,8 +47,8 @@ export class DesignService {
   async scan(worktreeId: string): Promise<DesignIndex> {
     const wt = this.readable(worktreeId);
     if (!wt) throw new UserError("unknown worktree");
-    const listed = await git(wt.path, "ls-files", "-co", "--exclude-standard");
-    const paths = listed.out.split("\n").filter(Boolean);
+    const listed = await gitRaw(wt.path, "ls-files", "-z", "-co", "--exclude-standard");
+    const paths = nulSplit(listed.out);
 
     const cssPaths = paths.filter((p) => CSS_EXT.test(p)).slice(0, MAX_CSS_FILES);
     const srcPaths = paths.filter((p) => SOURCE_EXT.test(p)).slice(0, MAX_SOURCE_FILES);

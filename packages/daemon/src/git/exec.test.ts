@@ -2,7 +2,37 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { GIT, run, runRows, runWatched } from "./exec.ts";
+import { GIT, run, runRows, runWatched, spawnEnv } from "./exec.ts";
+
+describe("spawnEnv", () => {
+  // landing reads git's stderr for "CONFLICT" and the like, which a translated git never prints
+  test("pins messages to English and leaves the other categories as the person set them", () => {
+    expect(spawnEnv({ LANG: "de_DE.UTF-8", LANGUAGE: "de:en", PATH: "/bin" }, { GIT_ASKPASS: "" })).toEqual({
+      LANG: "de_DE.UTF-8",
+      LC_MESSAGES: "C",
+      GIT_OPTIONAL_LOCKS: "0",
+      PATH: "/bin",
+      GIT_ASKPASS: "",
+    });
+  });
+
+  test("an LC_ALL, which would outrank the pin, is handed down as LANG", () => {
+    const env = spawnEnv({ LC_ALL: "de_DE.UTF-8", LANG: "en_US.UTF-8", LC_MESSAGES: "de_DE.UTF-8" });
+    expect(env).toEqual({ LANG: "de_DE.UTF-8", LC_MESSAGES: "C", GIT_OPTIONAL_LOCKS: "0" });
+  });
+
+  test("a spawn keeps UTF-8 for what git runs, with messages in English", async () => {
+    const was = { all: process.env.LC_ALL, lang: process.env.LANG };
+    process.env.LC_ALL = "de_DE.UTF-8";
+    try {
+      const r = await run("sh", ["-c", 'echo "${LC_ALL-unset} $LANG $LC_MESSAGES"'], "/");
+      expect(r.out).toBe("unset de_DE.UTF-8 C");
+    } finally {
+      if (was.all === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = was.all;
+    }
+  });
+});
 
 describe("runRows", () => {
   test("hands rows over as they arrive and kills the command when the reader has enough", async () => {

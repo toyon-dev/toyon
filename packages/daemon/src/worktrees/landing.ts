@@ -492,19 +492,23 @@ function tail(text: string): string {
   return t.length > TAIL_CHARS ? t.slice(-TAIL_CHARS) : t;
 }
 
+/** These summaries are prose for a model, read and never parsed, so they stay in lines; the
+ * switch keeps a name past ASCII as its own letters where git would print octal escapes. */
+const PLAIN_NAMES = ["-c", "core.quotePath=false"];
+
 /** what the next commit would contain and what the branch committed already, as git's own
  * summaries: the uncommitted part against HEAD with the files git does not track yet, and the
  * committed part against the merge base. Two texts, since the prompt labels them differently. */
 async function diffSummary(id: string, path: string, defaultBr: string): Promise<{ own: string; committed: string }> {
   const [base, dirty, untracked] = await Promise.all([
     git(path, "merge-base", "HEAD", defaultBr),
-    git(path, "diff", "HEAD", "--stat"),
-    git(path, "ls-files", "--others", "--exclude-standard"),
+    git(path, ...PLAIN_NAMES, "diff", "HEAD", "--stat"),
+    git(path, ...PLAIN_NAMES, "ls-files", "--others", "--exclude-standard"),
   ]);
   // a base git cannot place (not fetched yet, an unrelated history) leaves the branch's commits
   // out of the question, which then reads as the model's mistake: said here instead
   if (!base.ok) log.warn(id, `landing question: no merge base with ${defaultBr}: ${base.err.trim()}`);
-  const committed = base.ok && base.out ? await git(path, "diff", "--stat", base.out, "HEAD") : null;
+  const committed = base.ok && base.out ? await git(path, ...PLAIN_NAMES, "diff", "--stat", base.out, "HEAD") : null;
   const own = [dirty.out ? `Uncommitted:\n${dirty.out}` : "", untracked.out ? `New files:\n${untracked.out}` : ""]
     .filter(Boolean)
     .join("\n\n");

@@ -16,7 +16,7 @@ import type { Hub } from "../core/hub.ts";
 import { withSlot } from "../core/limiter.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { noteSync, treeReads } from "../core/metrics.ts";
-import { git } from "../git/exec.ts";
+import { git, gitRaw, nulSplit } from "../git/exec.ts";
 import {
   aheadBehind,
   aheadUpstream,
@@ -427,10 +427,10 @@ export class TreeState {
     // second would otherwise read the status every 300 ms
     fireAndForget(
       id,
-      git(r.path, "ls-files", "-o", "-i", "--exclude-standard", "--directory").then((res) => {
+      gitRaw(r.path, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory").then((res) => {
         if (!res.ok) return;
         // whole paths: an ignored packages/shell/dist must not silence all of packages/
-        for (const line of res.out.split("\n")) {
+        for (const line of nulSplit(res.out)) {
           const dir = line.replace(/\/$/, "");
           if (dir) ignore.add(dir);
         }

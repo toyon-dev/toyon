@@ -10,7 +10,7 @@
 // no-op.
 
 import type { RepoInfo, SelfState } from "@toyon/shared";
-import { git } from "../git/exec.ts";
+import { git, gitRaw, nulSplit } from "../git/exec.ts";
 import { log } from "./log.ts";
 
 /** What a running daemon holds in memory and re-reads only on a restart. `bun.lock` and the root
@@ -89,14 +89,14 @@ export class SelfWatch {
     // the branch as it is now, against the commit this process started from. Comparing against the
     // checkout's working HEAD instead would go quiet the moment main was checked out somewhere
     // else, which is exactly when it is most wrong.
-    const names = await git(this.root ?? "", "diff", "--name-only", `${this.booted}..${repo.defaultBranch}`);
+    const names = await gitRaw(this.root ?? "", "diff", "--name-only", "-z", `${this.booted}..${repo.defaultBranch}`);
     if (!names.ok) {
       // the boot commit is gone: a history rewrite, or a branch that never contained it. Nothing
       // useful to say, and a stale notice would be worse than none.
       log.debug("self", `could not diff ${this.booted}..${repo.defaultBranch}: ${names.err}`);
       return false;
     }
-    const paths = names.out.split("\n").filter((l) => l !== "");
+    const paths = nulSplit(names.out);
     const { rebuild, restart } = classify(paths);
     return this.set({ repoId: repo.id, rebuild, restart, building: this.state?.building ?? false });
   }

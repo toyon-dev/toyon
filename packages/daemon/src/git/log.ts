@@ -3,7 +3,7 @@
 
 import { type CommitEntry, type GitFileStatus, LAND_SUBJECTS_MAX } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
-import { parseNumstat } from "./status.ts";
+import { parseNameStatus, parseNumstat } from "./status.ts";
 
 /** How far back the history tab reads. Deep enough to cover a worktree's own work and the main
  * history around it; short enough that the list stays one frame's worth of rows to build. */
@@ -73,21 +73,17 @@ async function aheadShas(worktreePath: string, defaultBr: string): Promise<Set<s
  * parent, which is the change the merge actually brought in; without that git prints nothing. */
 export async function commitFiles(worktreePath: string, sha: string): Promise<GitFileStatus[]> {
   const [names, nums] = await Promise.all([
-    git(worktreePath, "show", "--first-parent", "--name-status", "--no-renames", "--format=", sha),
-    git(worktreePath, "show", "--first-parent", "--numstat", "--no-renames", "--format=", sha),
+    gitRaw(worktreePath, "show", "--first-parent", "--name-status", "-z", "--no-renames", "--format=", sha),
+    gitRaw(worktreePath, "show", "--first-parent", "--numstat", "-z", "--no-renames", "--format=", sha),
   ]);
   if (!names.ok || !names.out) return [];
   const counts = nums.ok ? parseNumstat(nums.out) : new Map();
-  return names.out
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [status, ...rest] = line.split("\t");
-      const path = (rest[rest.length - 1] ?? "").replace(/^"(.*)"$/, "$1");
-      // one letter, in the X column, so the row draws the same as an uncommitted one
-      return { xy: `${(status ?? "M").slice(0, 1)} `, path, ...(counts.get(path) ?? {}) };
-    })
-    .filter((f) => f.path);
+  // one letter, in the X column, so the row draws the same as an uncommitted one
+  return parseNameStatus(names.out).map(({ status, path }) => ({
+    xy: `${status} `,
+    path,
+    ...(counts.get(path) ?? {}),
+  }));
 }
 
 /** A file as the commit left it, and as its first parent had it. Both empty for a path the commit

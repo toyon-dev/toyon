@@ -3,7 +3,7 @@
 // ref alone keeps both reachable and gc collects neither.
 
 import { rmSync } from "node:fs";
-import { GIT, git, gitOrThrow, gitRaw, run } from "./exec.ts";
+import { GIT, git, gitOrThrow, gitRaw, nulSplit, run } from "./exec.ts";
 import { parsePorcelain } from "./status.ts";
 
 /** outside refs/heads, so no branch list, ref picker or push ever shows it */
@@ -37,7 +37,7 @@ export async function keepState(
   const head = await git(wtPath, "rev-parse", "--verify", "HEAD");
   if (!head.ok) return null;
   // -uall, so the count is the one the rail showed this worktree while it was live
-  const status = await gitRaw(wtPath, "status", "--porcelain", "-uall");
+  const status = await gitRaw(wtPath, "status", "--porcelain", "-z", "-uall");
   // a status that failed is treated as dirty: a snapshot of a clean tree costs one commit object
   const files = status.ok ? parsePorcelain(status.out).length : null;
   const dirty = files === null || files > 0;
@@ -90,8 +90,8 @@ export async function keptAt(repoPath: string, ref: string): Promise<KeptState |
   if (!commit) return null;
   const snapshot = subject === SNAPSHOT_SUBJECT && author === SNAPSHOT_AUTHOR && parents && !parents.includes(" ");
   if (!snapshot) return { head: commit };
-  const files = await git(repoPath, "diff", "--name-only", parents, commit);
-  const dirty = files.ok ? files.out.split("\n").filter(Boolean).length : 0;
+  const files = await gitRaw(repoPath, "diff", "--name-only", "-z", parents, commit);
+  const dirty = files.ok ? nulSplit(files.out).length : 0;
   return { head: parents, snapshot: commit, ...(dirty ? { dirty } : {}) };
 }
 

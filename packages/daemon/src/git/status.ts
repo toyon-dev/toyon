@@ -3,7 +3,7 @@
 
 import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
-import { git, gitRaw } from "./exec.ts";
+import { git, gitRaw, nulSplit } from "./exec.ts";
 
 /** The tree's content in one string: HEAD, a hash of the whole diff against it, and a hash of
  * each untracked file. A landing verdict is written against this and retired when it no longer
@@ -13,23 +13,20 @@ export async function treeFingerprint(worktreePath: string): Promise<string> {
   const [head, diff, untracked] = await Promise.all([
     git(worktreePath, "rev-parse", "HEAD"),
     gitRaw(worktreePath, "diff", "HEAD", "--no-renames"),
-    git(worktreePath, "ls-files", "--others", "--exclude-standard"),
+    gitRaw(worktreePath, "ls-files", "-z", "--others", "--exclude-standard"),
   ]);
   const others = await Promise.all(
-    untracked.out
-      .split("\n")
-      .filter(Boolean)
-      .map(async (p) => {
-        try {
-          const f = Bun.file(join(worktreePath, p));
-          // a dumped database or a video is its size, not its bytes
-          const body = f.size > 2_000_000 ? String(f.size) : Bun.hash(await f.arrayBuffer()).toString(36);
-          return `${p}:${body}`;
-        } catch {
-          // gone between the listing and the read: its absence is the fact
-          return `${p}:-`;
-        }
-      }),
+    nulSplit(untracked.out).map(async (p) => {
+      try {
+        const f = Bun.file(join(worktreePath, p));
+        // a dumped database or a video is its size, not its bytes
+        const body = f.size > 2_000_000 ? String(f.size) : Bun.hash(await f.arrayBuffer()).toString(36);
+        return `${p}:${body}`;
+      } catch {
+        // gone between the listing and the read: its absence is the fact
+        return `${p}:-`;
+      }
+    }),
   );
   return `${head.out}:${Bun.hash(diff.out).toString(36)}:${Bun.hash(others.join("\n")).toString(36)}`;
 }
@@ -49,7 +46,7 @@ async function readStatus(
   // not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
   // set of files this adds is the set a commit would have taken anyway. Literal pathspecs, so a
   // file named with a `*` is that file and not a glob.
-  const args = ["status", "--porcelain", "-uall"];
+  const args = ["status", "--porcelain", "-z", "-uall"];
   const r = only.length
     ? await gitRaw(worktreePath, "--literal-pathspecs", ...args, "--", ...only)
     : await gitRaw(worktreePath, ...args);
@@ -89,26 +86,29 @@ export function foldDropped(entries: GitFileStatus[]): { files: GitFileStatus[];
  * the two match. A failed read (git too old for `--end-of-options`, no such path at HEAD) leaves
  * the row uncounted rather than dropped. */
 async function diskAgainstHead(worktreePath: string, file: string): Promise<LineCounts | null> {
-  const r = await git(worktreePath, "diff", "--numstat", "--end-of-options", `HEAD:${file}`, file);
+  const r = await gitRaw(worktreePath, "diff", "--numstat", "-z", "--end-of-options", `HEAD:${file}`, file);
   if (!r.ok) return {};
   if (!r.out) return null;
   const [counts] = parseNumstat(r.out).values();
   return counts ?? {};
 }
 
-/** `git status --porcelain` (v1) → entries. Renames/copies (`R  old -> new`) report the NEW path:
- * that is the file that exists on disk, and what read-file / discard act on. Quoted paths are unquoted. */
+/** `git status --porcelain -z` (v1) → entries. `-z`, because without it git quotes a name that
+ * holds anything past ASCII and escapes its bytes in octal, and a name is then whatever the
+ * unquoting made of it. A rename or copy is two records, the new path and then the old one, and
+ * reports the NEW path: that is the file that exists on disk, and what read-file / discard act on. */
 export function parsePorcelain(out: string): GitFileStatus[] {
-  const unquote = (p: string) => (p.startsWith('"') && p.endsWith('"') ? JSON.parse(p) : p);
-  return out
-    .split("\n")
-    .filter((line) => line.length > 3)
-    .map((line) => {
-      const xy = line.slice(0, 2);
-      const rest = line.slice(3);
-      const arrow = xy.includes("R") || xy.includes("C") ? rest.lastIndexOf(" -> ") : -1;
-      return { xy, path: unquote(arrow >= 0 ? rest.slice(arrow + 4) : rest) };
-    });
+  const files: GitFileStatus[] = [];
+  const records = out.split("\0");
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i] ?? "";
+    if (record.length <= 3) continue;
+    const xy = record.slice(0, 2);
+    files.push({ xy, path: record.slice(3) });
+    // the old path follows as a record of its own, with no status in front of it
+    if (xy.includes("R") || xy.includes("C")) i++;
+  }
+  return files;
 }
 
 /** File content at merge-base with the default branch (empty string for new files). */
@@ -130,21 +130,43 @@ export async function fileAt(worktreePath: string, commit: string, file: string)
 
 export type LineCounts = Pick<GitFileStatus, "add" | "del">;
 
-/** `--numstat` output → counts by path, whichever command produced it. Binary files map to {}. */
+/** `--numstat -z` output → counts by path, whichever command produced it. Binary files map to {}.
+ * A record is `add<TAB>del<TAB>path`; a rename leaves the path empty and gives the old and the new
+ * one as the two records after it, and is counted under the new. */
 export function parseNumstat(out: string): Map<string, LineCounts> {
   const counts = new Map<string, LineCounts>();
-  for (const line of out.split("\n")) {
-    const [a, d, ...rest] = line.split("\t");
-    const path = rest.join("\t").replace(/^"(.*)"$/, "$1");
+  const records = out.split("\0");
+  for (let i = 0; i < records.length; i++) {
+    const [a, d, ...rest] = (records[i] ?? "").split("\t");
+    if (d === undefined) continue;
+    let path = rest.join("\t");
+    if (!path) {
+      path = records[i + 2] ?? "";
+      i += 2;
+    }
     if (!path) continue;
     counts.set(path, a === "-" || d === "-" ? {} : { add: Number(a), del: Number(d) });
   }
   return counts;
 }
 
+/** `--name-status -z` output → one-letter status and path. A record is the status, the next the
+ * path; a rename or copy (`R100`) carries the old path and then the new, and reports the new. */
+export function parseNameStatus(out: string): Array<{ status: string; path: string }> {
+  const files: Array<{ status: string; path: string }> = [];
+  const records = out.split("\0");
+  for (let i = 0; i + 1 < records.length; i += 2) {
+    const status = (records[i] ?? "").slice(0, 1);
+    if (status === "R" || status === "C") i++;
+    const path = records[i + 1] ?? "";
+    if (status && path) files.push({ status, path });
+  }
+  return files;
+}
+
 /** `git diff --numstat` for the given range, keyed by path. */
 async function numstat(worktreePath: string, ...range: string[]): Promise<Map<string, LineCounts>> {
-  const r = await git(worktreePath, "diff", "--numstat", "--no-renames", ...range);
+  const r = await gitRaw(worktreePath, "diff", "--numstat", "-z", "--no-renames", ...range);
   return r.ok ? parseNumstat(r.out) : new Map<string, LineCounts>();
 }
 
@@ -235,17 +257,10 @@ export async function committedFiles(worktreePath: string, defaultBr: string): P
 
 /** Files changed from one commit to another, with +/- counts. */
 export async function filesBetween(cwd: string, from: string, to: string): Promise<GitFileStatus[]> {
-  const r = await git(cwd, "diff", "--name-status", from, to);
+  const r = await gitRaw(cwd, "diff", "--name-status", "-z", from, to);
   if (!r.ok || !r.out) return [];
   const counts = await numstat(cwd, from, to);
-  return r.out
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [status, ...rest] = line.split("\t");
-      const path = rest[rest.length - 1] ?? "";
-      return { xy: `${(status ?? "M").slice(0, 1)} `, path, ...(counts.get(path) ?? {}) };
-    });
+  return parseNameStatus(r.out).map(({ status, path }) => ({ xy: `${status} `, path, ...(counts.get(path) ?? {}) }));
 }
 
 /** Changed line ranges (new-file numbering) for one file vs merge-base with main,

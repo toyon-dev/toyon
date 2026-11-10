@@ -8,7 +8,7 @@
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { GitFileStatus, TurnChanges } from "@toyon/shared";
-import { GIT, git, run } from "./exec.ts";
+import { GIT, git, gitRaw, nulSplit, run } from "./exec.ts";
 import { filesBetween } from "./status.ts";
 
 /** outside refs/heads, so no branch list, ref picker or push ever shows them */
@@ -95,8 +95,8 @@ async function treeNow(wtPath: string, head: string, dirty?: GitFileStatus[]): P
     if (!tree) return null;
   }
   // what differs from HEAD, read between two trees: no second walk of the files
-  const differs = await git(wtPath, "diff", "--name-only", "--no-renames", "-z", head, tree);
-  if (differs.ok) synced.set(wtPath, { index, head, dirty: new Set(differs.out.split("\0").filter(Boolean)) });
+  const differs = await gitRaw(wtPath, "diff", "--name-only", "--no-renames", "-z", head, tree);
+  if (differs.ok) synced.set(wtPath, { index, head, dirty: new Set(nulSplit(differs.out)) });
   return tree;
 }
 

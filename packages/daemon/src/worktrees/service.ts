@@ -97,7 +97,7 @@ import {
   landRef,
 } from "../git/archive.ts";
 import { excludeBlock } from "../git/exclude.ts";
-import { GIT, git, gitOrThrow, isGitRepo, NO_PROMPT, RUN_CEILING_MS, run } from "../git/exec.ts";
+import { GIT, git, gitOrThrow, gitRaw, isGitRepo, NO_PROMPT, nulSplit, RUN_CEILING_MS, run } from "../git/exec.ts";
 import {
   commitWorktree,
   fetchBase,
@@ -737,10 +737,8 @@ export class WorktreeService {
       // stash is those paths and the tracked reset, and nothing else. A blanket `clean -fd` here
       // took a claimed spare's node_modules and everything its setup wrote with it, and in a
       // worktree whose branch has no .gitignore it took every ignored file in the tree.
-      const carried = await git(repo.path, "ls-tree", "-r", "--name-only", `${sha}^3`);
-      const restored = (carried.ok ? carried.out.split("\n").filter(Boolean) : []).filter(
-        (p) => !existsSync(join(wt.path, p)),
-      );
+      const carried = await gitRaw(repo.path, "ls-tree", "-r", "-z", "--name-only", `${sha}^3`);
+      const restored = (carried.ok ? nulSplit(carried.out) : []).filter((p) => !existsSync(join(wt.path, p)));
       const applied = await git(wt.path, "stash", "apply", sha);
       if (applied.ok) {
         const ref = await entry();

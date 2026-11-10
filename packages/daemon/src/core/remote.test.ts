@@ -3,10 +3,33 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Remote } from "@toyon/shared";
-import { door, grantCookie, loadRemote, type PreviewGate, passPreview, setsGrant, takeGrant } from "./remote.ts";
+import {
+  door,
+  grantCookie,
+  loadRemote,
+  type PreviewGate,
+  passPreview,
+  sameSecret,
+  setsGrant,
+  takeGrant,
+} from "./remote.ts";
 
 // The grant rides in the browser's Cookie header next to the app's own cookies. It is checked, then
 // taken off, so the dev server behind a preview sees exactly what the app set and nothing of toyon's.
+
+describe("sameSecret", () => {
+  test("a secret matches itself and nothing else", () => {
+    expect(sameSecret("abc", "abc")).toBe(true);
+    expect(sameSecret("abd", "abc")).toBe(false);
+    expect(sameSecret("ab", "abc")).toBe(false);
+    expect(sameSecret(null, "abc")).toBe(false);
+  });
+  // `?token=` with nothing after it is the empty string, which an empty secret would equal
+  test("a secret that was never made is matched by nothing", () => {
+    expect(sameSecret("", "")).toBe(false);
+    expect(sameSecret(null, "")).toBe(false);
+  });
+});
 
 describe("takeGrant", () => {
   const grant = "ab".repeat(32);
@@ -58,6 +81,12 @@ describe("a grant by address, for a page another machine served", () => {
     expect(r.response.headers.get("set-cookie")).toContain("toyon_preview=g");
     expect(r.response.headers.get("set-cookie")).toContain("SameSite=Strict");
     expect(r.response.headers.get("set-cookie")).not.toContain("Partitioned");
+  });
+  // a Location that opens with two slashes names a host, and would carry the frame elsewhere
+  test("the address it is sent on to stays on this origin", () => {
+    const r = at("https://w3.toyon.example.com//evil.example/x?toyon_grant=ok");
+    if (r.ok) throw new Error("expected a redirect");
+    expect(r.response.headers.get("location")).toBe("/evil.example/x");
   });
   test("the cookie is partitioned only when the frame is cross-site", () => {
     const r = at("https://w3.toyon.example.com/?toyon_grant=ok", { "sec-fetch-site": "cross-site" });

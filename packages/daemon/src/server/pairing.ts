@@ -27,7 +27,7 @@ export interface PairingDeps {
   remote: () => Remote | null;
   /** the preview grant cookie for a page on the public name, as /bootstrap sets it */
   grantCookie: (remote: Remote) => string;
-  origins: Pick<Origins, "isOwn" | "isLoopback">;
+  origins: Pick<Origins, "isOwn" | "isLoopback" | "isPreview">;
   knocks: Knocks;
   /** a knock was just let in, from a page on `from` (null for a page this machine served) */
   onLetIn: (from: string | null) => void;
@@ -63,20 +63,28 @@ export function pairingRoutes(d: PairingDeps) {
     // loopback name there is no front and nobody to count.
     //
     // A knock takes no credential, so any web page the person visits could place one and hope
-    // for a careless yes. Two rules keep that to pages that are Toyon's: on the loopback name
+    // for a careless yes. Three rules keep that to pages that are Toyon's: on the loopback name
     // only this machine's own origins and other loopback ones (a second daemon here) knock,
-    // since a page from the internet has no business there; and a page from elsewhere is asked
-    // at its own /health first, which a Toyon answers and a stray site does not.
+    // since a page from the internet has no business there; a page a worktree's app serves never
+    // knocks, through either door, since a yes would hand the token to the code being previewed;
+    // and a page from elsewhere is asked at its own /health first, which a Toyon answers and a
+    // stray site does not. The caps are read before that ask: it is a fetch this daemon makes to
+    // an address the caller chose, and through the front the caller is anyone.
     if (url.pathname === "/knock" && req.method === "POST") {
       const from = req.headers.get("origin");
       const own = from === null || d.origins.isOwn(from);
-      const placed = front || (from !== null && d.origins.isLoopback(from));
-      if (!own && (!isShellOrigin(from) || !placed || !(await d.tailnet.isToyon(from)))) {
-        return new Response("not a Toyon page", { status: 403 });
+      const client = door.kind === "shell" ? door.client : null;
+      const full = () => new Response("too many devices are waiting to be let in", { status: 429 });
+      if (!own) {
+        const placed = front || d.origins.isLoopback(from);
+        if (!isShellOrigin(from) || !placed || d.origins.isPreview(from)) {
+          return new Response("not a Toyon page", { status: 403 });
+        }
+        if (!d.knocks.room(client)) return full();
+        if (!(await d.tailnet.isToyon(from))) return new Response("not a Toyon page", { status: 403 });
       }
-      const knocked = d.knocks.knock(own ? null : from, door.kind === "shell" ? door.client : null);
-      if (!knocked) return new Response("too many devices are waiting to be let in", { status: 429 });
-      return json(knocked);
+      const knocked = d.knocks.knock(own ? null : from, client);
+      return knocked ? json(knocked) : full();
     }
 
     // The same device, asking what became of its knock. A let-in answer carries the token, once,

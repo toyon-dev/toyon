@@ -23,6 +23,26 @@ describe("token", () => {
       delete process.env.TOYON_TOKEN;
     }
   });
+
+  // an empty token would be matched by `?token=`, and a short one can be guessed
+  test("a file that is empty or cut short is not the token: a new one is written over it", () => {
+    for (const held of ["", "\n", "abc123"]) {
+      writeFileSync(paths.tokenFile, held);
+      const token = loadOrCreateToken(paths, {});
+      expect(token).toMatch(/^[a-f0-9]{64}$/);
+      expect(readFileSync(paths.tokenFile, "utf8")).toBe(token);
+    }
+  });
+
+  // a deployed machine's token is the platform's secret; one made here would match no link
+  test("a deployed machine with no usable token does not start", () => {
+    writeFileSync(paths.tokenFile, "");
+    expect(() => loadOrCreateToken(paths, { TOYON_CLOUD: "1" })).toThrow("TOYON_TOKEN");
+    expect(readFileSync(paths.tokenFile, "utf8")).toBe("");
+    const set = "cd".repeat(32);
+    writeFileSync(paths.tokenFile, `${set}\n`);
+    expect(loadOrCreateToken(paths, { TOYON_CLOUD: "1" })).toBe(set);
+  });
 });
 
 const wt = (id: string) => ({

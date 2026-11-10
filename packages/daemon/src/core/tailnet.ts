@@ -111,7 +111,9 @@ const ANSWERED_RECENTLY_MS = 3 * 60_000;
 
 const probe: HealthProbe = async (origin, named) => {
   try {
-    const r = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    // a redirect is not an answer: the question is what serves this origin, and a knock's origin
+    // is the caller's choice, which must not steer the fetch to an address of its choosing
+    const r = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS), redirect: "error" });
     if (!r.ok) return null;
     const body = (await r.json()) as { ok?: unknown; machine?: unknown; remote?: unknown };
     if (body.ok !== true || typeof body.machine !== "string") return null;

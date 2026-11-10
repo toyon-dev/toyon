@@ -190,6 +190,16 @@ function attachedHeaders(imageType: string | null): Record<string, string> {
   };
 }
 
+/** What a file out of a worktree goes out with. The address carries the token, and an SVG is a
+ * document when a tab is pointed at it (an image opened in a new tab), so its script would run on
+ * the shell's origin holding that address; the sandbox makes that document an origin of its own
+ * with scripts off. An `<img>`, a `<video>` or a stylesheet reads no policy off what it loads. */
+const DRAWN_HEADERS = {
+  "cache-control": NO_STORE,
+  "x-content-type-options": "nosniff",
+  "content-security-policy": "sandbox",
+};
+
 export function createFetch(opts: HttpOpts) {
   const grant = previewGrant(opts.token);
   /** the token as a bearer: what every route a shell or the CLI calls on purpose sits behind */
@@ -549,7 +559,7 @@ export function createFetch(opts: HttpOpts) {
       const path = worktreeId && rel ? await opts.worktreeFile(worktreeId, rel) : null;
       if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), {
-        headers: { "cache-control": NO_STORE, "x-content-type-options": "nosniff" },
+        headers: DRAWN_HEADERS,
       });
     }
 
@@ -560,7 +570,7 @@ export function createFetch(opts: HttpOpts) {
       const path = opts.looseFile(url.pathname.slice("/loose/".length));
       if (!path) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path), {
-        headers: { "cache-control": NO_STORE, "x-content-type-options": "nosniff" },
+        headers: DRAWN_HEADERS,
       });
     }
 

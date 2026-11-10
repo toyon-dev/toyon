@@ -149,7 +149,9 @@ function pairing(over: Partial<PairingDeps>) {
     grantCookie: (r) => `toyon_preview=${previewGrant("secret")}; Domain=${r.host}`,
     origins: {
       isOwn: (o) => o === "http://localhost:4141" || o === `https://${remote()?.host}`,
-      isLoopback: (o) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o),
+      isLoopback: (o) => /^http:\/\/((w\d+\.toyon\.)?localhost|127\.0\.0\.1)(:\d+)?$/.test(o),
+      // wt1's preview port, and every name under the shell's
+      isPreview: (o) => o === "http://127.0.0.1:5173" || /^http:\/\/w\d+\.toyon\.localhost/.test(o),
     },
     knocks: new Knocks(quiet),
     onLetIn: () => {},
@@ -413,6 +415,63 @@ describe("knock", () => {
     const got = await poll(id, {}, "localhost");
     expect(await got?.json()).toEqual({ state: "let-in", token: "secret" });
     expect(got?.headers.get("set-cookie")).toBeNull();
+  });
+
+  // a previewed app answers its own /health, so the ask proves nothing there: it is never made
+  test("a page a worktree's app serves never knocks, whatever it answers and through either door", async () => {
+    const asked: string[] = [];
+    const f = withRemote(name, {
+      tailnet: {
+        view: async () => null,
+        isToyon: async (origin) => {
+          asked.push(origin);
+          return true;
+        },
+        up: async () => null,
+        login: async () => ({ why: "no" }),
+      },
+    });
+    for (const origin of ["http://127.0.0.1:5173", "http://w3.toyon.localhost:4141"]) {
+      const local = await f(req("/knock", { method: "POST", headers: { origin } }), srv());
+      expect(local?.status).toBe(403);
+      const fronted = await f(req("/knock", { method: "POST", host: name, headers: { ...https, origin } }), srv());
+      expect(fronted?.status).toBe(403);
+    }
+    expect(asked).toEqual([]);
+    const second = await f(req("/knock", { method: "POST", headers: { origin: "http://127.0.0.1:4242" } }), srv());
+    expect(second?.status).toBe(200);
+    expect(asked).toEqual(["http://127.0.0.1:4242"]);
+  });
+
+  // the ask is a fetch to an address the caller named; a caller past its share gets none made
+  test("a page from elsewhere past the caps is turned away before it is asked anything", async () => {
+    const asked: string[] = [];
+    const f = withRemote(name, {
+      tailnet: {
+        view: async () => null,
+        isToyon: async (origin) => {
+          asked.push(origin);
+          return false;
+        },
+        up: async () => null,
+        login: async () => ({ why: "no" }),
+      },
+    });
+    const by = (origin?: string) =>
+      f(
+        req("/knock", {
+          method: "POST",
+          host: name,
+          headers: { ...https, "x-forwarded-for": "203.0.113.20", ...(origin ? { origin } : {}) },
+        }),
+        srv(),
+      );
+    expect((await by("https://stray.example"))?.status).toBe(403);
+    expect(asked).toEqual(["https://stray.example"]);
+    expect((await by())?.status).toBe(200);
+    expect((await by())?.status).toBe(200);
+    expect((await by("https://stray.example"))?.status).toBe(429);
+    expect(asked).toEqual(["https://stray.example"]);
   });
 
   test("a page from elsewhere knocks only when it answers as a Toyon itself", async () => {
@@ -1175,6 +1234,16 @@ describe("/files", () => {
     expect(r?.status).toBe(200);
     expect(r?.headers.get("cache-control")).toBe("no-store");
     expect(r?.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+  // the address carries the token, and a tab pointed at an SVG makes a document of it: sandboxed,
+  // its script never runs on the shell's origin. A picture in an <img> is drawn all the same
+  test("a worktree's file and a granted one go out sandboxed", async () => {
+    await attachments.put("wt1", 1, await shot("a.png"));
+    for (const path of ["/files/wt1/public/a%20b.png?token=secret", "/loose/g1?token=secret"]) {
+      const r = await fetch(req(path), srv());
+      expect(r?.status).toBe(200);
+      expect(r?.headers.get("content-security-policy")).toBe("sandbox");
+    }
   });
   // the type is the file's own, which nosniff then holds; a Range (what lets the player seek) is
   // answered by Bun.serve as the file response goes out, not by the handler under test here

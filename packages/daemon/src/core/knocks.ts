@@ -40,10 +40,7 @@ export class Knocks {
    * `client` (null on the loopback name, where only this machine's own processes reach). Null
    * when too many wait already, or that client holds its share of them. */
   knock(from: string | null, client: string | null = null): Knocked | null {
-    this.sweep();
-    const waiting = this.live.filter((k) => k.answer === null);
-    if (waiting.length >= KNOCK_MAX) return null;
-    if (client !== null && waiting.filter((k) => k.client === client).length >= KNOCK_PER_CLIENT) return null;
+    if (!this.room(client)) return null;
     const id = randomBytes(9).toString("base64url");
     let word = knockWord(randomInt);
     // two knocks with one name would make the person's match a coin toss
@@ -51,6 +48,15 @@ export class Knocks {
     this.live.push({ id, word, from, client, since: this.now(), until: this.now() + KNOCK_TTL_MS, answer: null });
     this.changed();
     return { id, word };
+  }
+
+  /** whether one more knock from `client` would be taken: the list has room, and that client
+   * does not hold its share already */
+  room(client: string | null): boolean {
+    this.sweep();
+    const waiting = this.live.filter((k) => k.answer === null);
+    if (waiting.length >= KNOCK_MAX) return false;
+    return client === null || waiting.filter((k) => k.client === client).length < KNOCK_PER_CLIENT;
   }
 
   /** the knocks nobody has answered, oldest first */

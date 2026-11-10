@@ -235,14 +235,29 @@ export function saveState(paths: Paths, state: PersistedState) {
   renameSync(tmp, paths.stateFile);
 }
 
-export function loadOrCreateToken(paths: Paths): string {
+/** the least a token file may hold and still be the token: half of what the daemon writes */
+const TOKEN_MIN = 32;
+
+export function loadOrCreateToken(paths: Paths, env: Record<string, string | undefined> = process.env): string {
   ensureDirs(paths);
   const TOKEN_FILE = paths.tokenFile;
   // The file is the only source, never the environment: every proc, setup step, terminal and agent
   // inherits this process's environment, and Bun.spawn without an `env` hands children the one the
   // process started with, whatever was deleted from process.env since. A machine whose token comes
   // from a platform secret writes it here before the daemon starts (the cloud entrypoint).
-  if (existsSync(TOKEN_FILE)) return readFileSync(TOKEN_FILE, "utf8").trim();
+  //
+  // A file that is empty or cut short (a write that died, a secret that was never set) is not a
+  // token: an empty one would let every request in, and a short one can be guessed. Here a new one
+  // is made, and the devices paired with the old ask again. A deployed machine's token is the
+  // platform's secret, which the links already handed out carry, so it stops and says so instead.
+  if (existsSync(TOKEN_FILE)) {
+    const held = readFileSync(TOKEN_FILE, "utf8").trim();
+    if (held.length >= TOKEN_MIN) return held;
+    if (env.TOYON_CLOUD === "1") {
+      throw new Error(`${TOKEN_FILE} holds no token of ${TOKEN_MIN} characters or more; set TOYON_TOKEN to one`);
+    }
+    log.warn("state", `${TOKEN_FILE} held no usable token; a new one was written`);
+  }
   const token = randomBytes(32).toString("hex");
   writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
   return token;

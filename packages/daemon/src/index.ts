@@ -176,7 +176,7 @@ const remoteSwitch = new RemoteSwitch({ setting, ts: tailscale, port, file: path
 // the devices asking to be let in
 const knocks = new Knocks(hub);
 // which origins are this daemon's own; `branded` is known once the listener is bound
-const origins = new Origins({ setting, port, branded: () => branded });
+const origins = new Origins({ setting, port, branded: () => branded, appPorts: () => runtime.appPorts() });
 // on Linux, whether bubblewrap can start, answered before the first agent listing
 const linuxSandbox = new LinuxSandbox();
 await linuxSandbox.refresh();

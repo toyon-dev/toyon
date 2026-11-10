@@ -75,9 +75,10 @@ export class RemoteSetting {
   }
 }
 
-/** compare two secrets without leaking where they first differ */
+/** compare two secrets without leaking where they first differ. An empty `want` is a secret
+ * that was never made, and nothing matches it: an absent one would otherwise be met by `?token=`. */
 export function sameSecret(given: string | null, want: string): boolean {
-  if (given === null) return false;
+  if (given === null || want === "") return false;
   const a = Buffer.from(given);
   const b = Buffer.from(want);
   return a.length === b.length && timingSafeEqual(a, b);
@@ -259,7 +260,9 @@ export function passPreview(
   // frame's retry) would otherwise burn a code it did not need and fail on the second try.
   if (code !== null) {
     url.searchParams.delete(PREVIEW_GRANT_PARAM);
-    const location = `${url.pathname}${url.search}`;
+    // one leading slash: a path that opens with two is a host to the browser reading Location,
+    // and the redirect would carry the frame off this origin
+    const location = `${url.pathname.replace(/^\/+/, "/")}${url.search}`;
     if (!pass.ok && !gate.redeem(code)) return { ok: false, response: refusedPreview() };
     const headers: Record<string, string> = { location, "cache-control": "no-store" };
     // the frame is cross-site when the shell that framed it is on another site; a Strict cookie

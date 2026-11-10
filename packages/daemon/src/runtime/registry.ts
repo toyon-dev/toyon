@@ -572,6 +572,22 @@ export class RuntimeRegistry {
     return waiting ? "waiting" : null;
   }
 
+  /** every loopback port a worktree's app answers on: each preview, each proc where it listens,
+   * and each proc's fixed address. What is served there is the app's, never Toyon's. */
+  appPorts(): Set<number> {
+    const ports = new Set<number>();
+    for (const wt of this.deps.state.worktrees) ports.add(wt.proxyPort);
+    for (const rt of this.runtimes.values()) {
+      if (rt.proxy) ports.add(rt.proxy.port);
+      for (const f of rt.forwards.values()) ports.add(f.port);
+      for (const st of rt.procs?.states() ?? []) {
+        ports.add(st.port);
+        if (st.boundPort !== undefined) ports.add(st.boundPort);
+      }
+    }
+    return ports;
+  }
+
   markSetup(id: string, on: boolean): void {
     if (on) this.settingUp.add(id);
     else this.settingUp.delete(id);

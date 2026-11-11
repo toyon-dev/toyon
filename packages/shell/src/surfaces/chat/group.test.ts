@@ -858,7 +858,18 @@ describe("heldRow", () => {
     expect(held([tool("edit", "/wt/a.ts"), tool("read", "/wt/b.ts", { name: "Read" })])).toBe(-1);
   });
 
-  test("not a read, a command or a failed edit: the next call is anything after those", () => {
+  test("a file read twice running is being read in pieces, and the row holds for the next one", () => {
+    const read = (extra: Partial<ChatItem> = {}) => tool("read", "/wt/a.ts", { name: "Read", ...extra });
+    expect(held([text("The session core:"), read(), read()])).toBe(1);
+    expect(held([read(), read(), read(), read()])).toBe(0);
+    // two files read once each are two rows, and the newest is a single read
+    expect(held([read(), tool("read", "/wt/b.ts", { name: "Read" })])).toBe(-1);
+    expect(held([read(), read(), thought("The queue next.")])).toBe(-1);
+    expect(held([read(), read({ done: false })])).toBe(-1);
+    expect(held([spawn("task1", "Map it"), read({ parentToolId: "task1" }), read({ parentToolId: "task1" })])).toBe(-1);
+  });
+
+  test("not a single read, a command or a failed edit: the next call is anything after those", () => {
     expect(held([tool("read", "/wt/a.ts", { name: "Read" })])).toBe(-1);
     expect(held([tool("execute", "", { name: "Bash", input: { command: "ls" } })])).toBe(-1);
     expect(held([tool("edit", "/wt/a.ts", { isError: true })])).toBe(-1);

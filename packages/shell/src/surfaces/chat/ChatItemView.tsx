@@ -714,9 +714,9 @@ export const ToolRow = memo(
      * shine that came and went with each call would restart its sweep every time and strobe
      * rather than travel. */
     working?: boolean;
-    /** the agent is deciding its next move and this run of edits is where it most likely lands
-     * (heldRow in group.ts): the row shines through the gap, as it does for a call of its own
-     * whose path has not arrived, so no mark comes and goes at the foot between two edits */
+    /** the agent is deciding its next move and this run of edits, or of reads, is where it most
+     * likely lands (heldRow in group.ts): the row shines through the gap, as it does for a call of
+     * its own whose path has not arrived, so no mark comes and goes at the foot between two calls */
     held?: boolean;
     /** this row's call is the one executing (runningOf in the store), so its wait is counted
      * here, from this stamp: when the call reached the head of the batch, by the store's clock.

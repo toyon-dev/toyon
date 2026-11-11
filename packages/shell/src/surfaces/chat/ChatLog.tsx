@@ -480,7 +480,8 @@ export function ChatLog({
   const fanned = floating.length > 0;
   const moving = streaming >= 0 || calling || fanned;
   // The gap between an edit returning and the next call: the edit row keeps its shine for the
-  // call that most likely comes next (heldRow in group.ts), and the mark under the log stays
+  // call that most likely comes next (heldRow in group.ts), as a file being read in pieces does
+  // for the next piece, and the mark under the log stays
   // away, so a short gap moves nothing at the foot. A silence past the threshold is news, and
   // the mark's word (thinking, waiting for the model) says whose it is, so the row lets go then.
   const holding = working && !moving && quiet < QUIET_AFTER ? heldRow(entries, roots) : -1;

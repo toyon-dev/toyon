@@ -32,6 +32,7 @@ import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
 import {
   handedPrompt,
   handoffActedPrompt,
+  handoffDeclinedPrompt,
   type PieceOrigin,
   pieceAskPrompt,
   pieceSendPrompt,
@@ -721,17 +722,21 @@ export class HandoffService implements ToolProvider {
     agent.note({ type: "handoff-fate", id, pieceId, fate, ts: Date.now() });
   }
 
-  /** the answer to Toyon's own card: go acts on the list as the fates stand, not go closes it */
+  /** the answer to Toyon's own card: go acts on the list as the fates stand, not go closes it,
+   * and words typed with either go with it */
   async answer(worktreeId: string, id: string, go: boolean, note?: string): Promise<void> {
     if (!this.d.state.worktree(worktreeId)) throw new UserError("that chat is gone");
     if (go) await this.act(worktreeId, id, note?.trim() || undefined);
-    else await this.decline(worktreeId, id);
+    else await this.decline(worktreeId, id, undefined, note?.trim() || undefined);
   }
 
   /** the list closes with nothing done: the plan was sent back, the card was pressed not go, or
    * `reason` says what stopped the go. A held list has no file of its own, and the plan it sat on
-   * is the agent's to rewrite now, so its pieces are written as a page the row keeps. */
-  async decline(worktreeId: string, id: string, reason?: string): Promise<void> {
+   * is the agent's to rewrite now, so its pieces are written as a page the row keeps. `note` is
+   * what the person typed with not now: the agent handed off and was told to finish its turn, so
+   * the words start one, the way a plan card's no carries what to change. A bare not now tells it
+   * nothing, since a turn begun to say nothing happened is noise. */
+  async decline(worktreeId: string, id: string, reason?: string, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
@@ -743,9 +748,24 @@ export class HandoffService implements ToolProvider {
       type: "handoff-declined",
       id,
       ...(reason ? { outcome: "failed" as const, reason } : {}),
+      ...(note ? { note } : {}),
       ...(plan ? { plan } : {}),
       ts: Date.now(),
     });
+    if (!note) return;
+    // the card goes up as the handoff call answers, so the agent may still be on that turn, and a
+    // message steered into it would abort the call in flight: the words wait for the turn to end
+    const text = handoffDeclinedPrompt(proposed.pieces, note);
+    fireAndForget(
+      wt.id,
+      this.idle(wt.id, agent).then(() =>
+        agent.send(text, {
+          asked: { kind: "handoff", why: "the list was sent back with a note, so the agent reads it before going on" },
+          keepCards: true,
+        }),
+      ),
+      "pieces declined",
+    );
   }
 
   /** The yes. The go is on the transcript before anything slow starts, so the card closes on

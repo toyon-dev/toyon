@@ -299,6 +299,14 @@ export function handoffActedPrompt(
   return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
 }
 
+/** What the agent is told when the person pressed not now on Toyon's own card with words: nothing
+ * on the list started, and the words are what to change. Sent once its turn ends, since the card
+ * goes up as the handoff call answers. */
+export function handoffDeclinedPrompt(pieces: ReadonlyArray<{ title: string }>, note: string): string {
+  const titles = pieces.map((p) => `"${p.title}"`).join(", ");
+  return `The person answered the handoff card with not now: nothing on the list you handed over (${titles}) was started, and none of it is yours to do from that list. They added: ${note}\n\nRead that as the word on what to change. Hand over a new list with the handoff tool if a split still fits, or go on without one.`;
+}
+
 /** What rides behind a message sent with `toyon send` from a terminal: where the person was
  * standing, and that an agent was at the keyboard when the terminal said so, since text an agent
  * wrote is read as a task description rather than the person's own word. The directory is named

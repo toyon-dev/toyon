@@ -429,7 +429,11 @@ describe("fates", () => {
     expect(await call(a.id, piece())).toEqual({ text: SHOWN });
     const first = lastProposal(a.id);
     w.handoff.fate(a.id, first.id, "p1", "skip");
+    const before = agentOf(a.id).sent.length;
     await w.handoff.answer(a.id, first.id, false);
+    // a bare not now tells the agent nothing: a turn begun to say nothing happened is noise
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
     // the card's list already had its page: the no writes none
     expect(recorded(a.id, "handoff-declined")[0]).not.toHaveProperty("plan");
     agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
@@ -797,6 +801,30 @@ describe("read off the plan", () => {
     await settle();
     expect(recorded(a.id, "handoff-proposed")).toHaveLength(1);
     expect(recorded(a.id, "handoff-declined")).toHaveLength(0);
+  });
+
+  test("not now with words tells the agent once its turn ends", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await call(a.id, piece({ title: "One" }), piece({ title: "Two", plan: "Two." }));
+    const id = lastProposal(a.id).id;
+    const before = agentOf(a.id).sent.length;
+    // the agent may still be on the turn that handed off: the words wait for it to end
+    agentOf(a.id).status = "working";
+    await w.handoff.answer(a.id, id, false, "  merge the two ");
+    const back = recorded(a.id, "handoff-declined").at(-1);
+    expect(back).toMatchObject({ id, note: "merge the two" });
+    expect(back).not.toHaveProperty("reason");
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    agentOf(a.id).status = "idle";
+    w.hub.emit("agentStatus", a.id, "idle");
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const told = agentOf(a.id).sent.at(-1)!;
+    expect(told.asked?.kind).toBe("handoff");
+    expect(told.keepCards).toBe(true);
+    expect(told.text).toContain('"One", "Two"');
+    expect(told.text).toContain("They added: merge the two");
   });
 
   test("go on Toyon's own card starts the agent on a piece kept here, with the note on the go", async () => {

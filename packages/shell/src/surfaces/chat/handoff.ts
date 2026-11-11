@@ -153,8 +153,8 @@ export function handoffQuestion(item: Pick<HandoffItem, "pieces" | "fates">): st
 }
 
 /** one row of Toyon's card for a single piece: the fate it answers with (null for not now), its
- * label and a line under it. Any fate takes a note, since an agent is sent the piece; not now
- * sends nothing to anyone. */
+ * label and a line under it. Every row takes a note: a fate's goes to the agent the piece is sent
+ * to, not now's to this worktree's agent as what to change. */
 export interface OneRow {
   fate: PieceFate | null;
   label: string;
@@ -198,6 +198,29 @@ export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece): OneRow
   return piece.project ? [worktree, notNow] : [worktree, here, notNow];
 }
 
+/** the rows for a list: its fates are moved on its page, so the card is go or not now */
+export const LIST_ROWS: readonly OneRow[] = [
+  { fate: "worktree", label: "go" },
+  { fate: null, label: "not now" },
+];
+
+/** the row a letter typed on the card writes under: not now, since words on the card are nearly
+ * always what to change about the list, as on a plan card; null when no row is one */
+export function notNowRow(shape: readonly OneRow[]): number | null {
+  const i = shape.findIndex((r) => r.fate === null);
+  return i < 0 ? null : i;
+}
+
+/** what the note's field says before anything is typed: who reads the words, and with which
+ * answer they go. `only`: the card is one piece's, whose rows are its fates. */
+export function notePlaceholder(row: OneRow, only: boolean): string {
+  if (row.fate === null) return "what to change, sent with your not now";
+  if (!only) return "a note for every agent this hands to, sent with go";
+  return row.fate === "here"
+    ? "a note for this worktree's agent, sent with it"
+    : "a note for the agent there, sent with it";
+}
+
 /** the fate as the row's words: the plain state of the piece before go */
 export function fateWord(piece: Piece, fate: PieceFate): string {
   if (fate === "worktree") return piece.project ? `new worktree in ${piece.project.name}` : "new worktree";
@@ -220,25 +243,26 @@ export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): 
 
 /** Toyon's own card as the person answered it, for their bubble: the row they picked, by its
  * label on the card, and the note under it. One piece reads back the fate it went with, since
- * that row is what was pressed; a list's row was go. Null for a list no card asked about. */
+ * that row is what was pressed; a list's row was go. Not now reads back with what was typed
+ * under it. Null for a list no card asked about. */
 export function handoffSaid(item: Pick<HandoffItem, "pieces" | "fates" | "answered">): string | null {
   const a = item.answered;
   if (!a) return null;
-  if (!a.go) return "not now";
+  if (!a.go) return a.note ? `not now\n${a.note}` : "not now";
   const only = item.pieces.length === 1 ? item.pieces[0] : undefined;
   const picked = only ? oneRows(item, only).find((r) => r.fate === effectiveFate(item, only))?.label : undefined;
   const label = picked ?? "go";
   return a.note ? `${label}\n${a.note}` : label;
 }
 
-/** the answer to Toyon's own card: `note` rides with go alone, trimmed, and a blank one is left off */
+/** the answer to Toyon's own card: `note` rides with go or not now, trimmed, and a blank one is left off */
 export function handoffAnswer(
   item: Pick<HandoffItem, "id">,
   worktreeId: string,
   go: boolean,
   note: string | undefined,
 ): Extract<ClientMsg, { t: "handoff-answer" }> {
-  const said = go ? note?.trim() : undefined;
+  const said = note?.trim();
   return { t: "handoff-answer", worktreeId, id: item.id, go, ...(said ? { note: said } : {}) };
 }
 

@@ -270,7 +270,7 @@ export type ChatItem =
       outcomes: PieceOutcome[];
       later: Array<{ pieceId: string; worktreeId?: string; title?: string; reason?: string }>;
       reason?: string;
-      /** Toyon's own card was answered: go or not now, and the note typed with go. The list moves
+      /** Toyon's own card was answered: go or not now, and the note typed with it. The list moves
        * to where it was answered, below the turn that proposed it, with the answer as the person's
        * bubble */
       answered?: { go: boolean; note?: string };
@@ -3889,7 +3889,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       // not now on Toyon's own card is the person's answer, read where they gave it; a reason is
       // Toyon closing the list, which stays where it stood
       if (card.state === "proposed" && !event.reason) {
-        return answeredAtEnd(items, idx, { ...card, state: "declined", answered: { go: false }, ts: event.ts });
+        return answeredAtEnd(items, idx, {
+          ...card,
+          state: "declined",
+          answered: { go: false, ...(event.note ? { note: event.note } : {}) },
+          ts: event.ts,
+        });
       }
       return items.with(idx, { ...card, state: "declined", ...(event.reason ? { reason: event.reason } : {}) });
     }

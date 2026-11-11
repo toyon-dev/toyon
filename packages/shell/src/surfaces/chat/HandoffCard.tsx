@@ -2,12 +2,15 @@
 // there is no plan card for the list to ride beside, and the box asks instead. One piece, which
 // is most lists, is answered here whole: the text in the band where it is read, and the fates as
 // the rows, the agent's proposal first so enter on an untouched card is the proposal. A list of
-// several is read and moved in the document on the right, which the card opens on a press and
-// never on its own: a pane that opens itself is one the person has to close, and on the phone it
-// took the screen with the card behind it. The card does not list the pieces itself: the question
-// carries the count, the page carries the rows, the way the plan card's byline points at the plan. A note is the plan card's note: `n` opens the field
-// under the row it is on, and it goes to every agent a piece is sent to, this one's for a piece
-// kept here.
+// several is read and moved in the document on the right, which opens beside the box as the card
+// arrives, the way a plan does beside its card; the card does not list the pieces itself: the
+// question carries the count and the page carries the rows.
+//
+// It is answered the way a plan card is. `n` opens a field under the cursor's row, which becomes
+// the pick, and enter in the field is that pick. A letter typed on the card opens the field under
+// not now with the letter in it, since words on the card are nearly always what to change. Words
+// with a fate go to every agent a piece is sent to, this one's for a piece kept here; words with
+// not now go to this worktree's agent, which is otherwise told nothing.
 
 import type { AskAnswer } from "@toyon/shared";
 import { useMemo, useRef, useState } from "react";
@@ -18,18 +21,24 @@ import { worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { type Choice, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
-import { dropBlankNote, setNote } from "./ask.ts";
+import { useOnChange } from "../../ui/hooks.ts";
+import { dropBlankNote } from "./ask.ts";
 import { Card, CardBand, CardHead, type Root, takeKeyboard } from "./Card.tsx";
 import {
   effectiveFate,
   type HandoffItem,
   handoffAnswer,
+  handoffCounts,
   handoffQuestion,
+  LIST_ROWS,
+  notePlaceholder,
+  notNowRow,
   type OneRow,
   oneRows,
   pieceFate,
 } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { typingStart } from "./permissionNote.ts";
 
 /** one slot, no pick: the note is the whole of what the card takes from the person */
 const BLANK: AskAnswer[] = [{ selected: [] }];
@@ -55,12 +64,8 @@ export function HandoffCard({
   const noting = note !== undefined;
   // the row the note's field is under: the pick in the draft, read as a row index
   const noted = noting ? Number(draft[0]?.selected[0] ?? 0) : -1;
-  const write = (next: AskAnswer[], row = 0) =>
-    dispatch({
-      a: "card-draft",
-      id: worktreeId,
-      card: { id: item.id, draft: [{ ...(next[0] ?? { selected: [] }), selected: [String(row)] }], current: 0 },
-    });
+  const write = (next: AskAnswer[]) =>
+    dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: 0 } });
   const field = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState(0);
   // go went out on this row: the daemon's go event closes the card a round trip later, and
@@ -73,28 +78,31 @@ export function HandoffCard({
   const read = () => {
     if (plan) openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" });
   };
+  // The page opens as the card arrives: it is what go is asked about. Not on a phone, where the
+  // pane is a cover over the whole column: it would hide the card it is about, and closing it
+  // would mount the card again and open the page again. One piece's text is in the band.
+  const active = useStore((s) => s.activeId);
+  const phone = useStore((s) => s.frame === "phone");
+  useOnChange([item.id, plan], () => {
+    // the caret stays on the card, which is what is being asked
+    if (plan && !only && active === worktreeId && !phone)
+      openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview", focus: false });
+  });
   const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
   /** the rows: one piece's fates, or go and not now for a list */
-  const shape: OneRow[] = useMemo(
-    () =>
-      only
-        ? oneRows(item, only)
-        : [
-            { fate: "worktree", label: "go" },
-            { fate: null, label: "not now" },
-          ],
-    [item, only],
-  );
+  const shape: readonly OneRow[] = useMemo(() => (only ? oneRows(item, only) : LIST_ROWS), [item, only]);
 
   /** the answer: a fate the agent did not propose goes first, then go, two frames the daemon
-   * reads in order (the fate is recorded before go reads the list); not now closes the card */
+   * reads in order (the fate is recorded before go reads the list); not now closes the card.
+   * The words go with whatever was picked: typed under one row and answered by another's digit,
+   * they are still what the person had to say. */
   const answer = (row: number) => {
     if (starting || !sock) return;
     const picked = shape[row];
     if (!picked) return;
     if (picked.fate === null) {
-      sock.send(handoffAnswer(item, worktreeId, false, undefined));
+      sock.send(handoffAnswer(item, worktreeId, false, note));
     } else {
       if (only && picked.fate !== effectiveFate(item, only))
         sock.send(pieceFate(item, worktreeId, only.id, picked.fate));
@@ -103,20 +111,24 @@ export function HandoffCard({
     }
     dispatch({ a: "answered", id: worktreeId });
   };
-  /** `n`: the field opens under the cursor's row when it is a fate (an agent is sent the piece),
-   * else under the first fate, since not now sends nothing; the row becomes the pick */
-  const openNote = () => {
-    const under = shape[cursor];
-    const at = under && under.fate !== null ? cursor : shape.findIndex((r) => r.fate !== null);
-    if (at === -1) return;
-    if (!noting || noted !== at) write(setNote(draft, 0, note ?? ""), at);
-    setCursor(at);
-    requestAnimationFrame(() => field.current?.focus());
+  /** the field opens under a row, which becomes the pick without answering, since the words are
+   * still to be written; a field already open elsewhere moves with them. The caret goes in once
+   * it is painted, the commit after this one, at the end of what is there. */
+  const openNote = (row: number, text: string) => {
+    if (starting || !shape[row]) return;
+    write([{ selected: [String(row)], note: text }]);
+    setCursor(row);
+    requestAnimationFrame(() => {
+      const el = field.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
   };
   const park = () => dispatch({ a: "card-park", id: worktreeId, cardId: item.id });
   const leaveField = () => {
     const next = dropBlankNote(draft, 0);
-    if (next !== draft) write(next, noted);
+    if (next !== draft) write(next);
     root.current?.focus();
   };
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -134,17 +146,22 @@ export function HandoffCard({
       return;
     if (e.key === "n") {
       e.preventDefault();
-      openNote();
-    } else if (e.key === "r" && plan && !only) {
-      e.preventDefault();
-      read();
+      openNote(cursor, note ?? "");
+      return;
     }
+    const start = typingStart(e);
+    if (start === null) return;
+    e.preventDefault();
+    // `r` reads the list while nothing is being written
+    if (start === "r" && plan && !only && !noting) return read();
+    // a field already open takes the letter at its end; a fresh one opens under not now
+    openNote(noting ? noted : (notNowRow(shape) ?? cursor), (note ?? "") + start);
   };
 
   const rows: Choice[] = shape.map((r, i) => ({
     label: r.label,
     ...(pressed === i ? { description: "starting" } : r.description ? { description: r.description } : {}),
-    ...(r.fate !== null ? { hint: { k: "n", label: "add context", icon: "edit", on: !noting } } : {}),
+    hint: { k: "n", label: "add context", icon: "edit", on: !noting },
     tone: r.fate === null ? "deny" : undefined,
     checked: noting && i === noted,
     field:
@@ -152,13 +169,9 @@ export function HandoffCard({
         ? {
             ref: field,
             value: note ?? "",
-            placeholder: !only
-              ? "a note for every agent this hands to, sent with go"
-              : r.fate === "here"
-                ? "a note for this worktree's agent, sent with it"
-                : "a note for the agent there, sent with it",
+            placeholder: notePlaceholder(r, !!only),
             enterKeyHint: "send",
-            onChange: (value) => write(setNote(draft, 0, value), noted),
+            onChange: (value) => write([{ selected: [String(noted)], note: value }]),
             onSend: () => answer(noted),
           }
         : undefined,
@@ -191,12 +204,16 @@ export function HandoffCard({
             takeKeyboard(root);
           }}
           onPick={answer}
+          onHint={(i) => openNote(i, note ?? "")}
         />
       </Card>
     );
   }
   // a list reads like the plan card's byline: the question carries the count, and the list itself
-  // is one press away on its page, where each row is read and moved; the card does not repeat it
+  // is on its page, where each row is read and moved; the card does not repeat it. The mode is
+  // said when the go makes a worktree, since it is the mode that worktree's agent starts in
+  const counts = handoffCounts(item);
+  const makes = counts.worktrees + counts.queued > 0;
   const open = plan ? (
     <Button variant="inline" data-tip="Open it beside the box; any row can still be moved (r)" onClick={() => read()}>
       The list is on its page
@@ -206,7 +223,19 @@ export function HandoffCard({
   );
   return (
     <Card root={root} id={item.id} onKeyDown={onKeyDown}>
-      <CardHead sub={<>{open}. Nothing has started yet.</>}>{handoffQuestion(item)}</CardHead>
+      <CardHead
+        sub={
+          <>
+            {open}.{" "}
+            {makes
+              ? `New worktrees start in ${mode} mode${mode === "auto" ? ", which runs without asking" : ""}. `
+              : ""}
+            Nothing has started yet.
+          </>
+        }
+      >
+        {handoffQuestion(item)}
+      </CardHead>
       <Choices
         rows={rows}
         cursor={cursor}
@@ -215,6 +244,7 @@ export function HandoffCard({
           takeKeyboard(root);
         }}
         onPick={answer}
+        onHint={(i) => openNote(i, note ?? "")}
       />
     </Card>
   );

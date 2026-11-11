@@ -16,7 +16,10 @@ import {
   handoffQuestion,
   handoffSaid,
   hereWaits,
+  LIST_ROWS,
   listPage,
+  notePlaceholder,
+  notNowRow,
   oneRows,
   openHandoff,
   pieceFate,
@@ -37,6 +40,9 @@ describe("handoffSaid", () => {
     );
     expect(handoffSaid(list([piece("p1"), piece("p2")], {}, { answered: { go: true } }))).toBe("go");
     expect(handoffSaid(list(one, {}, { answered: { go: false } }))).toBe("not now");
+    expect(handoffSaid(list(one, {}, { answered: { go: false, note: "merge the two" } }))).toBe(
+      "not now\nmerge the two",
+    );
   });
 });
 
@@ -90,7 +96,15 @@ describe("fates", () => {
       go: true,
       note: "and tests",
     });
-    expect(handoffAnswer(list([]), "a", false, "kept")).toEqual({
+    // words with not now go too: they are what to change, and the agent is sent them
+    expect(handoffAnswer(list([]), "a", false, "  merge the two ")).toEqual({
+      t: "handoff-answer",
+      worktreeId: "a",
+      id: "l1",
+      go: false,
+      note: "merge the two",
+    });
+    expect(handoffAnswer(list([]), "a", false, "  ")).toEqual({
       t: "handoff-answer",
       worktreeId: "a",
       id: "l1",
@@ -202,6 +216,24 @@ describe("oneRows", () => {
       ["worktree", "start a worktree in acp"],
       [null, "not now"],
     ]);
+  });
+});
+
+describe("the note", () => {
+  test("a letter typed on the card writes under not now", () => {
+    const l = list([piece("p1")]);
+    expect(notNowRow(oneRows(l, l.pieces[0]!))).toBe(2);
+    expect(notNowRow(LIST_ROWS)).toBe(1);
+    expect(notNowRow(LIST_ROWS.slice(0, 1))).toBeNull();
+  });
+  test("the field says who reads the words and with which answer they go", () => {
+    const l = list([piece("p1")]);
+    const [worktree, here, notNow] = oneRows(l, l.pieces[0]!);
+    expect(notePlaceholder(worktree!, true)).toBe("a note for the agent there, sent with it");
+    expect(notePlaceholder(here!, true)).toBe("a note for this worktree's agent, sent with it");
+    expect(notePlaceholder(notNow!, true)).toBe("what to change, sent with your not now");
+    expect(notePlaceholder(LIST_ROWS[0]!, false)).toBe("a note for every agent this hands to, sent with go");
+    expect(notePlaceholder(LIST_ROWS[1]!, false)).toBe("what to change, sent with your not now");
   });
 });
 

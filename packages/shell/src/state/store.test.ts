@@ -4621,6 +4621,8 @@ describe("a pieces list", () => {
     expect(chatOf(more)[0]).toMatchObject({ kind: "assistant", text: "Nothing has started yet. Ask away." });
     const notNow = reducer(s, agent("a", { type: "handoff-declined", id: "l1", ts: 9 }));
     expect(chatOf(notNow)[1]).toMatchObject({ state: "declined", answered: { go: false } });
+    const why = reducer(s, agent("a", { type: "handoff-declined", id: "l1", note: "merge the two", ts: 9 }));
+    expect(chatOf(why)[1]).toMatchObject({ state: "declined", answered: { go: false, note: "merge the two" } });
     // Toyon closing the list is not the person's answer, and a held list's answer is its plan card's
     const failed = reducer(s, agent("a", { type: "handoff-declined", id: "l1", reason: "gone", ts: 9 }));
     expect(chatOf(failed)[0]).toMatchObject({ state: "declined", reason: "gone" });

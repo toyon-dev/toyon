@@ -1,12 +1,13 @@
 // What GitHub says about the PRs of toyon's rows: read after a PR opens or is merged, when the
-// window comes back (repoTick), and every few minutes while any PR of a repo is open. A PR GitHub
-// itself is about to merge (in the merge queue, or on auto-merge with its checks still running) is
-// asked about every half minute instead, while a shell is connected to see the answer: nobody
-// presses anything for that merge, so the poll is the only way the row hears of it. A merged PR is
-// the landing on the PR route, wherever it was merged from: the row is marked landed and main here
-// follows origin as far as it can, the same ending as the local routes. While a PR is open the same
-// read brings in what reviewers wrote on it, for the page the line over the box opens; a remark
-// someone else wrote rings the worktree, once.
+// window comes back (repoTick), when a row's work turns up on the base ahead of any word of a
+// merge (prDue), and every few minutes while any PR of a repo is open. A PR GitHub itself is about
+// to merge (in the merge queue, or on auto-merge with its checks still running) is asked about
+// every half minute instead, while a shell is connected to see the answer: nobody presses anything
+// for that merge, so the poll is the only way the row hears of it. A merged PR is the landing on
+// the PR route, wherever it was merged from: the row is marked landed and main here follows origin
+// as far as it can, the same ending as the local routes. While a PR is open the same read brings in
+// what reviewers wrote on it, for the page the line over the box opens; a remark someone else
+// wrote rings the worktree, once.
 //
 // A PR the land press did not open is found the same way. An agent that pushes its branch and runs
 // `gh pr create` in the chat, or a person doing so in a terminal, leaves the row with no record,
@@ -16,7 +17,7 @@
 // window comes back, and on the poll; what GitHub answers goes on the record and the rest follows
 // as for a PR toyon opened.
 
-import { landPolicy, type PrComment, type PrState, prTaken } from "@toyon/shared";
+import { landPolicy, type PrComment, type PrState, prTaken, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -78,6 +79,12 @@ export class PrService {
     d.hub.on("repoTick", (repoId) => this.refreshRepo(repoId));
     // the push and the `gh pr create` happen inside a turn: its end is when the PR is there
     d.hub.on("turnSettled", (id) => fireAndForget(id, this.discover(id, "turn"), "pr discovery"));
+    // a merge that kept the hashes reached the base here before GitHub was asked about it, and
+    // git alone could not say the PR merged: the row's landing waits on the answer, asked for now
+    d.hub.on("prDue", (id) => {
+      const wt = this.d.state.worktree(id);
+      if (wt) this.ask(wt);
+    });
     // unref'd: a daemon with nothing else to do should still exit, and the ticks matter only while
     // someone is looking anyway (the frame they push reaches no one otherwise)
     this.timer = setInterval(() => this.refreshAll(), d.everyMs ?? POLL_MS);
@@ -109,12 +116,18 @@ export class PrService {
     for (const wt of this.d.state.worktrees) {
       if (wt.repoId !== repoId) continue;
       if (!wt.pr) fireAndForget(wt.id, this.discover(wt.id, why), "pr discovery");
-      else if (wt.pr.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
-      // merged while an op was out on the row, so its landing was left to that press: taken now,
-      // with nothing to ask GitHub
-      else if (wt.pr.state === "merged" && !prTaken(wt)) {
-        fireAndForget(wt.id, this.d.worktrees.prMerged(wt.id), "pr landing");
-      }
+      else this.ask(wt);
+    }
+  }
+
+  /** One row's PR, where there is something left to hear: an open one is read again, and a
+   * merged one no landing has taken is landed. A closed one, or one taken, is over. */
+  private ask(wt: WorktreeInfo) {
+    if (wt.pr?.state === "open") fireAndForget(wt.id, this.refresh(wt.id), "pr refresh");
+    // merged while an op was out on the row, so its landing was left to that press: taken now,
+    // with nothing to ask GitHub
+    else if (wt.pr?.state === "merged" && !prTaken(wt)) {
+      fireAndForget(wt.id, this.d.worktrees.prMerged(wt.id), "pr landing");
     }
   }
 

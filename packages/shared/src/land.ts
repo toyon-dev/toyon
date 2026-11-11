@@ -120,6 +120,15 @@ export function prTaken(wt: Landed): boolean {
   return !!wt.pr && (wt.lands ?? []).some((l) => l.pr === wt.pr?.number);
 }
 
+/** The row carries a PR whose landing is still to come: open or merged, and on no landing yet.
+ * Work of such a row found on the base is that PR's to record: a merge that kept the hashes puts
+ * the commits there before the merge is heard of, and a landing recorded for them with no PR
+ * behind it would leave the PR to be recorded again. A closed PR lands nothing, so work that
+ * reached the base past one got there by hand. */
+export function prPending(wt: Landed): boolean {
+  return !!wt.pr && wt.pr.state !== "closed" && !prTaken(wt);
+}
+
 /** a landing op as a sentence names it: "a land is already running here" */
 export function shipNoun(op: ShipOp): string {
   return { land: "a land", commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];

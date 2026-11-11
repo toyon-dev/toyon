@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { landedNow, landWord, movedPastLand, notLandedWhy, prStanding, prTaken, standingOf } from "./land.ts";
+import {
+  landedNow,
+  landWord,
+  movedPastLand,
+  notLandedWhy,
+  prPending,
+  prStanding,
+  prTaken,
+  standingOf,
+} from "./land.ts";
 
 // The one rule every landing path shares: a row is landed when the base has its work, read
 // from the recorded landings and the tree, never from an ahead count alone.
@@ -121,5 +130,16 @@ describe("prTaken", () => {
     expect(prTaken({ pr: merged, lands: [{ ...land, pr: 7 }] })).toBe(true);
     expect(prTaken({ pr: merged, lands: [{ ...land, pr: 6 }] })).toBe(false);
     expect(prTaken({ lands: [{ ...land, pr: 7 }] })).toBe(false);
+  });
+});
+
+describe("prPending", () => {
+  test("an open or merged PR on no landing is still to land; a closed one, or one taken, is not", () => {
+    const open = { ...merged, state: "open" as const };
+    expect(prPending({ pr: open })).toBe(true);
+    expect(prPending({ pr: merged, lands: [land] })).toBe(true);
+    expect(prPending({ pr: merged, lands: [{ ...land, pr: 7 }] })).toBe(false);
+    expect(prPending({ pr: { ...merged, state: "closed" } })).toBe(false);
+    expect(prPending({ lands: [land] })).toBe(false);
   });
 });

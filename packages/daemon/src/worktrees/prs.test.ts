@@ -154,6 +154,21 @@ describe("PrService", () => {
     expect(w.merged).toEqual(["w2"]);
     w.prs.stop();
   });
+
+  test("a row whose work reached the base ahead of the merge's news is asked about at once, and alone", async () => {
+    const w = world(
+      [open({ state: "merged" })],
+      [{}, { pr: open({ number: 13, state: "merged" }) }, { pr: open({ number: 14 }) }],
+    );
+    w.hub.emit("prDue", "w1");
+    w.hub.emit("prDue", "w2");
+    await Bun.sleep(20);
+    // the open PR is read and its merge lands the row; the one known merged lands with no read
+    expect(w.asked).toEqual([12]);
+    expect(w.merged.sort()).toEqual(["w1", "w2"]);
+    expect(w.wt("w3")?.pr?.state).toBe("open");
+    w.prs.stop();
+  });
 });
 
 describe("PrService discovery", () => {

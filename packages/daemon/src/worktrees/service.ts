@@ -44,6 +44,7 @@ import {
   type PrState,
   runSetup as procSetup,
   runTeardown as procTeardown,
+  prPending,
   prStanding,
   prTaken,
   type RefKind,
@@ -123,6 +124,7 @@ import {
   aheadBehind,
   aheadOf,
   aheadUpstream,
+  reaches,
   remoteHead,
   statusFiles,
   treeEmpty,
@@ -2140,9 +2142,14 @@ export class WorktreeService {
   setPr(worktreeId: string, pr: PrState | undefined) {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || (wt.pr === undefined && pr === undefined)) return;
+    const pending = prPending(wt);
     if (pr) wt.pr = pr;
     else delete wt.pr;
     this.d.state.save();
+    // work found on the base was left for this PR's merge to record. Closed or gone, it records
+    // nothing, so the landing is one git did by hand: asked about again at the same HEAD, in the
+    // read this frame sets off
+    if (pending && !prPending(wt) && this.handChecked.delete(worktreeId)) this.tree.invalidate(worktreeId);
     this.d.hub.emit("worktreesChanged");
   }
 
@@ -3360,6 +3367,13 @@ export class WorktreeService {
       this.handChecked.set(wt.id, head);
       const mark = await handLanding(r.path, wt.branch, r.base, wt.lands?.at(-1)?.tip);
       if (mark) {
+        // The work is on the base while the row's PR is on no landing yet: a merge that kept
+        // the hashes, fetched before any word of it from GitHub. The landing is the PR's, on the
+        // record once and under its number; one by hand here would leave the PR to go on a
+        // second time. GitHub calls a PR merged once its head is on the base, and this history
+        // is level with the base, so a head found in it is the merge, known without asking.
+        const merged =
+          prPending(wt) && (wt.pr?.state === "merged" || (!!wt.pr?.head && (await reaches(r.path, wt.pr.head))));
         // an op that started under this read owns the row until it ends: this HEAD is asked
         // about again in the read its closing frame sets off
         const out = this.ops.get(wt.id);
@@ -3372,8 +3386,27 @@ export class WorktreeService {
           );
           return false;
         }
-        await this.landedByHand(wt, mark);
-        return true;
+        // closed, taken or gone: under the reads above as well
+        const pr = prPending(wt) ? wt.pr : undefined;
+        if (!pr) {
+          await this.landedByHand(wt, mark);
+          return true;
+        }
+        if (merged) {
+          // the queue is behind a merged PR, as it is on the record GitHub gives of one
+          const { queue: _had, queued: _was, ...rest } = pr;
+          if (pr.state !== "merged") this.setPr(wt.id, { ...rest, state: "merged" });
+          // not waited for: the landing pulls main, over the network and under the repo lock,
+          // and this read is one every recount queues behind
+          fireAndForget(wt.id, this.prMerged(wt.id), "pr landing");
+        } else {
+          // GitHub never named the PR's head, or it holds commits this history lacks: only
+          // GitHub can say, and is asked now, once for this HEAD
+          log.info(wt.id, `the work is on ${r.base}; PR #${pr.number} lands it once GitHub says it merged`);
+          this.d.hub.emit("prDue", wt.id);
+        }
+        // the PR's landing went out in that same tick, and the marks are its op's from here
+        if (this.ops.has(wt.id)) return false;
       }
     }
     if (!isMain && head) {

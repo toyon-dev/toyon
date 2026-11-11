@@ -114,6 +114,9 @@ export interface HubEvents {
    * worktree another one handed work to tells that one here, so the two services need not know
    * each other. */
   landed: (worktreeId: string) => void;
+  /** a read found the worktree's work on the base while its PR is on no landing yet, and could
+   * not tell from git that the PR merged: GitHub is asked now, not when the poll comes round */
+  prDue: (worktreeId: string) => void;
   /** the person answered a pieces list through the plan card it sat beside: approved with the
    * plan, or sent back with it. The session raises it; the handoff service acts, so the two need
    * not know each other. */

@@ -473,6 +473,18 @@
   .code-copy {
     position: absolute;
   }
+  /* On touch no pointer says which block, so every block wears its control and it never leaves:
+     a first line running under it would be covered for good. The corner is kept clear instead, by
+     a float the first line wraps short of, one line tall so the second runs the full width. It is
+     there only where a holder has controls to show, so a block with no copy gives up no room. The
+     width is the control's 20px box, its 4px inset and 4px of air (28px), less the block's 10px
+     padding. */
+  [data-touch] :has(> .code-copy) pre::before {
+    content: "";
+    float: right;
+    width: 18px;
+    height: 1em;
+  }
   .msg-error {
     color: var(--red);
   }
@@ -2050,14 +2062,32 @@
     background: var(--sunken-floor);
     color: var(--text1);
   }
-  .card-code pre {
-    margin: 0;
+  /* Set in code, the band's ground is the block's, so the padding is the block's own and the band
+     keeps none: the copy control is placed against the block's box, and that puts it in the band's
+     corner the way it sits in a fenced block's. Against the bare text it hung under a one-line
+     command's band, which then scrolled, and lay across the first two lines of a longer one. */
+  .card-code {
     padding: 0;
-    background: none;
-    border-radius: 0;
-    font: var(--type-mono-sm);
-    white-space: pre-wrap;
-    word-break: break-word;
+    & pre {
+      margin: 0;
+      padding: 6px var(--picker-inset);
+      background: none;
+      border-radius: 0;
+      font: var(--type-mono-sm);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    /* the room the control leaves the first line on touch, as below .code-copy, for this padding */
+    [data-touch] & pre::before {
+      width: max(0px, 28px - var(--picker-inset));
+    }
+    /* A thumb's target is drawn 10px outside the control (ui/button.css), and here that is past
+       the band's right edge and under a one-line command's floor: scrollable overflow in a band
+       that scrolls. The target stops at the band's edges on those two sides. */
+    [data-touch] & > .code-copy::after {
+      right: -4px;
+      bottom: 0;
+    }
   }
   /* the actions under a page, at the page's floor: every page stands at the tallest one's height,
    and the slack goes above this row, so the send sits in one place whichever page is open. The

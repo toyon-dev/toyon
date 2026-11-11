@@ -764,6 +764,16 @@
       margin: 10px 0 4px;
       color: var(--text0);
     }
+    /* A heading set in weight alone hands that weight to the mono inside it, a backticked word or
+       a file's link: a heading that is only a name has no size to mark it, and at the mono's own
+       weight it read as a chip left between two paragraphs. The mono has no cut between Regular
+       and Bold, so the title weight draws its Bold, a cut the shell ships and never a synthesised
+       one. A document's h1 and h2 are marked by size and keep the mono's own weight
+       (.md-preview). */
+    &:not(.md-preview) :is(h1, h2) :is(code, a.file-link),
+    & :is(h3, h4, h5, h6) :is(code, a.file-link) {
+      font-weight: inherit;
+    }
     /* A fenced block is read, not edited, so a long line wraps rather than clipping. The chat
        column is narrow beside a preview, the overlay scrollbar hides until scrolled, and a clipped
        line looks whole; the editor pane is where a line keeps its column. Leading indentation
@@ -1030,8 +1040,10 @@
     }
     /* A backticked word in the two headings that climb the ladder keeps the proportion the body's
        chip has against the body (12 on 15); at the mono tier's fixed size it read as a footnote
-       dropped into the title. The mono's own weight, not the heading's: a path is a path in a
-       title too, and the heavier mono shouts where the heading is already set in weight. */
+       dropped into the title. The mono's own weight, not the heading's: size already marks these
+       two, a path is a path in a title too, and the heavier mono shouts beside it. The headings
+       under them stay at the body size, marked by weight alone, and hand that weight to their
+       code (.md). */
     & h1 code,
     & h2 code {
       font-size: 0.8em;

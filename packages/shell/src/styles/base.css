@@ -850,6 +850,22 @@
     & strong {
       color: var(--text0);
     }
+    /* A key the text names (<kbd>, which only a document's own HTML carries): the boxed key
+       (`.kbd-chip`), set into the sentence. The UI face and not the mono a browser gives the
+       element: the mono stack has no ⌘ or ⇧, and the fallback glyph never matches the letter
+       beside it. It stays inline, so the box paints into the line's leading and the paragraph
+       keeps its line height. The rule names the element and not `.kbd`, which touch hides: the
+       app's hint offers a key a phone does not have, and a document is describing one. */
+    & kbd {
+      font: var(--type-ui-sm);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      padding: 1px 5px;
+      color: var(--text0);
+      background: var(--sunken);
+      border: 1px solid var(--border0);
+      border-radius: var(--radius);
+    }
     & hr {
       border: none;
       border-top: 1px solid var(--border0);
@@ -1019,6 +1035,11 @@
     & h1 code,
     & h2 code {
       font-size: 0.8em;
+    }
+    /* a key sits two points under the words around it, as the app's chip does under its own: the
+       page reads at the arm's-length tier, so its key takes that tier's small */
+    & kbd {
+      font: var(--type-ui-sm-phone);
     }
     & > :first-child {
       margin-top: 0;

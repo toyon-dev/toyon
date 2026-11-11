@@ -18,9 +18,11 @@
   .kbd-mod {
     margin-right: 1px;
   }
+  /* the boxed key: one box wherever a key wears one, so this and a key a document names
+     (base.css, `.md kbd`) are the same chip */
   .kbd-chip {
     justify-content: center;
-    padding: 3px 6px;
+    padding: 1px 5px;
     color: var(--text0);
     background: var(--sunken);
     border: 1px solid var(--border0);

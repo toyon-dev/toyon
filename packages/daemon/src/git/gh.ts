@@ -95,7 +95,7 @@ async function viewPrRef(repoPath: string, ref: string): Promise<FoundPr | null>
     if (q?.queued) parsed.queued = q.queued;
     if (preview) parsed.preview = preview;
   }
-  return { pr: { ...parsed, at: Date.now() }, head };
+  return { pr: { ...parsed, ...(head ? { head } : {}), at: Date.now() }, head };
 }
 
 /** the merge queue of the PR's base branch: whether the branch has one, and the PR's standing in

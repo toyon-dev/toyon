@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT, git } from "./exec.ts";
@@ -11,6 +11,7 @@ import {
   pushBranch,
   splitMessage,
   squashMessage,
+  takeMainIn,
 } from "./land.ts";
 
 describe("squashMessage", () => {
@@ -132,6 +133,27 @@ describe("landLocally on a main with uncommitted files", () => {
     expect(readFileSync(join(t.repo, "version.txt"), "utf8")).toBe("1.1\n");
   });
 
+  test("a hook that refuses the merge commit leaves no merge behind on main, and the next landing goes through", async () => {
+    // named as the hooks path, since a global one would hide a hook written into .git/hooks
+    const hooks = join(dirname(t.repo), "hooks");
+    mkdirSync(hooks, { recursive: true });
+    sh(t.repo, GIT, "config", "core.hooksPath", hooks);
+    const mergeHead = join(t.repo, ".git", "MERGE_HEAD");
+    const before = (await git(t.repo, "rev-parse", "main")).out;
+    for (const hook of ["commit-msg", "pre-merge-commit"]) {
+      writeFileSync(join(hooks, hook), "#!/bin/sh\necho no >&2\nexit 1\n", { mode: 0o755 });
+      const r = await landLocally(wt, "feat", t.repo, "main", "merge", "");
+      expect(r.ok).toBe(false);
+      expect(r.conflict).toBeUndefined();
+      expect(r.message).toMatch(/^merge failed: no/);
+      expect(existsSync(mergeHead)).toBe(false);
+      expect((await git(t.repo, "rev-parse", "main")).out).toBe(before);
+      expect((await git(t.repo, "status", "--porcelain")).out).toBe("");
+      rmSync(join(hooks, hook));
+    }
+    expect(await landLocally(wt, "feat", t.repo, "main", "merge", "")).toMatchObject({ ok: true });
+  });
+
   test("an edit the landing would overwrite refuses it by name, and main stays as it was", async () => {
     writeFileSync(join(t.repo, "README.md"), "edited on main\n");
     writeFileSync(join(t.repo, "version.txt"), "1.1\n");
@@ -161,6 +183,34 @@ describe("landLocally on a main with uncommitted files", () => {
     const r = await landLocally(wt, "feat", t.repo, "main", "squash", "feat squashed");
     expect(r).toMatchObject({ ok: false, message: "main has uncommitted changes: commit or stash them there first" });
     expect(readFileSync(join(t.repo, "version.txt"), "utf8")).toBe("1.1\n");
+  });
+});
+
+describe("takeMainIn by merge", () => {
+  let t: ReturnType<typeof tmpRepo>;
+  let wt: string;
+  beforeEach(() => {
+    t = tmpRepo();
+    wt = join(dirname(t.repo), "wt");
+    sh(t.repo, GIT, "worktree", "add", "-q", "-b", "theirs", wt);
+    sh(wt, GIT, "commit", "-q", "--allow-empty", "-m", "theirs");
+    sh(t.repo, GIT, "commit", "-q", "--allow-empty", "-m", "on main");
+  });
+  afterEach(() => t.cleanup());
+
+  test("a hook that refuses the merge of main leaves the worktree out of the merge, on its own tip", async () => {
+    const hooks = join(dirname(t.repo), "hooks");
+    mkdirSync(hooks, { recursive: true });
+    writeFileSync(join(hooks, "commit-msg"), "#!/bin/sh\necho no >&2\nexit 1\n", { mode: 0o755 });
+    sh(t.repo, GIT, "config", "core.hooksPath", hooks);
+    const tip = (await git(wt, "rev-parse", "HEAD")).out;
+    const r = await takeMainIn(wt, "main", false);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/^merge failed: no/);
+    expect((await git(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD")).ok).toBe(false);
+    expect((await git(wt, "rev-parse", "HEAD")).out).toBe(tip);
+    rmSync(join(hooks, "commit-msg"));
+    expect((await takeMainIn(wt, "main", false)).ok).toBe(true);
   });
 });
 
@@ -219,15 +269,15 @@ describe("pushBranch", () => {
   afterEach(() => t.cleanup());
 
   test("pushes a new branch, then a rebased one over its own earlier push", async () => {
-    expect(await pushBranch(t.repo, "feat")).toMatchObject({ ok: true, message: "pushed feat" });
+    expect(await pushBranch(t.repo, "feat", true)).toMatchObject({ ok: true, message: "pushed feat" });
     expect((await git(t.repo, "rev-parse", "--abbrev-ref", "feat@{u}")).out).toBe("origin/feat");
     sh(t.repo, GIT, "commit", "-q", "--amend", "--allow-empty", "-m", "one, reworded");
-    expect((await pushBranch(t.repo, "feat")).ok).toBe(true);
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
     expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("one, reworded");
   });
 
   test("a branch origin deleted since the last push is pushed again as a new one", async () => {
-    expect((await pushBranch(t.repo, "feat")).ok).toBe(true);
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
     // the PR merged and GitHub deleted its head branch; nothing here fetched with --prune, so
     // origin/feat still names the old tip and git's own lease refuses the push as stale
     sh(origin, GIT, "update-ref", "-d", "refs/heads/feat");
@@ -236,22 +286,93 @@ describe("pushBranch", () => {
     expect(raw.ok).toBe(false);
     expect(raw.err).toContain("stale info");
 
-    expect(await pushBranch(t.repo, "feat")).toMatchObject({ ok: true, message: "pushed feat" });
+    expect(await pushBranch(t.repo, "feat", true)).toMatchObject({ ok: true, message: "pushed feat" });
     expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("two");
     expect((await git(t.repo, "rev-parse", "origin/feat")).out).toBe((await git(t.repo, "rev-parse", "feat")).out);
   });
 
   test("a branch someone else moved on origin is still refused", async () => {
-    expect((await pushBranch(t.repo, "feat")).ok).toBe(true);
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
     const other = join(dirname(t.repo), "other");
     sh(dirname(t.repo), GIT, "clone", "-q", "-b", "feat", origin, other);
     sh(other, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "--allow-empty", "-m", "theirs");
     sh(other, GIT, "push", "-q", "origin", "feat");
     sh(t.repo, GIT, "commit", "-q", "--allow-empty", "-m", "two");
-    const r = await pushBranch(t.repo, "feat");
-    expect(r.ok).toBe(false);
-    expect(r.message).toContain("stale info");
+    const r = await pushBranch(t.repo, "feat", true);
+    expect(r).toMatchObject({
+      ok: false,
+      message: "feat on origin holds commits that are not in the branch here: take them in first, then land again",
+    });
     expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("theirs");
+  });
+
+  /** a commit pushed to origin's feat from another clone, as a suggestion taken on GitHub is */
+  const theirs = () => {
+    const other = join(dirname(t.repo), "other");
+    sh(dirname(t.repo), GIT, "clone", "-q", "-b", "feat", origin, other);
+    writeFileSync(join(other, "theirs.txt"), "theirs\n");
+    sh(other, GIT, "add", "-A");
+    sh(other, GIT, "-c", "user.name=o", "-c", "user.email=o@o", "commit", "-q", "-m", "theirs");
+    sh(other, GIT, "push", "-q", "origin", "feat");
+  };
+  /** a commit of real content on feat: an empty one has nothing to tell a rebased copy by */
+  const work = (name: string, message: string) => {
+    writeFileSync(join(t.repo, name), `${name}\n`);
+    sh(t.repo, GIT, "add", "-A");
+    sh(t.repo, GIT, "commit", "-q", "-m", message);
+  };
+
+  test("a rebased branch goes up over its own earlier push when no record of that push is left here", async () => {
+    work("two.txt", "two");
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    // reworded, as a rebase leaves it: the same change under a new hash. Every reflog expired,
+    // as after ninety days, or as on a second machine that never made the push
+    sh(t.repo, GIT, "commit", "-q", "--amend", "-m", "two, reworded");
+    sh(t.repo, GIT, "reflog", "expire", "--expire=now", "--all");
+    expect((await git(t.repo, "reflog", "show", "refs/remotes/origin/feat")).out).toBe("");
+    expect(await pushBranch(t.repo, "feat", true)).toMatchObject({ ok: true, message: "pushed feat" });
+    expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("two, reworded");
+    // rewritten for real, so nothing matches by content, and with the push's own record gone:
+    // the branch's reflog still says it stood on origin's tip before the rewrite
+    work("three.txt", "three");
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    writeFileSync(join(t.repo, "three.txt"), "rewritten\n");
+    sh(t.repo, GIT, "commit", "-q", "-a", "--amend", "-m", "three, rewritten");
+    rmSync(join(t.repo, ".git", "logs", "refs", "remotes", "origin", "feat"), { force: true });
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("three, rewritten");
+  });
+
+  test("a commit someone else pushed is not overwritten once a fetch has brought it here", async () => {
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    theirs();
+    // the trunk's own fetch: origin/feat names their commit now, and a lease measured against
+    // that ref would pass right over it
+    sh(t.repo, GIT, "fetch", "-q");
+    work("two.txt", "two");
+    sh(t.repo, GIT, "reset", "-q", "--soft", "HEAD~2");
+    sh(t.repo, GIT, "commit", "-q", "-m", "one and two, rebased");
+    const r = await pushBranch(t.repo, "feat", true);
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain("holds commits that are not in the branch here");
+    expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("theirs");
+  });
+
+  test("their commit taken into the branch goes up with the work over it, as a fast-forward", async () => {
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    theirs();
+    sh(t.repo, GIT, "fetch", "-q");
+    sh(t.repo, GIT, "merge", "-q", "--ff-only", "origin/feat");
+    sh(t.repo, GIT, "commit", "-q", "--allow-empty", "-m", "two");
+    expect((await pushBranch(t.repo, "feat", true)).ok).toBe(true);
+    expect((await git(origin, "log", "--format=%s", "-n", "2", "feat")).out).toBe("two\ntheirs");
+  });
+
+  test("an adopted branch is never forced: it is merged with, so a push that is not a fast-forward is refused", async () => {
+    expect((await pushBranch(t.repo, "feat", false)).ok).toBe(true);
+    sh(t.repo, GIT, "commit", "-q", "--amend", "--allow-empty", "-m", "one, reworded");
+    expect((await pushBranch(t.repo, "feat", false)).ok).toBe(false);
+    expect((await git(origin, "log", "-1", "--format=%s", "feat")).out).toBe("one");
   });
 });
 

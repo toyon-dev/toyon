@@ -337,6 +337,15 @@ export async function reaches(worktreePath: string, sha: string): Promise<boolea
   return (await git(worktreePath, "merge-base", "--is-ancestor", sha, "HEAD")).ok;
 }
 
+/** The commits HEAD holds that `base` lacks, or null when git could not say. For a caller that
+ * reads zero as "the base has this work": aheadBehind folds a count that failed into zero, which
+ * there would land nothing and call it done. */
+export async function aheadOf(worktreePath: string, base: string): Promise<number | null> {
+  const r = await git(worktreePath, "rev-list", "--count", `${base}..HEAD`);
+  const n = r.ok ? Number(r.out) : Number.NaN;
+  return Number.isInteger(n) ? n : null;
+}
+
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
     git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),

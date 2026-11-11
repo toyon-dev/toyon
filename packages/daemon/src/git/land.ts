@@ -16,7 +16,7 @@ import {
 import { GIT, git, gitRaw, NO_PROMPT, nulSplit, RUN_CEILING_MS, run, runWatched, type Watched } from "./exec.ts";
 import { githubRepoUrl } from "./forge.ts";
 import { enqueuePr, gh, ghMethod, prNumberOf, viewQueue } from "./gh.ts";
-import { aheadBehind, behindUpstream, statusFiles } from "./status.ts";
+import { aheadBehind, behindUpstream, reaches, statusFiles } from "./status.ts";
 
 export interface ShipResult {
   ok: boolean;
@@ -587,14 +587,17 @@ export async function pushLanding(
     : stepRefused("push failed", p, 300);
 }
 
-/** A conflict leaves a merge in progress that must be aborted; any other failure (dirty index,
- * unrelated histories, hook) has nothing to abort and deserves its own message. Both streams are
+/** A merge that failed once it had begun is still in progress and must be aborted: a conflict,
+ * and as much a commit-msg or pre-merge-commit hook that turned the merge commit down, which
+ * prints no conflict and leaves MERGE_HEAD all the same. Left in the main checkout, it refuses
+ * every landing after it. A failure before the merge began (dirty index, unrelated histories)
+ * has nothing to abort; each kind gets its own message, and a hook is named. Both streams are
  * read: git reports a conflict on stdout, and reading stderr alone left every real conflict as an
  * empty "merge failed" with the merge still in progress. */
 async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string): Promise<ShipResult> {
   const conflict = /CONFLICT|Automatic merge failed/.test(m.text);
+  if (conflict || (await midway(cwd)) === "merge") await git(cwd, "merge", "--abort");
   if (conflict) {
-    await git(cwd, "merge", "--abort");
     const step = rowOf(m);
     return {
       ok: false,
@@ -605,6 +608,7 @@ async function mergeFailure(cwd: string, m: StepResult, conflictMessage: string)
         : `${conflictMessage} (${m.text.slice(0, 200)})`,
     };
   }
+  if (m.hook) return stepRefused("merge refused", m);
   return {
     ok: false,
     message: m.shown ? "merge failed: what git printed is on the chat" : `merge failed: ${m.text.slice(0, 300)}`,
@@ -641,40 +645,72 @@ export interface OpenPr {
   subject?: string;
   body?: string;
   automerge: boolean;
+  /** the branch is toyon's own, rebased onto the base, as opposed to one it adopted */
+  own: boolean;
   /** the method auto-merge uses; unset follows the repo's allowed methods */
   method?: MergeMethod;
 }
 
-/** Push the branch to origin, tracking. Force with lease, since a branch already there was
- * rebased onto main since; the lease refuses when origin's copy moved under it.
+/** Push the branch to origin, tracking, and never over work that is not here.
  *
- * The lease is measured against `origin/<branch>` here, and that ref outlives the branch on
- * GitHub: a merged PR deletes its head branch, nothing here fetches with --prune, and the next
- * push from the same worktree is refused as "stale info" against a tip origin no longer has.
- * When origin says the branch is gone, the ref is dropped and the push is a first push again;
- * a branch that is there but moved keeps the refusal, since that is what the lease is for. */
-export async function pushBranch(worktreePath: string, branch: string, w: LandWatch = UNWATCHED): Promise<ShipResult> {
-  const args = ["push", "-u", "--force-with-lease", "origin", branch];
+ * A branch toyon owns was rebased onto main since its last push, so that push has to be forced.
+ * A bare `--force-with-lease` measures against `origin/<branch>`, which every fetch moves: a
+ * commit someone else pushed (a suggestion taken on GitHub) is in that ref by the next fetch, and
+ * the lease then passes over it. So origin is asked where the branch stands now, and the push is
+ * decided once, before any hook runs: a first push when origin has no such branch (a merged PR
+ * deletes its head), a plain one when origin's tip is in this branch's history, a forced one
+ * leased on that tip when the tip is this branch's own earlier work (supersedes), and none at all
+ * otherwise. An adopted branch is merged with and never rebased, so its push is never forced. */
+export async function pushBranch(
+  worktreePath: string,
+  branch: string,
+  own: boolean,
+  w: LandWatch = UNWATCHED,
+): Promise<ShipResult> {
+  const theirs = `${branch} on origin holds commits that are not in the branch here: take them in first, then land again`;
+  const tip = own ? await originTip(worktreePath, branch) : null;
+  const behind = tip !== null && !(await reaches(worktreePath, tip));
+  if (tip && behind && !(await supersedes(worktreePath, branch, tip))) return { ok: false, message: theirs };
   w.step(`pushing ${branch}`);
-  let push = await w.git(worktreePath, args);
-  if (!push.ok && /stale info/.test(push.err) && (await goneFromOrigin(worktreePath, branch))) {
-    await git(worktreePath, "update-ref", "-d", `refs/remotes/origin/${branch}`);
-    push = await w.git(worktreePath, args);
-  }
-  if (!push.ok) return stepRefused("push failed", push, 300);
-  return { ok: true, message: `pushed ${branch}` };
+  const lease = tip && behind ? [`--force-with-lease=${branch}:${tip}`] : [];
+  const push = await w.git(worktreePath, ["push", "-u", ...lease, "origin", branch]);
+  if (push.ok) return { ok: true, message: `pushed ${branch}` };
+  // origin moved between the read and the push, or the branch is an adopted one that was rewritten
+  if (/\[rejected\]|fetch first|non-fast-forward|stale info/.test(push.err)) return { ok: false, message: theirs };
+  return stepRefused("push failed", push, 300);
 }
 
-/** origin answers and has no branch of that name; exit 2 is ls-remote's own "nothing matched",
- * so an origin that cannot be reached (any other failure) reads as not gone */
-async function goneFromOrigin(worktreePath: string, branch: string): Promise<boolean> {
-  const r = await run(GIT, ["ls-remote", "--exit-code", "--heads", "origin", branch], worktreePath, NO_PROMPT);
-  return !r.ok && r.exit === 2;
+/** where the branch stands on origin right now, asked of origin itself; null when it has no such
+ * branch, and when it cannot be reached, which the push that follows reports in git's own words */
+async function originTip(worktreePath: string, branch: string): Promise<string | null> {
+  const ref = `refs/heads/${branch}`;
+  const r = await run(GIT, ["ls-remote", "origin", ref], worktreePath, NO_PROMPT);
+  if (!r.ok) return null;
+  // a pattern matches by its tail, so `feat` also names `x/feat`: the line is taken by its ref
+  const line = r.out.split("\n").find((l) => l.split("\t")[1] === ref);
+  return line?.split("\t")[0] || null;
+}
+
+/** Whether origin's tip is this branch's own earlier work, so a push over it loses nothing. Any
+ * one of three says so: this clone pushed that very commit (git marks a push apart from a fetch
+ * in the remote-tracking ref's reflog); the branch here once stood on it, and was rebased or
+ * amended off it by this hand; or every commit origin has that the branch lacks is in the branch
+ * by content, which is what a rebase leaves and holds when both reflogs have expired or the push
+ * came from another machine. A commit git does not hold here answers none of them. */
+async function supersedes(worktreePath: string, branch: string, tip: string): Promise<boolean> {
+  const [pushed, stood, lacking] = await Promise.all([
+    git(worktreePath, "reflog", "show", "--format=%H %gs", `refs/remotes/origin/${branch}`),
+    git(worktreePath, "reflog", "show", "--format=%H", `refs/heads/${branch}`),
+    git(worktreePath, "rev-list", "--count", "--cherry-pick", "--left-only", `${tip}...HEAD`),
+  ]);
+  if (pushed.ok && pushed.out.split("\n").includes(`${tip} update by push`)) return true;
+  if (stood.ok && stood.out.split("\n").includes(tip)) return true;
+  return lacking.ok && lacking.out === "0";
 }
 
 /** Push the branch and create a PR through gh, or hand back the compare URL where gh is not
- * around. A branch already on origin from an earlier push is force-pushed with lease, since it
- * was rebased since; a PR that already exists is found rather than made twice. */
+ * around. A branch of toyon's own already on origin from an earlier push is force-pushed with
+ * lease, since it was rebased since; a PR that already exists is found rather than made twice. */
 export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipResult> {
   const cErr = await requireClean(o.worktreePath);
   if (cErr) return cErr;
@@ -684,7 +720,7 @@ export async function openPr(o: OpenPr, w: LandWatch = UNWATCHED): Promise<ShipR
   const remote = await git(o.worktreePath, "remote", "get-url", "origin");
   if (!remote.ok) return { ok: false, message: "no 'origin' remote: add one, or land by merging here" };
 
-  const push = await pushBranch(o.worktreePath, o.branch, w);
+  const push = await pushBranch(o.worktreePath, o.branch, o.own, w);
   if (!push.ok) return push;
 
   w.step("creating the PR");

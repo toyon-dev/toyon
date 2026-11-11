@@ -457,6 +457,67 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
   });
 
+  for (const by of ["poll", "press"] as const) {
+    test(`a commit made after the PR's last push stays on the branch when the PR merges, seen by the ${by}`, async () => {
+      const repoId = await registered();
+      const { origin, other } = await withOrigin(repoId);
+      const wt = await w.worktrees.create(repoId, "feature");
+      writeFileSync(join(wt.path, "feature.txt"), "x\n");
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+      sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+      const pushed = (await git(wt.path, "rev-parse", "HEAD")).out;
+      w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+      // a commit does not push: this one is only here when GitHub merges the PR as it has it
+      writeFileSync(join(wt.path, "more.txt"), "y\n");
+      sh(wt.path, "git", "add", "-A");
+      sh(wt.path, "git", "commit", "-q", "-m", "more, never pushed");
+      const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+      squashedOnOrigin(other, origin, wt.branch);
+      w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+      const r = by === "poll" ? await w.worktrees.prMerged(wt.id) : (await w.worktrees.land(wt.id)).result;
+      expect(r.ok).toBe(true);
+      expect(r.message).toContain("PR #7 merged");
+      expect(r.message).toContain("a commit made since its last push stayed on the branch");
+      // the branch is where it was, not restarted from the base under the commit
+      expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+      // what landed ends at the PR's head, and the row is not landed: it holds work the base lacks
+      expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip: pushed, pr: 7 }]);
+      expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+      expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({ type: "landed", held: expect.any(String) });
+      // the next read takes the merged PR off the row: what is here is new work to land
+      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 2 });
+      expect(w.state.worktree(wt.id)?.pr).toBeUndefined();
+    });
+  }
+
+  test("a branch synced after its PR opened lands when the PR merges: the rebased copies are not new work", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    const pushed = (await git(wt.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    // origin's main moves, and the sync rebases the branch onto it: the commit the PR has is
+    // here under a new hash
+    writeFileSync(join(other, "elsewhere.txt"), "z\n");
+    sh(other, "git", "add", "-A");
+    sh(other, "git", "commit", "-q", "-m", "elsewhere");
+    sh(other, "git", "push", "-q", "origin", "main");
+    expect((await w.worktrees.sync(wt.id)).result.ok).toBe(true);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).not.toBe(pushed);
+    squashedOnOrigin(other, origin, wt.branch);
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    const r = await w.worktrees.prMerged(wt.id);
+    expect(r.ok).toBe(true);
+    expect(r.message).not.toContain("stayed on the branch");
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
+  });
+
   test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {
     const repoId = await registered();
     const origin = join(w.repo, "..", "origin.git");

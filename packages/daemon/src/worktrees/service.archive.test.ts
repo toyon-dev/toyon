@@ -60,6 +60,26 @@ describe("archive", () => {
     expect(w.worktrees.archived(repoId).map((a) => a.id)).toEqual([wt.id]);
   });
 
+  test("uncommitted work that cannot be snapshotted refuses the archive: the directory and the branch stay", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    // a repo started inside the worktree with no commit yet: git refuses to add it, and with it
+    // the whole snapshot
+    sh(wt.path, "git", "init", "-q", "nested");
+    writeFileSync(join(wt.path, "nested", "file.txt"), "x\n");
+    const err = await w.worktrees.archiveWorktree(wt.id).catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toBe(`could not keep ${wt.title}'s work, so it was left in place`);
+    expect(readFileSync(join(wt.path, "wip.txt"), "utf8")).toBe("untracked\n");
+    expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toContain(wt.branch);
+    expect(w.state.worktree(wt.id)).toBeDefined();
+    expect(w.worktrees.archived(repoId)).toEqual([]);
+    // the nested repo out of the way, the archive goes through with the work kept
+    rmSync(join(wt.path, "nested"), { recursive: true });
+    expect(await w.worktrees.archiveWorktree(wt.id)).toMatchObject({ id: wt.id, uncommitted: true });
+    expect(sh(w.repo, "git", "show", `${ref(wt.id)}:wip.txt`)).toBe("untracked");
+  });
+
   test("restore puts back the branch, the commits, the uncommitted work, the chat and the session", async () => {
     const repoId = await registered();
     const { wt, head } = await workedOn(repoId);

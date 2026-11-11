@@ -253,6 +253,25 @@ describe("landing", () => {
     expect(w.refused).toEqual([[wt.id, "subject over 72 characters\nand on stderr"]]);
   });
 
+  test("a hook that refuses the merge onto main is named and the agent's to fix, and main is left out of the merge", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    const main = (await git(w.repo, "rev-parse", "main")).out;
+    refusingHook(["no merges today"], "pre-merge-commit");
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result).toMatchObject({ ok: false, asked: true });
+    expect(result.message).toMatch(/^merge refused: /);
+    expect(sent(wt.id)).toMatchObject([{ asked: { kind: "hook", why: expect.stringContaining("pre-merge-commit") } }]);
+    // the merge the hook stopped is aborted: left in progress, it would refuse every land after it
+    expect(existsSync(join(w.repo, ".git", "MERGE_HEAD"))).toBe(false);
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe(main);
+    rmSync(join(w.repo, "..", "hooks", "pre-merge-commit"));
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
   test("a failed check is the agent's to fix once, until a message that is not that ask", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
@@ -566,6 +585,27 @@ describe("landing", () => {
     sh(wt.path, "git", "switch", "-q", "--detach");
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.branch).toBe("mine");
+  });
+
+  test("a land on a detached HEAD is refused, and the commits it holds stay where they are", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    sh(wt.path, "git", "switch", "-q", "--detach");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "on no branch");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    const main = (await git(w.repo, "rev-parse", "main")).out;
+    // the row's own branch is level with main: merging it lands nothing, and the restart after
+    // would take HEAD off the commit
+    const err = await w.worktrees.land(wt.id).catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toBe(`${wt.title} is detached: check out a branch in it first`);
+    expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
+    expect((await git(w.repo, "rev-parse", "main")).out).toBe(main);
+    expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
+    // the refusal lets the row go: nothing is left out on it
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
   });
 
   test("land syncs main in first when the branch is behind, and a file on main in the way refuses", async () => {

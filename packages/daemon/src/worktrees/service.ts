@@ -119,7 +119,15 @@ import {
 } from "../git/land.ts";
 import { withFetchLock, withRepoLock } from "../git/lock.ts";
 import { logCommits, rangeSubjects, commitFiles as readCommitFiles } from "../git/log.ts";
-import { aheadBehind, aheadUpstream, statusFiles, treeEmpty, treeFingerprint } from "../git/status.ts";
+import {
+  aheadBehind,
+  aheadOf,
+  aheadUpstream,
+  remoteHead,
+  statusFiles,
+  treeEmpty,
+  treeFingerprint,
+} from "../git/status.ts";
 import { dropTurnRefs, markTurn } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { configFor, settingsLines } from "../repos/config.ts";
@@ -278,6 +286,12 @@ function withCarry(context: string[] | undefined, c: Carried): string[] | undefi
 }
 
 /** every row and trunk a frame carries numbers for */
+/** a land that reads "nothing ahead" as "landed already" could not count, so it stops */
+const uncounted = (base: string): ShipResult => ({
+  ok: false,
+  message: `could not count the commits ahead of ${base}; try again`,
+});
+
 const idsOf = (rows: readonly { id: string }[], trunks: Record<string, TrunkStatus>) => [
   ...rows.map((r) => r.id),
   ...Object.values(trunks).map((t) => t.id),
@@ -1286,6 +1300,10 @@ export class WorktreeService {
   /** Marked as going for the whole of it, reads included: `archiving` covers a click during a
    * sweep, and a discard is not in it at all. */
   private async takeDown(wt: WorktreeInfo, archive: boolean, reason?: string): Promise<ArchivedWorktree | null> {
+    // a landing op out on the row is running git in the directory, and on the push and PR routes
+    // outside the repo lock the removal takes
+    const out = this.ops.get(wt.id);
+    if (out) throw new UserError(`${shipNoun(out.op)} is still running in ${wt.title}; try again once it ends`);
     this.going.add(wt.id);
     // before the agent is stopped: its stop settles the turn, and a sync waiting on that would
     // run in the directory on its way out
@@ -1308,9 +1326,11 @@ export class WorktreeService {
       // before the directory goes: its uncommitted work exists nowhere else. Nothing kept means
       // nothing goes: the branch is deleted on the strength of the ref holding its commits, and a
       // sweep runs with nobody watching, so the row stays and says why. The runtime is already
-      // down, which is what an idle row looks like; a look at it wakes it.
+      // down, which is what an idle row looks like; a look at it wakes it. Uncommitted work that
+      // could not be snapshotted counts as nothing kept: the ref holds the commits alone, and the
+      // directory is the only copy of the rest.
       const k = archive ? await this.keep(repo, wt) : null;
-      if (archive && !k) throw new UserError(`could not keep ${wt.title}'s work, so it was left in place`);
+      if (archive && (!k || k.lost)) throw new UserError(`could not keep ${wt.title}'s work, so it was left in place`);
       // the plans are kept out of git, so the snapshot has none of them; they leave with the chat
       if (archive) this.keepPlans(wt);
       try {
@@ -1392,7 +1412,7 @@ export class WorktreeService {
     const index = join(this.d.paths.archiveDir, `${wt.id}.index`);
     const kept = (await keepState(repo.path, wt.path, archiveRef(wt.id), index)) ?? (await this.keepUnlinked(repo, wt));
     if (!kept) log.warn(wt.id, "could not keep its git state");
-    else if (kept.lost) log.warn(wt.id, "could not keep its uncommitted changes: only its commits are archived");
+    else if (kept.lost) log.warn(wt.id, "could not keep its uncommitted changes");
     return kept;
   }
 
@@ -1920,6 +1940,8 @@ export class WorktreeService {
       // turn; refusing beats stopping someone's turn from a rail button
       if (isBusy(this.d.runtime.agentFor(w.id)?.status))
         throw new UserError(`${w.title}'s agent is mid-turn; stop it first`);
+      const out = this.ops.get(w.id);
+      if (out) throw new UserError(`${shipNoun(out.op)} is still running in ${w.title}; try again once it ends`);
     }
     // uncommitted work is the one thing the merge would not carry and the removal would lose
     for (const w of all) {
@@ -2305,6 +2327,10 @@ export class WorktreeService {
     // inside the op, so the press is the one out on the row from its first tick
     const out = await this.ship(wt.id, "land", "press", async (): Promise<Landed> => {
       await this.followBranch(wt);
+      // a detached HEAD has no branch to land: merging the record's branch would report a landing
+      // of nothing, and the restart after it would move HEAD off the commits it holds
+      const on = await git(wt.path, "branch", "--show-current");
+      if (on.ok && !on.out) throw new UserError(`${wt.title} is detached: check out a branch in it first`);
       const moved = await this.movedMidTurn(wt);
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
@@ -2395,7 +2421,7 @@ export class WorktreeService {
    * the way it edits files there, and every count is read from HEAD already; a land that merged
    * the record's branch while HEAD was on another would report a landing of nothing and then
    * reset the branch with the work. A detached HEAD leaves the record as it was: there is no
-   * branch to follow, and the land refuses on its own. Read here on every status and before a
+   * branch to follow, and the land refuses it. Read here on every status and before a
    * landing, since a switch moves no file the watcher sees. */
   private async followBranch(wt: WorktreeInfo, current?: string): Promise<void> {
     if (wt.kind === "main") return;
@@ -2507,7 +2533,7 @@ export class WorktreeService {
         if (!taken.ok) return { result: taken };
         await this.headMoved(wt.id);
         this.tree.invalidate(wt.id);
-        const pushed = await pushBranch(wt.path, wt.branch, w);
+        const pushed = await pushBranch(wt.path, wt.branch, own, w);
         if (!pushed.ok) return { result: pushed };
         await this.headMoved(wt.id);
         this.setLanding(wt.id, undefined);
@@ -2537,7 +2563,9 @@ export class WorktreeService {
       await this.headMoved(wt.id);
       // the rebase dropped every commit: origin's main holds this work already, through a PR
       // merged where toyon did not see it. The row lands the way a merged PR lands it.
-      if ((await aheadBehind(wt.path, base)).ahead === 0) {
+      const ahead = await aheadOf(wt.path, base);
+      if (ahead === null) return { result: uncounted(base) };
+      if (ahead === 0) {
         const { mark: noted, held, ...r } = await this.prMergedOp(wt.id, mark, w);
         const on = `origin's ${repo.defaultBranch} has this work already`;
         const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
@@ -2557,6 +2585,7 @@ export class WorktreeService {
           subject: named?.subject,
           body: named?.body,
           automerge: policy.automerge,
+          own,
           method: policy.merge,
         },
         w,
@@ -2655,7 +2684,9 @@ export class WorktreeService {
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       await this.headMoved(wt.id);
-      if ((await aheadBehind(wt.path, base)).ahead === 0) {
+      const ahead = await aheadOf(wt.path, base);
+      if (ahead === null) return { result: uncounted(base) };
+      if (ahead === 0) {
         already = true;
         sha = (await commitOf(wt.path, base)) ?? "";
         break;
@@ -2820,6 +2851,8 @@ export class WorktreeService {
     const read = carried === undefined ? await landingMark(wt.path, base) : carried;
     const pulled = await this.trunk.pull(repo.id, w);
     let noted: LandMark | undefined;
+    // after the pull, whose fetch is what puts a merge that kept the hashes on the base
+    const past = await this.pastPr(wt, base);
     await withRepoLock(repo.path, async () => {
       // A PR goes on the record once, since the record is what says it was taken, and always:
       // the trunk's own fetch often moves the base before the poll sees the merge, and a merge
@@ -2829,17 +2862,56 @@ export class WorktreeService {
       if (!prTaken(wt)) {
         const own = read ?? (await handLanding(wt.path, wt.branch, base, wt.lands?.at(-1)?.tip));
         const mark = own ?? (wt.pr ? await this.tipMark(wt) : null);
-        noted = await this.noteLand(repo, wt, mark, { pr: wt.pr });
+        // what landed ends where the PR did: the commits past it are still the row's own work
+        noted = await this.noteLand(repo, wt, mark && past?.tip ? { ...mark, tip: past.tip } : mark, { pr: wt.pr });
       }
-      // origin's main, fetched by the pull, whatever the checkout here could do with it
-      await this.restartFromMain(wt, base);
+      // origin's main, fetched by the pull, whatever the checkout here could do with it. Not
+      // under commits the PR never had: the restart would take the branch off them.
+      if (!past) await this.restartFromMain(wt, base);
     });
     this.invalidateCounts();
     const held = await this.settleLanded(wt);
     const took = pulled.ok
       ? `${br} here ${pulled.moved ? "pulled it" : "has it"}`
       : `${br} here was left where it is: ${pulled.message}`;
-    return { ok: true, message: wt.pr ? `PR #${wt.pr.number} merged; ${took}` : took, mark: noted, held };
+    const left = past?.count
+      ? `; ${past.count === 1 ? "a commit" : `${past.count} commits`} made since its last push stayed on the branch`
+      : "";
+    return { ok: true, message: `${wt.pr ? `PR #${wt.pr.number} merged; ${took}` : took}${left}`, mark: noted, held };
+  }
+
+  /** The commits a merged PR never had: on HEAD, and in neither the base nor the PR's head, as
+   * GitHub named it or as origin's copy of the branch stood at the last push or fetch. A commit
+   * does not push, so one made after the PR opened is only here. Told by content as well as by
+   * hash: a sync rebases the branch, and the copies it leaves of commits the PR has are not new
+   * work. Null when there are none, which is every commit accounted for; `tip` is where the PR's
+   * own work ends in the branch. With no word on where the PR stood, whatever the base lacks
+   * counts, and a read git could not make counts too: a branch left in place can be landed again,
+   * and one restarted over its commits cannot. */
+  private async pastPr(wt: WorktreeInfo, base: string): Promise<{ count: number; tip?: string } | null> {
+    if (!hasOwnBranch(wt)) return null;
+    const named = [wt.pr?.head, await remoteHead(wt.path, wt.branch)];
+    const known: string[] = [];
+    // GitHub's head may be a commit this clone never fetched (a suggestion taken there)
+    for (const sha of named) if (sha && !known.includes(sha) && (await commitOf(wt.path, sha))) known.push(sha);
+    const read = await git(wt.path, "rev-list", "HEAD", "--not", base, ...known);
+    if (!read.ok) {
+      log.warn(wt.id, `could not read what ${wt.branch} holds past its PR: ${read.err}`);
+      return { count: 0 };
+    }
+    // newest first, as rev-list walks
+    let past = read.out.split("\n").filter(Boolean);
+    for (const sha of known) {
+      if (past.length === 0) break;
+      const fresh = await git(wt.path, "rev-list", "--cherry-pick", "--right-only", `${sha}...HEAD`);
+      if (!fresh.ok) continue;
+      const kept = new Set(fresh.out.split("\n"));
+      past = past.filter((c) => kept.has(c));
+    }
+    const oldest = past.at(-1);
+    if (!oldest) return null;
+    const tip = await git(wt.path, "rev-parse", "--verify", "--quiet", `${oldest}^`);
+    return { count: past.length, ...(tip.ok && tip.out ? { tip: tip.out } : {}) };
   }
 
   /** take main into any row with a branch, a found worktree included: a rebase for toyon's own

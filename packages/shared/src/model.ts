@@ -542,6 +542,9 @@ export interface PrState {
   /** its title, as GitHub has it: what a landing by PR says it was when the range it merged
    * cannot be read back */
   title?: string;
+  /** the commit its head stood at when GitHub was last asked: what a merge took, so a commit made
+   * here after it is told from the work that landed. Absent until gh has answered with one. */
+  head?: string;
   /** GitHub's review decision; absent when the repo requires no review */
   review?: "approved" | "changes_requested" | "review_required";
   /** the checks, folded to one word; absent when the PR has none */

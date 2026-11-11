@@ -64,7 +64,7 @@ What the sandbox allows in each is in [trust.md](trust.md).
 
 To keep a change, press land or type `/land`. Land merges the chat's branch into main on your machine. If the settings have a `check` command, it must pass first.
 
-- Nothing is pushed by default. Set `land.route` in the settings to push main or open a pull request. See [settings.md](settings.md#keys).
+- Nothing is pushed by default. Set `land.route` in the settings to push main or open a pull request. See [settings.md](settings.md#land).
 - `/archive` archives the copy after it has landed.
 - Agents are told not to push or delete branches. See [trust.md](trust.md#pushing).
 
@@ -75,5 +75,5 @@ Press <kbd>⌘,</kbd> for the full list.
 ## Limits
 
 - The editor shows one file at a time and has no extensions.
-- Copies share one database unless the settings create one per copy. A copy can run a separate server, but a database or a compose stack that server points at is shared, migrations included. See [settings.md](settings.md#keeping-copies-apart).
+- Copies share one database unless the settings create one per copy. A copy can run a separate server, but a database or a compose stack that server connects to is shared, migrations included. See [backends.md](backends.md#a-database-per-copy).
 - Logins are not carried between copies. Each preview has its own cookies, so a new chat's app starts signed out, and an OAuth provider cannot redirect into a preview.

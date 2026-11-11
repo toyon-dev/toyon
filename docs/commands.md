@@ -51,3 +51,6 @@ It does not remove these. Run the command first:
 | `TOYON_HOME` | Where Toyon keeps its state. Default: `~/.toyon`. |
 | `TOYON_PORT` | The port Toyon listens on. Default: 4141. |
 | `TOYON_UPDATES` | `off` turns off the update check and the install. |
+| `TOYON_PROC_SLEEP_MS` | How long an unopened copy keeps its servers running, in milliseconds. `off` keeps them running. See [settings.md](settings.md#sleep). |
+| `TOYON_STOP_AFTER_MS` | How long Toyon stays up with nothing open or running, in milliseconds. `off` keeps it up. |
+| `TOYON_KEEP_AWAKE` | `off` stops Toyon from keeping a Mac awake. |

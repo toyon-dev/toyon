@@ -30,11 +30,11 @@ The picker draws an outline and never changes the page.
 
 If the server crashed or never answered, a card replaces the page with the reason and the last lines of its output.
 
-- **"ask the agent to fix it"** sends the agent the command, its port, how it failed, the end of the log, and the [rules a command must follow](settings.md#the-contract). It is offered while the agent is idle. When the turn ends, Toyon restarts the server and checks again.
+- **"ask the agent to fix it"** sends the agent the command, its port, how it failed, the end of the log, and the [rules a command must follow](settings.md#command-requirements). It is offered while the agent is idle. When the turn ends, Toyon restarts the server and checks again.
 - **"edit setup"** opens the command so you can change it yourself.
 
 ## Limits
 
 - No screenshots of the frame. A page cannot capture itself, so the picker sends markup and text.
 - No network panel. Use your browser's devtools on the frame.
-- No shared logins. Each copy has its own cookies, so a new chat's app starts signed out, and an OAuth provider cannot redirect into a preview. See [settings.md](settings.md#keeping-copies-apart).
+- No shared logins. Each copy has its own cookies, so a new chat's app starts signed out, and an OAuth provider cannot redirect into a preview. See [backends.md](backends.md#a-database-per-copy).

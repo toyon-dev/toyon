@@ -44,6 +44,10 @@ export type TabsProps<Id extends string> = {
    * two joined strips read as one thing twice. With `fill` the pill slides to the tab that opens,
    * which counts on even seats: no `fit` or `far` tab in a filled segmented strip. */
   segmented?: boolean;
+  /** with `segmented`: the track at a chip's size, for a pair that sits among a row of buttons
+   * (the editor head's page or text) rather than heading a screen. The full track is the dense
+   * row's whole height and would stand over the chips beside it. */
+  dense?: boolean;
   /** no recess and no track: the labels stand on the parent's own ground, each sized to itself,
    * and the open one is marked by a rule under its label. For a strip inside a screen whose header
    * is already a control, where a recess or a track makes a second band under the first, and the
@@ -77,6 +81,7 @@ export function Tabs<Id extends string>({
   fill,
   font,
   segmented,
+  dense,
   quiet,
   end,
   label,
@@ -105,6 +110,7 @@ export function Tabs<Id extends string>({
         fill && "tabs-fill",
         font === "mono" && "tabs-mono",
         segmented && "tabs-segmented",
+        dense && "tabs-dense",
         quiet && "tabs-quiet",
       )}
     >

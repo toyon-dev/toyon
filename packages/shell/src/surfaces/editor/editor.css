@@ -80,12 +80,16 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* the views are alternatives to one another, so they sit closer than the head's gap keeps the
-   wrap toggle and the pane's own controls from them */
-  .editor-views {
+  /* a strip of seats among the head's switches, the page or its text and how its diff is drawn:
+   the open seat is raised in the tone a lit switch is seated in, so what is on reads the same
+   across the head. A lifted seat, so it moves the ladder for its label. */
+  .editor-pair {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    --tabs-ground: var(--element1);
+    & .tab[data-state~="current"] {
+      --text1: var(--ink0);
+      --text2: var(--ink1);
+    }
   }
   /* the commit the note names, over it while the pointer rests there, is the tooltip's card
    (Editor.tsx); only the sha is its own, in the mono at the card's size */

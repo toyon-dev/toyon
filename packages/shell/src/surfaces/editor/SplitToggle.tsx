@@ -1,7 +1,7 @@
 import { STORAGE } from "../../state/keys.ts";
-import { Button } from "../../ui/Button.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
-import { Icon } from "../../ui/Icon.tsx";
+import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 
 /** the width under which two columns are each too short to read: Monaco's own breakpoint for
  * falling back to one column, the rendered page's, and the test for whether turning the split on
@@ -15,22 +15,47 @@ export function useSplit(): readonly [boolean, (on: boolean) => void] {
   return usePersisted(STORAGE.editorSplit, false, (raw) => (raw === null ? undefined : raw === "1"));
 }
 
-/** the head's split switch, named for the state it switches to, as the wrap toggle beside it is */
-export function SplitToggle({ split, onSplit }: { split: boolean; onSplit: (on: boolean) => void }) {
+/** how the head shows a changed file: its diff in one column or in two, or the file alone */
+export type DiffSeat = "inline" | "split" | "file";
+
+/** in the order the change is added to what is seen: the file, its diff in the same column, its
+ * old side in a column of its own */
+const SEATS: TabItem<DiffSeat>[] = [
+  { id: "file", label: "file", tip: tip("File: as it is now, with no diff") },
+  { id: "inline", label: "inline", tip: tip("Inline: old and new in one column") },
+  {
+    id: "split",
+    label: "split",
+    tip: tip("Split: old beside new, taking the chat's room when the pane is too narrow for both"),
+  },
+];
+
+/** The head's one answer about a changed file: three seats and not a switch beside a layout,
+ * since a layout is only ever a diff's, and the file with no diff over it is the third way to
+ * read the change, named for what is seen and not as the diff turned off. `columns` is off where there is no second column to offer, a phone's screen. */
+export function DiffSeats({
+  at,
+  onPick,
+  columns = true,
+}: {
+  at: DiffSeat;
+  onPick: (seat: DiffSeat) => void;
+  columns?: boolean;
+}) {
   return (
-    <Button
-      variant="outline"
-      tone="quiet"
-      mono
-      className="deep-link"
-      onClick={() => onSplit(!split)}
-      data-tip={
-        split
-          ? "Inline: old and new in one column, and the chat back if the split took its room"
-          : "Split: old beside new, taking the chat's room when the pane is too narrow for both"
-      }
-    >
-      <Icon name={split ? "split" : "columns"} className="icon-inline" /> {split ? "inline" : "split"}
-    </Button>
+    <span className="editor-pair">
+      <Tabs
+        items={columns ? SEATS : SEATS.filter((s) => s.id !== "split")}
+        current={at}
+        onPick={(id) => {
+          if (id !== at) onPick(id);
+        }}
+        segmented
+        dense
+        font="mono"
+        label="the diff"
+        owner="pane"
+      />
+    </span>
   );
 }

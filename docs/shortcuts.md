@@ -36,8 +36,8 @@ Each feature with how to reach it. The short list, and what Toyon does on its ow
 | History | The history tab of the same panel lists the branch's commits. A commit opens to its files. |
 | Panel tabs | <kbd>⌥→</kbd> and <kbd>⌥←</kbd> step through files, changes and history. In a field with text they stay the word jump. |
 | Editor | Saves when you stop typing; <kbd>⌘S</kbd> saves now. Shows who last changed the current line. Click that note to open the pull request or the commit. |
-| Diff | "split" or "inline" in the pane's header. A wrap toggle folds long lines. |
-| Markdown | Opens rendered, with an outline of its headings. A changed file marks what came and went, inline or split as the diff is. "plain" in the pane's header turns the marks off. |
+| Diff | "file", "inline" or "split" in the pane's header. "wrap" folds long lines. |
+| Markdown | Opens rendered, with an outline of its headings. A changed file marks what came and went. "file" in the pane's header hides the marks. "code" shows the text. |
 | HTML | Opens rendered in the editor pane, with scripts running in a sandboxed frame. "run" sends it to the preview. |
 | SVG, pictures and video | Open as a preview. A picture can go full size. |
 | Terminal | <kbd>⌘J</kbd>. <kbd>⌘F</kbd> finds in it. <kbd>⌃⇧&#96;</kbd> goes to the next tab. |

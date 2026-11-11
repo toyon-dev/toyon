@@ -722,6 +722,10 @@ export interface EditorFile extends Omit<OpenFile, "view" | "picked"> {
    * the file: the next one opened with no view asked for (a walk down the changes list) is read
    * rendered too, where it can be */
   reads?: boolean;
+  /** read rendered, the page marks what came and went since its other side: a markdown file's
+   * diff as the page it draws. On for a changed file opened with no view asked for, since the
+   * page marked is that file's diff; off for a page asked for by name, which is read as it is */
+  marks: boolean;
   /** null while the first read is out */
   disk: EditorDisk | null;
   /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
@@ -1785,7 +1789,9 @@ export type Action =
   /** fileSync: the file changed on disk under unsaved edits (what is there now), or that was settled */
   | { a: "editor-conflict"; file: FileRef; theirs: EditorFile["conflict"] }
   /** switch the open file between its diff and the file */
-  | { a: "editor-view"; v: EditorView }
+  /** `marks` goes with the rendered view: whether the page shows what came and went */
+  | { a: "editor-view"; v: EditorView; marks?: boolean }
+  | { a: "editor-marks"; v: boolean }
   /** fileSync: a save was refused for good, and why; the pane says so above the text */
   | { a: "editor-refused"; file: FileRef; message: string }
   /** fileSync: who last touched each line of the open file, for the version its read found */
@@ -2436,6 +2442,7 @@ function reduce(s: State, action: Action): State {
           ...(v.ref ? { ref: v.ref } : {}),
           ...(v.since ? { since: v.since } : {}),
           view: v.view ?? same?.view ?? null,
+          marks: v.view ? false : (same?.marks ?? true),
           ...((v.picked ? v.view === "preview" : e?.reads) ? { reads: true } : {}),
           seq: v.seq,
           disk: same?.disk ?? null,
@@ -2465,6 +2472,7 @@ function reduce(s: State, action: Action): State {
           worktreeId: v.worktreeId,
           path: v.name,
           view: readingView(v.name),
+          marks: false,
           seq: v.seq,
           disk,
           focus: true,
@@ -2487,7 +2495,9 @@ function reduce(s: State, action: Action): State {
         return e.disk ? said : { ...said, editor: null };
       }
       // With no view asked for, a changed file opens on its diff and an unchanged one has none to
-      // show, so it opens to be read. A file with nothing on the other side (new to the branch) is
+      // show, so it opens to be read. A markdown file's diff is its page with what came and went
+      // marked on it (`marks`), so a changed one opens rendered and its text is a press away in
+      // the pane's head. A file with nothing on the other side (new to the branch) is
       // never shown as its diff: that would be every line added, which the changes row already says,
       // over a phantom removed line that Monaco draws for the empty side.
       // Someone who picked the rendered view is reading the changes, not comparing them, and is
@@ -2495,12 +2505,13 @@ function reduce(s: State, action: Action): State {
       // pick another view.
       const reading = readingView(e.path);
       const held = e.reads && reading === "preview" ? reading : null;
+      const compared = renderedAs(e.path) === "markdown" ? "preview" : "diff";
       const view =
         disk.before === ""
           ? e.view && e.view !== "diff"
             ? e.view
             : reading
-          : (e.view ?? held ?? (disk.before === disk.after ? reading : "diff"));
+          : (e.view ?? held ?? (disk.before === disk.after ? reading : compared));
       return { ...s, editor: { ...e, view, disk } };
     }
     case "editor-conflict": {
@@ -2509,10 +2520,22 @@ function reduce(s: State, action: Action): State {
     }
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
-      // kept for the diff view would land inside a collapsed region the next time the file is read
+      // kept for the diff view would land inside a collapsed region the next time the file is read.
+      // A page asked for with nothing said about its marks is the page as it is.
       return s.editor
-        ? { ...s, editor: { ...s.editor, view: action.v, reads: action.v === "preview", line: undefined } }
+        ? {
+            ...s,
+            editor: {
+              ...s.editor,
+              view: action.v,
+              marks: action.marks ?? false,
+              reads: action.v === "preview",
+              line: undefined,
+            },
+          }
         : s;
+    case "editor-marks":
+      return s.editor ? { ...s, editor: { ...s.editor, marks: action.v } } : s;
     case "editor-refused": {
       const e = s.editor;
       if (!e || !sameFile(e, action.file)) return s;

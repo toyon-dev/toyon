@@ -34,8 +34,6 @@ export const STORAGE = {
   editorWrap: "toyon-dwrap",
   /** "1" while a diff draws the old text beside the new instead of in one column */
   editorSplit: "toyon-dsplit",
-  /** "0" while a changed document read rendered is drawn without what came and went marked on it */
-  editorMarks: "toyon-dmarks",
   designHeight: "toyon-dsh",
   designFull: "toyon-dsfull",
   termHeight: "toyon-th",
@@ -77,7 +75,6 @@ export const WINDOW_KEYS: readonly Key[] = [
   STORAGE.editorFull,
   STORAGE.editorWrap,
   STORAGE.editorSplit,
-  STORAGE.editorMarks,
   STORAGE.designHeight,
   STORAGE.designFull,
   STORAGE.termHeight,

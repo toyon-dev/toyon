@@ -66,16 +66,19 @@ export function Pane({
   children: ReactNode;
 }) {
   const cm = useContextMenu("pane");
+  // one word, lit while the pane has the column: a head's switches say the state it is in
   const fullToggle = onToggleFull && (
     <Button
       variant="outline"
-      tone="quiet"
+      tone="chrome"
       mono
+      on={full}
+      aria-pressed={!!full}
       className="deep-link"
       onClick={onToggleFull}
-      data-tip={full ? "Split view: show the preview above" : "Full height: hide the preview"}
+      data-tip="Full height: hide the preview"
     >
-      <Icon name={full ? "split" : "full"} className="icon-inline" /> {full ? "split" : "full"}
+      <Icon name="full" className="icon-inline" /> full
     </Button>
   );
   // the pane's own controls sit together at the end: both are about the pane's shape, and a gap

@@ -2535,11 +2535,48 @@ describe("the editor's open file", () => {
       run([hello(wt("a")), opening({ path: "docs/x.md", seq: 1, view }), readInto("docs/x.md", { before, after })])
         .editor?.view;
     expect(viewOf("a", "a")).toBe("preview");
-    expect(viewOf("a", "b")).toBe("diff");
+    // a changed one too: its diff is the page, marked
+    expect(viewOf("a", "b")).toBe("preview");
+    expect(viewOf("a", "b", "diff")).toBe("diff");
     expect(viewOf("a", "b", "file")).toBe("file");
     expect(viewOf("", "b")).toBe("preview");
     expect(viewOf("", "b", "diff")).toBe("preview");
     expect(viewOf("", "b", "file")).toBe("file");
+    // a page that cannot be marked has its diff in its text
+    const html = run([
+      hello(wt("a")),
+      opening({ path: "x.html", seq: 1 }),
+      readInto("x.html", { before: "a", after: "b" }),
+    ]);
+    expect(html.editor?.view).toBe("diff");
+  });
+
+  test("a page opened with no view asked for is marked, and one asked for by name is read as it is", () => {
+    const changed = { before: "a", after: "b" };
+    const row = run([hello(wt("a")), opening({ path: "a.md", seq: 1 }), readInto("a.md", changed)]);
+    expect(row.editor).toMatchObject({ view: "preview", marks: true });
+    const eye = [opening({ path: "a.md", seq: 2, view: "preview", picked: true }), readInto("a.md", changed)];
+    expect(run(eye, row).editor).toMatchObject({ view: "preview", marks: false });
+    // the open file asked for again with no view keeps what the person left it showing
+    expect(run([...eye, opening({ path: "a.md", seq: 3 })], row).editor).toMatchObject({
+      view: "preview",
+      marks: false,
+    });
+    // and the next file is marked again: the eye was that file's
+    expect(run([...eye, opening({ path: "b.md", seq: 3 }), readInto("b.md", changed)], row).editor).toMatchObject({
+      view: "preview",
+      marks: true,
+    });
+    // the head's switch turns the marks on the page, and its seats carry the diff's answer across
+    expect(reducer(row, { a: "editor-marks", v: false }).editor).toMatchObject({ view: "preview", marks: false });
+    const code = reducer(row, { a: "editor-view", v: "diff" });
+    expect(reducer(code, { a: "editor-view", v: "preview", marks: true }).editor).toMatchObject({
+      view: "preview",
+      marks: true,
+    });
+    // a page named with nothing said about its marks, as a file's menu names it, is the page as it is
+    expect(reducer(code, { a: "editor-view", v: "preview" }).editor).toMatchObject({ view: "preview", marks: false });
+    expect(reducer(initial, { a: "editor-marks", v: true }).editor).toBeNull();
   });
 
   test("opening the open file again keeps its text on screen while the fresh read is out", () => {
@@ -2585,25 +2622,27 @@ describe("the editor's open file", () => {
   });
 
   test("the rendered view picked by hand holds for the files opened after it", () => {
+    // html pages: a changed one opens on the diff of its text unless the pick holds, where a
+    // markdown file opens rendered either way
     const changed = { before: "a", after: "b" };
-    const first = [hello(wt("a")), opening({ path: "a.md", seq: 1 }), readInto("a.md", changed)];
+    const first = [hello(wt("a")), opening({ path: "a.html", seq: 1 }), readInto("a.html", changed)];
     const next = (path: string, seq: number) => [opening({ path, seq }), readInto(path, changed)];
     const toggled: Action[] = [...first, { a: "editor-view", v: "preview" }];
     expect(run(first).editor?.view).toBe("diff");
-    expect(run([...first, ...next("b.md", 2)]).editor?.view).toBe("diff");
-    expect(run([...toggled, ...next("b.md", 2)]).editor?.view).toBe("preview");
+    expect(run([...first, ...next("b.html", 2)]).editor?.view).toBe("diff");
+    expect(run([...toggled, ...next("b.html", 2)]).editor?.view).toBe("preview");
     // a file that does not render opens on its diff, and the pick is there for the one after it
     expect(run([...toggled, ...next("x.tsx", 2)]).editor?.view).toBe("diff");
-    expect(run([...toggled, ...next("x.tsx", 2), ...next("b.md", 3)]).editor?.view).toBe("preview");
+    expect(run([...toggled, ...next("x.tsx", 2), ...next("b.html", 3)]).editor?.view).toBe("preview");
     // picking another view ends it, and an open that names its view is not second-guessed
-    expect(run([...toggled, { a: "editor-view", v: "diff" }, ...next("b.md", 2)]).editor?.view).toBe("diff");
-    const asked = [opening({ path: "b.md", seq: 2, view: "diff" }), readInto("b.md", changed)];
+    expect(run([...toggled, { a: "editor-view", v: "diff" }, ...next("b.html", 2)]).editor?.view).toBe("diff");
+    const asked = [opening({ path: "b.html", seq: 2, view: "diff" }), readInto("b.html", changed)];
     expect(run([...toggled, ...asked]).editor?.view).toBe("diff");
-    // a row's eye is a pick; a caller that opens every markdown file rendered is not
-    const eye = [opening({ path: "a.md", seq: 1, view: "preview", picked: true }), readInto("a.md", changed)];
-    expect(run([hello(wt("a")), ...eye, ...next("b.md", 2)]).editor?.view).toBe("preview");
-    const tree = [opening({ path: "a.md", seq: 1, view: "preview" }), readInto("a.md", changed)];
-    expect(run([hello(wt("a")), ...tree, ...next("b.md", 2)]).editor?.view).toBe("diff");
+    // a row's eye is a pick; a caller that opens every page rendered is not
+    const eye = [opening({ path: "a.html", seq: 1, view: "preview", picked: true }), readInto("a.html", changed)];
+    expect(run([hello(wt("a")), ...eye, ...next("b.html", 2)]).editor?.view).toBe("preview");
+    const tree = [opening({ path: "a.html", seq: 1, view: "preview" }), readInto("a.html", changed)];
+    expect(run([hello(wt("a")), ...tree, ...next("b.html", 2)]).editor?.view).toBe("diff");
   });
 
   test("a read that failed closes a pane with nothing in it, and over text only says why", () => {

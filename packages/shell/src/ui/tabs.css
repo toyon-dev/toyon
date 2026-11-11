@@ -181,6 +181,25 @@
     background: none;
   }
 
+  /* The segmented control at a chip's size (Tabs.tsx, `dense`): the track's inset drops a pixel
+   and its corners step down with it, so the whole control is as tall as the bordered chips it
+   sits among. A seat's inset is a chip's less the track's own, so a word stands as far from the
+   control's edge as it does in a chip. The labels take the strip's own small tier, or the mono
+   where the chips beside them are set in it. */
+  .tabs-dense {
+    padding: 2px;
+    border-radius: var(--radius-md);
+    --tab-inset: 6px;
+  }
+  .tabs-dense .tab {
+    min-height: 14px;
+    border-radius: var(--radius);
+    font: var(--type-ui-sm);
+  }
+  .tabs-dense.tabs-mono .tab {
+    font: var(--type-mono);
+  }
+
   /* The strip with no recess (Tabs.tsx, `quiet`): the labels on the parent's own ground, a hairline
    under all of them where the list begins, and the open label marked by a rule at its foot in its
    own colour, spanning the label and not the tab's inset. Nothing is filled, hover included: a block

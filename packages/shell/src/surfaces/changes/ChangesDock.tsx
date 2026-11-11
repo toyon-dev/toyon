@@ -1,4 +1,4 @@
-import { baseOf, type CommitEntry, canSync, type GitFileStatus } from "@toyon/shared";
+import { baseOf, type CommitEntry, canSync, type GitFileStatus, renderedAs } from "@toyon/shared";
 import { type DragEvent, Fragment, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { previewBus } from "../../app/previewBus.ts";
 import { commitItems } from "../../state/actions/commit.ts";
@@ -89,6 +89,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
   const openSince = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.since ?? null) : null));
   const openView = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.view : null));
+  const openMarks = useStore((s) => !!s.editor && s.editor.worktreeId === shownId && s.editor.marks);
   // each list reads the change first and its tests after: the order every index below is in, so
   // the arrows, the pick and the titles agree with what is drawn. A folded committed section
   // leaves the list altogether, so the cursor, the row ids and the menus count only what is drawn;
@@ -615,15 +616,22 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     const r = inHist(sel) ? histRows[sel - above] : undefined;
     return r ? (r.file ? menuAtCommit(r.file.path) : commitItems(r.commit)) : [];
   };
-  // A press on the row of the file the pane is reading rendered goes back to its code: the diff,
-  // or the file where it has none. The row is where the diff was asked for the first time, so it
-  // is where it is asked for again, and it is a pick by hand as the pane's own switch is.
-  const toCode = useCallback(() => {
-    if (openView !== "preview" || !openDisk) return false;
+  // A press on the row of the file the pane is reading rendered asks for its diff again, as the
+  // row did the first time. A markdown file's diff is its page with what came and went marked on
+  // it, so a page read clean gets its marks and one already marked is where the row leads. Any
+  // other page goes back to its code: the diff, or the file where it has none, and that is a pick
+  // by hand as the pane's own switch is.
+  const toDiff = useCallback(() => {
+    if (openView !== "preview" || !openDisk || openPath === null) return false;
     const noDiff = openDisk.before === "" || openDisk.before === openDisk.after;
+    if (renderedAs(openPath) === "markdown") {
+      if (noDiff || openMarks) return false;
+      dispatch({ a: "editor-marks", v: true });
+      return true;
+    }
     dispatch({ a: "editor-view", v: noDiff ? "file" : "diff" });
     return true;
-  }, [openView, openDisk, dispatch]);
+  }, [openView, openMarks, openDisk, openPath, dispatch]);
   // One press for every section of the changes list. `at` is where the section's rows start: a
   // path can sit in more than one section, and the cursor lands on the row that was pressed. The
   // rows are memoized on their props, so each section's handler reads the latest press through a ref.
@@ -631,7 +639,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const press = (at: number, path: string, view?: EditorView) => {
     const i = rows.findIndex((f, n) => n >= at && f.path === path);
     setSel(i);
-    if (!view && opensAt(i) && toCode()) return;
+    if (!view && opensAt(i) && toDiff()) return;
     // a press on the open test file folds its names and opens them again, as a commit's row does
     if (!view && opensAt(i) && openTests.length > 0) setFolded((f) => !f);
     else open(path, false, sinceAt(i), view);
@@ -655,11 +663,11 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     (path: string) => {
       setSel(above + histRows.findIndex((r) => r.file?.path === path));
       const isOpen = path === openPath && openRef === openShaRef.current;
-      if (isOpen && toCode()) return;
+      if (isOpen && toDiff()) return;
       if (isOpen && openTests.length > 0) setFolded((f) => !f);
       else openAt(path);
     },
-    [histRows, above, openAt, openPath, openRef, openTests, toCode],
+    [histRows, above, openAt, openPath, openRef, openTests, toDiff],
   );
   const readHistFile = useCallback(
     (path: string) => {

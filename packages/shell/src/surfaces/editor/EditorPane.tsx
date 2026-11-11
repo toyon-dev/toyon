@@ -2,7 +2,7 @@ import { renderedAs, viewerOf } from "@toyon/shared";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { writeCopiedSource } from "../../app/copiedSource.ts";
 import { previewBus } from "../../app/previewBus.ts";
-import { fileItems, viewsOf } from "../../state/actions/file.ts";
+import { fileItems } from "../../state/actions/file.ts";
 import { addToChat } from "../../state/attach.ts";
 import { useDispatch, useFileSync, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import type { FileSync } from "../../state/fileSync.ts";
@@ -13,7 +13,6 @@ import {
   type ChatItem,
   type EditorDisk,
   type EditorFile,
-  type EditorView,
   isChatCentred,
   localOf,
   routeTarget,
@@ -26,6 +25,8 @@ import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useAtLeast, useOnChange, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
+import { type TabItem, Tabs } from "../../ui/Tabs.tsx";
+import { tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { defaultTab, handoffOn, listPage } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
@@ -34,9 +35,8 @@ import { FileViewer } from "./FileViewer.tsx";
 import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
-import { MarksToggle, useMarks } from "./MarksToggle.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
-import { SPLIT_MIN, SplitToggle, useSplit } from "./SplitToggle.tsx";
+import { type DiffSeat, DiffSeats, SPLIT_MIN, useSplit } from "./SplitToggle.tsx";
 import { SvgPreview } from "./SvgPreview.tsx";
 import { useWrap, WrapToggle } from "./WrapToggle.tsx";
 import "./editor.css";
@@ -63,7 +63,12 @@ const NO_DRAG = () => {};
 /** one empty chat for the selector, so a worktree with no chat yet does not make a new array a render */
 const NO_CHAT: ChatItem[] = [];
 
-const VIEW_ICONS = { diff: "diff", file: "text", preview: "book" } as const;
+/** the two forms a file that renders is read in: the page it draws, or its text. Both seats stay
+ * in the head, so the one it is on is seen and not worked out from what the other offers. */
+const FORMS: TabItem<"preview" | "code">[] = [
+  { id: "preview", label: "preview", tip: tip("Preview: read it rendered") },
+  { id: "code", label: "code", tip: tip("Code: read and edit the text") },
+];
 
 /** the file's name first and its directory after, as the row in the changes panel has it: the name
  * is what the head is there to say, so it never shrinks, and the directory gives way when the
@@ -105,12 +110,6 @@ function EditorTitle({
       {dir && <span className="editor-dir row-dim">{dir}</span>}
     </span>
   );
-}
-
-function viewTip(to: EditorView, from: EditorView): string {
-  if (to === "diff") return "Diff view: show what changed";
-  if (to === "preview") return "Preview: read it rendered";
-  return from === "diff" ? "File view: hide the diff" : "File view: edit the text";
 }
 
 /** the editor pane: the open file as its diff against main or on its own, with autosave, line-hover → preview highlight.
@@ -214,19 +213,19 @@ export function EditorPane({
   }, [worktreeId, path, cached, history, kept, loose, sock]);
   const lineOff = cached?.offset ?? 0;
   const disk = editor.disk;
-  // until the first read decides, the toggles offer what they would from a diff
-  const view = editor.view ?? "diff";
-  // a file with nothing on the other side, or the same on both, has no diff to switch to; the
-  // disk is read again after every save, so an edit brings the view back. A loose file has no
+  const rendering = renderedAs(path);
+  // until the first read decides, the head shows what a changed file opens as: a markdown file
+  // as its page, anything else as the diff of its text
+  const view = editor.view ?? (rendering === "markdown" ? "preview" : "diff");
+  // a file with nothing on the other side, or the same on both, has no diff to turn on; the
+  // disk is read again after every save, so an edit brings the switch back. A loose file has no
   // other side at all.
   const noDiff = !!disk && (disk.before === "" || disk.before === disk.after);
-  const others = prPage ? [] : viewsOf(path, noDiff).filter((v) => v !== view && !(loose && v === "diff"));
   // a file the browser draws is drawn from the working tree, or from its grant when it was opened
   // from outside; one only in git (a commit's copy, an archived page) or dropped in from the
   // browser has no bytes the daemon can serve
   const grant = loose?.source.kind === "grant" ? loose.source : null;
   const viewer = history || kept || (loose && !grant) ? null : viewerOf(path);
-  const rendering = renderedAs(path);
   // a picture at the window's size: the header's button and the picture itself both open it, so
   // the pane holds the switch and the viewer draws the float. An svg read rendered is a picture
   // too, drawn from the text, so a commit's copy has one as well
@@ -236,9 +235,8 @@ export function EditorPane({
   const [wrap, setWrap] = useWrap();
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
-  // a markdown file with another side, read rendered, can show on the page what came and went;
-  // a piece of the plan's list is not the file's text
-  const [marks, setMarks] = useMarks();
+  // a markdown file with another side, read rendered, can show on the page what came and went:
+  // its diff as the page it draws. A piece of the plan's list is not the file's text.
   const markable =
     view === "preview" &&
     rendering === "markdown" &&
@@ -249,9 +247,26 @@ export function EditorPane({
     !disk.tooLarge &&
     !noDiff &&
     !openPiece;
-  // the split is a diff's alone, the text's or the page's; a phone's screen is one column wide
-  // whatever is asked
-  const splittable = ((wrappable && view === "diff" && !noDiff) || (markable && marks)) && !onScreen;
+  const marks = markable && editor.marks;
+  // text the pane can show: not the PR's page, a picture in its viewer, or a file it will not open
+  const shown = !prPage && !viewer && !(disk && (disk.binary || disk.tooLarge));
+  // the page or its text, for a file that renders
+  const forms = shown && !!rendering;
+  // the diff is one answer in both forms: the text against its other side, or the page with what
+  // came and went marked on it. A page that cannot be marked (html, a picture drawn from text)
+  // has its diff in its text alone, so the seats wait there.
+  const diffable = shown && !loose && !noDiff && (view !== "preview" || markable);
+  const diffOn = view === "preview" ? marks : view === "diff";
+  const onDiff = (on: boolean) =>
+    dispatch(view === "preview" ? { a: "editor-marks", v: on } : { a: "editor-view", v: on ? "diff" : "file" });
+  // a press on a seat changes the form and keeps the diff's answer: a marked page is left for
+  // the diff of its text and a clean one for the file, and the same on the way back. A page that
+  // cannot be marked is left for its diff where it has one, since its text is where that is read.
+  const onForm = (form: "preview" | "code") => {
+    if (form === (view === "preview" ? "preview" : "code")) return;
+    if (form === "preview") dispatch({ a: "editor-view", v: "preview", marks: view === "diff" });
+    else dispatch({ a: "editor-view", v: noDiff || loose || (markable && !marks) ? "file" : "diff" });
+  };
   const [split, setSplit] = useSplit();
   const bodyRef = useRef<HTMLDivElement>(null);
   // the page folds to one column where Monaco folds its own, by the same number
@@ -289,6 +304,17 @@ export function EditorPane({
   };
   // the pane closing takes the split's reason with it
   useEffect(() => giveChatBack, [giveChatBack]);
+  // a layout asked for is a diff asked for; with the diff off nothing is split, so the chat a
+  // split took comes back, and the layout last picked is kept for the next diff
+  const onDiffSeat = (seat: DiffSeat) => {
+    if (seat === "file") {
+      onDiff(false);
+      giveChatBack();
+      return;
+    }
+    if (!diffOn) onDiff(true);
+    onSplit(seat === "split");
+  };
   // a line the page reported is only placed once its offset is known
   const line = editor.line && !editor.line.fiber ? editor.line.n : undefined;
   // an html page on the working tree can be run as well as read: the rendered view keeps its
@@ -341,23 +367,18 @@ export function EditorPane({
       // same list the file's row in the changes panel has
       actions={
         <>
-          {/* each names the view it switches to, as the full toggle beside them does; a cluster,
-              since they are alternatives to one another and the wrap toggle beside them is not */}
-          {!viewer && others.length > 0 && (
-            <span className="editor-views">
-              {others.map((v) => (
-                <Button
-                  key={v}
-                  variant="outline"
-                  tone="quiet"
-                  mono
-                  className="deep-link"
-                  onClick={() => dispatch({ a: "editor-view", v })}
-                  data-tip={viewTip(v, view)}
-                >
-                  <Icon name={VIEW_ICONS[v]} className="icon-inline" /> {v}
-                </Button>
-              ))}
+          {forms && (
+            <span className="editor-pair">
+              <Tabs
+                items={FORMS}
+                current={view === "preview" ? "preview" : "code"}
+                onPick={onForm}
+                segmented
+                dense
+                font="mono"
+                label="the page or its text"
+                owner="pane"
+              />
             </span>
           )}
           {/* a picture sits where a text file's views do: the pane is a strip of the window, and a
@@ -374,8 +395,14 @@ export function EditorPane({
               <Icon name="zen" className="icon-inline" /> full size
             </Button>
           )}
-          {markable && <MarksToggle marks={marks} onMarks={setMarks} />}
-          {splittable && <SplitToggle split={split} onSplit={onSplit} />}
+          {/* a phone's screen is one column wide whatever is asked */}
+          {diffable && (
+            <DiffSeats
+              at={diffOn ? (split && !onScreen ? "split" : "inline") : "file"}
+              onPick={onDiffSeat}
+              columns={!onScreen}
+            />
+          )}
           {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
           {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
           {runnable && (

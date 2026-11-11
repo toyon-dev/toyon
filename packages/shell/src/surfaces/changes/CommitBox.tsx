@@ -105,11 +105,12 @@ export function CommitBox({
   // what the box has is what any verb commits with; the daemon falls back to the suggestion on its
   // own when nothing was typed, so the message is sent only when it is the person's
   const typed = msg.trim() || undefined;
-  // a land or an update commits first when the tree is dirty, so with no message typed and none
-  // suggested the press that writes one takes the land word's place: the same check the composer
-  // offers, which runs the repo's check and asks the model for the message. Nothing offers it
-  // when nothing could answer (`unasked`, an agent with no quick model): the message is the
-  // person's to write, and the field says so.
+  // a land or an update commits first when the tree is dirty, so with no message typed and no
+  // verdict to suggest one the press that writes one takes the land word's place: the same check
+  // the composer offers, which runs the repo's check and asks the model for the message. A
+  // verdict whose question went unanswered keeps the land word, since the press asks again
+  // itself. Nothing offers either when nothing could answer (`unasked`, an agent with no quick
+  // model): the message is the person's to write, and the field says so.
   const quick = useStore((s) => !!s.agents.find((a) => a.id === (owned?.agent ?? s.defaultAgent))?.quick);
   const verdict = owned?.landing;
   const gap = typed ? null : messageGap(verdict, dirty ? 1 : 0, quick);
@@ -142,19 +143,14 @@ export function CommitBox({
   // work since the PR opened: the same press sends it up to the PR, and merge waits until the
   // branch on origin has all of it, since merging now would leave it behind
   const prMissing = prOpen && (dirty || unpushed > 0);
-  const held = checking || stale || !!gap;
+  const held = checking || stale || (!!gap && gap !== "unanswered");
   // a landed row has nothing to land, whatever it counts as ahead: after a squash on GitHub the
   // branch keeps its own commits until it restarts from the base, and the press would offer to
   // land them again beside the landed badge
   const canLand = !!owned && landable(owned) && !hasLanded && (dirty || ahead > 0) && !checkFailed && !prOpen && !held;
   const canUpdate = !!owned && prMissing && !checkFailed && !held;
   // the check in the land word's place, while the agent is not mid-turn (the daemon refuses it then)
-  const canCheck =
-    !!owned &&
-    landable(owned) &&
-    !checking &&
-    (stale || gap === "unwritten" || gap === "unanswered") &&
-    !isBusy(active.agent);
+  const canCheck = !!owned && landable(owned) && !checking && (stale || gap === "unwritten") && !isBusy(active.agent);
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const policy = landPolicy(repo?.config ?? {});
   const landTip = describeLand(policy, repo?.defaultBranch);
@@ -269,7 +265,7 @@ export function CommitBox({
               placeholder={
                 suggested ??
                 (gap === "unanswered"
-                  ? "no message yet: the model did not answer. Check again, or write one here"
+                  ? "no message yet: landing writes one, or write one here"
                   : gap === "unasked"
                     ? "no message yet: write one here to commit or land"
                     : "commit message…")
@@ -322,7 +318,7 @@ export function CommitBox({
                 <Button
                   tone="primary"
                   disabled={!!op}
-                  data-tip={checkTip(verdict, !!repo?.config.check?.trim(), gap)}
+                  data-tip={checkTip(verdict, !!repo?.config.check?.trim())}
                   onClick={judge}
                 >
                   check

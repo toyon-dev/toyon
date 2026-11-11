@@ -644,6 +644,41 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.branch).toBe("mine");
   });
 
+  test("a land with a commit to make and no message asks for one at the press, and only then", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    // nothing answers: the press is refused with the field named, and the work stays uncommitted
+    const err = await w.worktrees.land(wt.id).catch((e) => e);
+    expect(err).toBeInstanceOf(UserError);
+    expect(err.message).toBe("no commit message yet: write one in the changes panel");
+    expect(w.writing.calls).toBe(1);
+    expect((await git(wt.path, "status", "--porcelain")).out).not.toBe("");
+    // answered, the land commits with it
+    w.writing.reply = "add the feature\n\nOne file.";
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(w.writing.calls).toBe(2);
+    expect((await git(w.repo, "log", "-1", "--format=%s%n%b", "main^2")).out).toBe("add the feature\nOne file.");
+    // a message typed, one on the verdict, or nothing to commit: nobody is asked
+    writeFileSync(join(wt.path, "typed.txt"), "x\n");
+    expect((await w.worktrees.land(wt.id, "typed by hand")).result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("typed by hand");
+    writeFileSync(join(wt.path, "suggested.txt"), "x\n");
+    w.state.worktree(wt.id)!.landing = {
+      at: 1,
+      check: "pass",
+      ready: true,
+      subject: "written by the verdict",
+      fingerprint: await treeFingerprint(wt.path),
+    };
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect((await git(w.repo, "log", "-1", "--format=%s", "main^2")).out).toBe("written by the verdict");
+    writeFileSync(join(wt.path, "committed.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "committed by hand")).ok).toBe(true);
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    expect(w.writing.calls).toBe(2);
+  });
+
   test("a land on a detached HEAD is refused, and the commits it holds stay where they are", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");

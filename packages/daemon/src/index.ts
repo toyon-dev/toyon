@@ -280,8 +280,10 @@ const worktrees = new WorktreeService({
   fix,
   pageErrors: (id) => pageErrors.ambient(id),
   interested: (id) => interest.isSubscribed(id),
-  // idle is built below; the closure is read per call, so the order does not matter
+  // idle and the landing service are built below; a closure is read per call, so the order does
+  // not matter
   shown: (id) => idle.isShown(id),
+  message: (wt): Promise<string | undefined> => landing.message(wt.id),
 });
 // a subscriber arriving is when a worktree's panel tier and its watcher start; the last leaving
 // is when the watcher stops

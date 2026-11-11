@@ -776,6 +776,38 @@ describe("LandingService", () => {
     expect(w.wt()?.landing?.unanswered).toBeUndefined();
   });
 
+  test("the message alone is asked for a land that needs it: the check does not run again", async () => {
+    let answers = 0;
+    w = world({
+      check: "bun run check",
+      judge: async () => {
+        const n = answers++;
+        if (n === 0) throw new Error("ACP connection closed");
+        return n === 1
+          ? null
+          : { ready: false, why: "a question is open", subject: "add the feature", body: "One file." };
+      },
+    });
+    w.dirty();
+    await w.settle();
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", unanswered: true });
+    // no answer again: nothing is made up, and the mark stays
+    expect(await w.service.message("w1")).toBeUndefined();
+    expect(w.wt()?.landing).toMatchObject({ check: "pass", unanswered: true });
+    // answered: the message is handed back and is on the verdict, the mark gone; the check's
+    // word and the doubt are as they were, since only the message was asked for
+    expect(await w.service.message("w1")).toBe("add the feature\n\nOne file.");
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.wt()?.landing).toMatchObject({
+      check: "pass",
+      ready: true,
+      subject: "add the feature",
+      body: "One file.",
+    });
+    expect(w.wt()?.landing?.unanswered).toBeUndefined();
+    expect(w.wt()?.landing?.why).toBeUndefined();
+  });
+
   test("stop() mid-question leaves the verdict pending, and boot() finishes it", async () => {
     let fail!: (e: Error) => void;
     const dying = new Promise<LandVerdict | null>((_, reject) => {

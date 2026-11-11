@@ -9,7 +9,8 @@
 // press on the word while the agent rebases would meet the same conflict, or tear the agent's
 // rebase down. A tree that changes under it goes stale (service.gitStatus), and the
 // same question can be asked again by hand, or the check alone re-run after a discard, which
-// narrows the work without changing what the sentence and the message say about it. The sentence
+// narrows the work without changing what the sentence and the message say about it. A message the
+// question never came back with is asked for alone, by the land that needs it. The sentence
 // is the turn's recap and stays with the turn.
 
 import {
@@ -274,6 +275,34 @@ export class LandingService {
     fireAndForget(worktreeId, this.run(wt, { at: Date.now(), ask: false, quiet: true }), "landing recheck");
   }
 
+  /** The message alone, for a land about to commit with none typed and none on the verdict: the
+   * question went unanswered when the verdict was written, and the check's answer about these
+   * bytes stands, so the press asks again rather than run the suite a second time for the sake of
+   * a sentence. The answer goes on the verdict too, where a land that stops further on (a hook, a
+   * conflict) leaves it in the box. None when nothing answers, and the land says one is owed. */
+  async message(worktreeId: string): Promise<string | undefined> {
+    const wt = this.d.state.worktree(worktreeId);
+    if (!wt || !this.d.judge) return undefined;
+    const repo = this.d.state.requireRepo(wt.repoId);
+    let verdict: LandVerdict | null = null;
+    try {
+      verdict = await this.d.judge(wt, landPrompt(await this.landInput(wt, repo)));
+    } catch (e) {
+      log.warn(worktreeId, "landing message unanswered at the press", e);
+    }
+    if (!verdict?.subject) return undefined;
+    const now = this.d.state.worktree(worktreeId)?.landing;
+    if (now && !now.subject) {
+      const { unanswered: _owed, ...rest } = now;
+      this.d.worktrees.setLanding(worktreeId, {
+        ...rest,
+        subject: verdict.subject,
+        ...(verdict.body ? { body: verdict.body } : {}),
+      });
+    }
+    return verdict.body ? `${verdict.subject}\n\n${verdict.body}` : verdict.subject;
+  }
+
   /** What the question is asked with. The message is for the next commit, so the turns it reads
    * are the ones since the branch's last commit, or its last landing, after which the branch
    * restarted from main: the earlier turns describe work that is committed, and a model shown
@@ -390,7 +419,7 @@ export class LandingService {
         if (!live()) return undefined;
         // the question was never put (the agent died, or would not open a session), which is not
         // the model declining: no message is made up, and the verdict says one is still owed, so
-        // the box offers to ask again rather than a land word with no message behind it
+        // the land that commits asks again before it does
         log.warn(worktreeId, "landing verdict unanswered", e);
         unanswered = true;
       }

@@ -334,6 +334,10 @@ export interface WorktreeServiceDeps {
    * carries: a worktree made from a lead's box carries the lead's, since that is the preview the
    * person was looking at as they typed. Absent in tests. */
   pageErrors?: (worktreeId: string) => string | undefined;
+  /** the commit message for a land with none typed and none on the verdict, asked of the
+   * worktree's own agent at the press; none when nothing answers. Absent in tests that land with
+   * a message in hand. */
+  message?: (wt: WorktreeInfo) => Promise<string | undefined>;
 }
 
 /** a landing op's result as the service hands it on: `asked` when the agent was sent the turn that
@@ -2520,9 +2524,22 @@ export class WorktreeService {
     this.d.hub.emit("worktreesChanged");
   }
 
-  private async landOp(wt: WorktreeInfo, repo: RepoInfo, message?: string): Promise<Landed> {
+  /** The message a land commits with when none was typed and the verdict carries none: the
+   * question went unanswered when the verdict was written, so it is asked again here, alone and
+   * inside the op. The check's answer about this tree stands, and a press sent back through it
+   * would run the suite again to get a sentence. Only with something to commit, since a land of
+   * commits alone needs no message. */
+  private async messageOwed(wt: WorktreeInfo, typed: string | undefined, w: LandWatch): Promise<string | undefined> {
+    if (!this.d.message || this.suggestion(wt, typed)) return typed;
+    if ((await statusFiles(wt.path)).length === 0) return typed;
+    w.step("writing the message");
+    return (await this.d.message(wt)) ?? typed;
+  }
+
+  private async landOp(wt: WorktreeInfo, repo: RepoInfo, typed?: string): Promise<Landed> {
     const policy = landPolicy(repo.config);
     const w = this.landWatch(wt);
+    const message = await this.messageOwed(wt, typed, w);
     // what the newest commit's work is called: the message typed for it, else the verdict's.
     // Where the whole branch is named at once (a squash, a PR), squashMessage puts the branch's
     // earlier subjects under it.

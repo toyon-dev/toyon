@@ -166,8 +166,9 @@ const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1
  * `unwritten` when no verdict has been written, or the tree moved under the one there is, so the
  * check writes it; `pending` while that runs; `unanswered` when the question went unanswered and
  * is worth asking again (the agent was down, or its reply carried no message, which an agent with
- * a quick model can be asked to redo); `unasked` when nothing could answer it (`quick` false: the
- * agent has no quick model), so the message is the person's to write. Null with a message in
+ * a quick model can be asked to redo), which the land does itself before it commits, so the word
+ * stays; `unasked` when nothing could answer it (`quick` false: the agent has no quick model), so
+ * the message is the person's to write and the land waits on it. Null with a message in
  * hand, or with nothing uncommitted, since a land only commits first when there is something to
  * commit. A failed check is null too: its own line stands in front, and the message is not what
  * is missing. */
@@ -182,13 +183,15 @@ export function messageGap(l: Landing | undefined, dirty: number, quick: boolean
 
 /** The check word's tooltip, the same on the composer and the commit box: what the press runs and
  * what it writes, and why it is offered again when it is. */
-export function checkTip(l: Landing | undefined, hasCheck: boolean, gap: MessageGap | null = null): string {
+export function checkTip(l: Landing | undefined, hasCheck: boolean): string {
   if (l?.stale)
     return `The work changed since this was written. ${hasCheck ? "Run the check again and refresh" : "Refresh"} the message.`;
-  if (gap === "unanswered")
-    return `The model did not answer with a message. ${hasCheck ? "Run the check again and ask" : "Ask"} for it again.`;
   return `${hasCheck ? "Run the repo's check here and write" : "Write"} the recap and the commit message.`;
 }
+
+/** The land word's tip for a commit whose message the question never came back with: the press
+ * asks again, and the check is not run for it. */
+export const MESSAGE_AT_PRESS = "No commit message yet: one is written before the commit.";
 
 /** The line for a message nobody here can write: which agent cannot, when known, and the field
  * it is written in. The agent's own page says the same once, with what would change it. */
@@ -254,10 +257,8 @@ export function filesLine(count: number): string {
  * was written says so instead, which is why the word above is `check` and not `land`. Never a
  * refusal: the word stays. Null when the work is ready: the word alone says so, and its tooltip
  * carries the facts. */
-export function verdictLine(l: Landing, gap: MessageGap | null = null): string | null {
+export function verdictLine(l: Landing): string | null {
   if (l.stale) return "Changed since this was written.";
-  // a message is owed only for a commit the land would make, which is what the gap says
-  if (gap === "unanswered") return "No message yet: the model did not answer.";
   return l.why ? `Not ready: ${ended(clause(l.why))}` : null;
 }
 

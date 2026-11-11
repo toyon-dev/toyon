@@ -193,12 +193,8 @@ describe("landingLine", () => {
     expect(verdictLine(landing({ check: "pass", stale: true }))).toBe("Changed since this was written.");
   });
 
-  test("a question that went unanswered says the message is owed, under the check word", () => {
-    expect(verdictLine(landing({ check: "pass", unanswered: true }), "unanswered")).toBe(
-      "No message yet: the model did not answer.",
-    );
-    // nothing uncommitted: the land makes no commit, so no message is owed and the word is land
-    expect(verdictLine(landing({ check: "pass", unanswered: true }), null)).toBeNull();
+  test("a question that went unanswered puts nothing in the way: the land asks again itself", () => {
+    expect(verdictLine(landing({ check: "pass", unanswered: true }))).toBeNull();
   });
 
   test("what is missing for the land to commit, and nothing when nothing is uncommitted or a message is in hand", () => {
@@ -206,8 +202,8 @@ describe("landingLine", () => {
     expect(messageGap(landing({ check: "pass", stale: true }), 2, true)).toBe("unwritten");
     expect(messageGap(landing({ check: "pending", ready: false }), 2, true)).toBe("pending");
     expect(messageGap(landing({ check: "pass", unanswered: true }), 2, false)).toBe("unanswered");
-    // a reply with no message from an agent that could give one is asked again; an agent with no
-    // quick model could not have answered, and the message is the person's
+    // a reply with no message from an agent that could give one is asked again, by the land; an
+    // agent with no quick model could not have answered, and the message is the person's
     expect(messageGap(landing({ check: "pass" }), 2, true)).toBe("unanswered");
     expect(messageGap(landing({ check: "pass" }), 2, false)).toBe("unasked");
     expect(messageGap(landing({}), 2, false)).toBe("unasked");
@@ -227,7 +223,7 @@ describe("landingLine", () => {
     );
     expect(landingLine(landing({ check: "pass" }), 0, false)).toBeNull();
     expect(landingLine(landing({ check: "pass", subject: "add the feature" }), 2, false)).toBeNull();
-    // the check word covers the rest: no line stands in front of it
+    // the word covers the rest, check or land: no line stands in front of it
     expect(landingLine(landing({ check: "pass" }), 2, true)).toBeNull();
     expect(landingLine(landing({ check: "pass", unanswered: true }), 2, false)).toBeNull();
     expect(landingLine(landing({ check: "pass", stale: true }), 2, false)).toBeNull();
@@ -238,12 +234,6 @@ describe("landingLine", () => {
     expect(checkTip(undefined, false)).toBe("Write the recap and the commit message.");
     expect(checkTip(landing({ stale: true }), true)).toBe(
       "The work changed since this was written. Run the check again and refresh the message.",
-    );
-    expect(checkTip(landing({ unanswered: true }), true, "unanswered")).toBe(
-      "The model did not answer with a message. Run the check again and ask for it again.",
-    );
-    expect(checkTip(landing({}), false, "unanswered")).toBe(
-      "The model did not answer with a message. Ask for it again.",
     );
   });
 

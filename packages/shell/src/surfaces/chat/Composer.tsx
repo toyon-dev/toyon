@@ -87,6 +87,7 @@ import {
   landFacts,
   landingLine,
   lineParts,
+  MESSAGE_AT_PRESS,
   mergeTip,
   messageGap,
   prCanMerge,
@@ -809,11 +810,12 @@ export function Composer({
   const hasCheck = !!repo?.config.check?.trim();
   // what the land would be missing for the commit it makes first, if anything
   const gap = messageGap(verdict, dirty, quick);
-  // work with no verdict, one the tree moved under, or one whose question went unanswered with a
-  // commit to write: the check is the next step, and the word for it sits where `land` will once
-  // it passes. A check running or failed keeps its own line. Not while a press is out on the row:
-  // the land clears the verdict as its work reaches main, and a check of what just landed is not
-  // the next step.
+  // work with no verdict, or one the tree moved under: the check is the next step, and the word
+  // for it sits where `land` will once it passes. A verdict whose question went unanswered keeps
+  // `land`: the check it passed is about this tree, and the press asks for the message itself. A
+  // check running or failed keeps its own line. Not while a press is out on the row: the land
+  // clears the verdict as its work reaches main, and a check of what just landed is not the next
+  // step.
   const checkable =
     atRest &&
     !op &&
@@ -822,7 +824,7 @@ export function Composer({
     !hasLanded &&
     !prClosed &&
     landCount > 0 &&
-    (!verdict || !!verdict.stale || gap === "unanswered");
+    (!verdict || !!verdict.stale);
   const archiveTip =
     "Archive this worktree when you are done here; the rail's archived section brings it back with its chat.";
   // the ship word and where it sends the work: onto main by the repo's route, or up to the open
@@ -892,7 +894,7 @@ export function Composer({
                 word: "check",
                 kind: "check",
                 line: verdict?.subject ?? verbLine(said ?? filesLine(landCount)),
-                tip: checkTip(verdict, hasCheck, gap),
+                tip: checkTip(verdict, hasCheck),
                 run: judge,
               }
             : landing?.ready && !landingLine(landing, dirty, quick, agentInfo?.name)
@@ -905,6 +907,7 @@ export function Composer({
                     behindFact(base, active?.behind),
                     shipHow,
                     landing.subject && dirty > 0 ? "Tab from the word edits the message first." : "",
+                    gap === "unanswered" ? MESSAGE_AT_PRESS : "",
                   ]
                     .filter(Boolean)
                     .join(" "),
@@ -948,7 +951,7 @@ export function Composer({
     ) : null;
   const offeredUnder: ReactNode =
     (offered?.kind === "ship" || offered?.kind === "check") && landing
-      ? (waitLine ?? verdictLine(landing, gap))
+      ? (waitLine ?? verdictLine(landing))
       : offered?.word === "archive" && landedUnder
         ? ended(landedUnder)
         : null;

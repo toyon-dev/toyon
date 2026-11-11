@@ -62,6 +62,9 @@ export function world() {
   // the tree's fingerprint as git reads it, held at `gate` so a test can move the record while a
   // status read is between its git calls; `entered` says the read is inside
   const fingerprinting = { entered: 0, gate: Promise.resolve() };
+  // the message a land is given when it asks for one at the press, and how many times it asked;
+  // none by default, as from an agent that does not answer
+  const writing = { reply: undefined as string | undefined, calls: 0 };
   // the version commands answered without a shell, so the key is the lockfiles and the platform
   const cache = new ArtifactCache({ paths: t.paths, state, hub, tool: async () => "1.0" });
   /** the landing messages a hook refused, each with what the hook said */
@@ -93,6 +96,10 @@ export function world() {
     watch: (id, command, run) => exec.watch(id, command, run),
     fix,
     pageErrors: (id) => pageErrors.ambient(id),
+    message: async () => {
+      writing.calls++;
+      return writing.reply;
+    },
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
   const repos = new RepoRegistry({ state, hub, runtime, worktrees, ...noSelf(state, hub) });
@@ -120,6 +127,7 @@ export function world() {
     registry: agents,
     naming,
     fingerprinting,
+    writing,
     cache,
     refused,
     fix,

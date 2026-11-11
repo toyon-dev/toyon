@@ -1,6 +1,8 @@
 import { matchChord } from "@toyon/shared";
-import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { cx } from "./cx.ts";
 import { DocumentFind } from "./DocumentFind.tsx";
+import { diffDocument } from "./documentDiff.ts";
 import { Float } from "./Float.tsx";
 import { isFind } from "./find.ts";
 import { useOnChange } from "./hooks.ts";
@@ -16,7 +18,11 @@ type Heading = { id: string; level: number; depth: number; text: string; el: HTM
 
 function readHeadings(root: HTMLElement): Heading[] {
   const seen = new Map<string, number>();
-  const els = Array.from(root.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"));
+  // a heading that went is drawn (documentDiff.ts) and is no section of the document as it is:
+  // one marked gone, and every one on the side of a split page that holds the page as it was
+  const els = Array.from(root.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")).filter(
+    (el) => !el.closest(".document-gone, .document-split > :nth-child(odd)"),
+  );
   const depths = outlineDepths(els.map((el) => Number(el.tagName[1])));
   return els.map((el, i) => {
     const text = el.textContent?.trim() ?? "";
@@ -42,10 +48,14 @@ const JUMP_AIR = 16;
  * (one to a file beside it, or a section); an http link opens its tab untouched. `onChat` takes
  * what ⌘L selected, as the page draws it. `lead` is drawn at the head of the page, above the
  * markdown and scrolling with it, and stays out of the outline: a line of Toyon's own on a text
- * that is the agent's.
+ * that is the agent's. `before` is the same document as it was, rendered the same way: with one,
+ * the page is marked with what came and what went since (documentDiff.ts), in one column or,
+ * with `split`, as it was beside as it is.
  */
 export function Document({
   html,
+  before,
+  split = false,
   openSeq = 0,
   focus = true,
   onLink,
@@ -53,6 +63,8 @@ export function Document({
   lead,
 }: {
   html: string;
+  before?: string;
+  split?: boolean;
   openSeq?: number;
   focus?: boolean;
   onLink?: (href: string) => void;
@@ -61,6 +73,7 @@ export function Document({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const page = useMemo(() => (before === undefined ? html : diffDocument(before, html, split)), [before, html, split]);
   const [heads, setHeads] = useState<Heading[]>([]);
   const [at, setAt] = useState(-1);
   // the find box: open with what was selected at the press, and `seq` ticking on each press since
@@ -83,7 +96,7 @@ export function Document({
   // the headings are read off the rendered DOM rather than the markdown, so they are the ones the
   // sanitizer let through, with the text the way it is drawn; off the body alone, so a lead's
   // own heading is not a section of the document
-  useOnChange([html], () => {
+  useOnChange([page], () => {
     setHeads(body.current ? readHeadings(body.current) : []);
   });
   // the section being read: the last heading above the top edge, re-read on every scroll frame
@@ -168,9 +181,9 @@ export function Document({
         {lead}
         <div
           ref={body}
-          className="md md-preview"
+          className={cx("md md-preview", before !== undefined && split && "document-split")}
           // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized markdown output
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: page }}
         />
       </div>
       {find && <DocumentFind root={ref} body={body} seed={find.seed} seq={find.seq} onClose={closeFind} />}

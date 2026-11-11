@@ -23,7 +23,7 @@ import {
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
-import { useOnChange, useSettled } from "../../ui/hooks.ts";
+import { useAtLeast, useOnChange, useSettled } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { Pane } from "../../ui/Pane.tsx";
 import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
@@ -34,6 +34,7 @@ import { FileViewer } from "./FileViewer.tsx";
 import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
+import { MarksToggle, useMarks } from "./MarksToggle.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
 import { SPLIT_MIN, SplitToggle, useSplit } from "./SplitToggle.tsx";
 import { SvgPreview } from "./SvgPreview.tsx";
@@ -235,10 +236,26 @@ export function EditorPane({
   const [wrap, setWrap] = useWrap();
   // the toggle is for text in Monaco: a picture, a rendered preview and a file not shown have no lines to fold
   const wrappable = !!disk && !prPage && !viewer && !disk.binary && !disk.tooLarge && view !== "preview";
-  // the split is the diff's alone; a phone's screen is one column wide whatever is asked
-  const splittable = wrappable && view === "diff" && !noDiff && !onScreen;
+  // a markdown file with another side, read rendered, can show on the page what came and went;
+  // a piece of the plan's list is not the file's text
+  const [marks, setMarks] = useMarks();
+  const markable =
+    view === "preview" &&
+    rendering === "markdown" &&
+    !!disk &&
+    !prPage &&
+    !viewer &&
+    !disk.binary &&
+    !disk.tooLarge &&
+    !noDiff &&
+    !openPiece;
+  // the split is a diff's alone, the text's or the page's; a phone's screen is one column wide
+  // whatever is asked
+  const splittable = ((wrappable && view === "diff" && !noDiff) || (markable && marks)) && !onScreen;
   const [split, setSplit] = useSplit();
   const bodyRef = useRef<HTMLDivElement>(null);
+  // the page folds to one column where Monaco folds its own, by the same number
+  const roomy = useAtLeast(bodyRef, SPLIT_MIN);
   // whether the split shut the chat dock for its room: the chat comes back when the split is
   // turned off or the pane closes, and only then. A chat the person opened again meanwhile is
   // theirs to keep, and one they shut themselves is not the split's to reopen.
@@ -357,6 +374,7 @@ export function EditorPane({
               <Icon name="zen" className="icon-inline" /> full size
             </Button>
           )}
+          {markable && <MarksToggle marks={marks} onMarks={setMarks} />}
           {splittable && <SplitToggle split={split} onSplit={onSplit} />}
           {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
           {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
@@ -438,6 +456,9 @@ export function EditorPane({
         ) : view === "preview" ? (
           <MarkdownPreview
             text={disk.after}
+            before={markable ? disk.before : undefined}
+            marks={marks}
+            split={split && roomy && !onScreen}
             path={path}
             worktreeId={worktreeId}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from

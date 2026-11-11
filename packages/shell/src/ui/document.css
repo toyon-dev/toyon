@@ -88,4 +88,88 @@
       white-space: nowrap;
     }
   }
+
+  /* ---- what changed ----
+     A document drawn against the one it was (documentDiff.ts). The tints are the diff pane's: a
+     block, a row or an item that came or went whole wears the line's, and a word inside a block
+     that stayed wears the line's and the word's together, as a changed word does on its changed
+     line there. Painted as an image, over whatever ground the thing already has (a fence's, a
+     header cell's). */
+  .document-came {
+    --document-tint: var(--diff-add);
+    --document-word: var(--diff-add-word);
+  }
+  .document-gone {
+    --document-tint: var(--diff-del);
+    --document-word: var(--diff-del-word);
+  }
+  /* a table is tinted by its cells, so the tint keeps the table's rounded corners */
+  .md :is(.document-came, .document-gone):not(ins, del, tr, .md-table),
+  .md :is(.document-came, .document-gone) :is(th, td) {
+    background-image: linear-gradient(var(--document-tint), var(--document-tint));
+  }
+  /* a block of the page itself runs a little past its text on every side, so the band reads as a
+     band and the words are not pressed against its edge; an item inside a list keeps to its box,
+     where two bands a margin apart would overlap */
+  .md-preview > :is(.document-came, .document-gone):not(.md-table),
+  .document-split > div > :is(.document-came, .document-gone):not(.md-table) {
+    box-shadow: 0 0 0 4px var(--document-tint);
+  }
+  /* What went is still read, a tier down: struck, a paragraph that left whole is 300 words nobody
+     can read. Only a word that went from a block that stayed is struck, where it stands among
+     words that did not go. */
+  .md .document-gone,
+  .md .document-gone strong {
+    color: var(--text1);
+  }
+  .md ins.document-came {
+    text-decoration: none;
+  }
+  .md :is(ins.document-came, del.document-gone) {
+    background-image:
+      linear-gradient(var(--document-word), var(--document-word)),
+      linear-gradient(var(--document-tint), var(--document-tint));
+    border-radius: var(--radius-xs);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  /* a picture has no words to tint or strike: the one that came is ringed, the one that went
+     is ringed and dimmed */
+  .md :is(ins.document-came, del.document-gone) > img {
+    box-shadow: 0 0 0 3px var(--document-tint);
+  }
+  .md del.document-gone > img {
+    opacity: 0.5;
+  }
+
+  /* As it was beside as it is: one grid, a row per block, so a block and its other self share a
+     top edge and the two sides are one scroll. Two measures, sharing one pair of side pads, with
+     the rule between them down the middle of the gap. */
+  .md-preview.document-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 48px;
+    max-width: calc(2 * var(--chat-measure) - 16px);
+    background: linear-gradient(var(--border0), var(--border0)) center / 1px 100% no-repeat;
+    & > div {
+      min-width: 0;
+    }
+    /* A cell keeps its blocks' margins inside it, so a heading's top margin no longer folds into
+       the bottom margin of the block above, which every block but a heading sets at 12: at the
+       head of a cell a heading gives those 12 back, and the page keeps the rhythm it has in one
+       column. */
+    & > div > h1:first-child {
+      margin-top: 18px;
+    }
+    & > div > :is(h2, hr):first-child {
+      margin-top: 12px;
+    }
+    & > div > :is(h3, h4, h5, h6):first-child {
+      margin-top: 6px;
+    }
+    /* the page's first block, on either side, opens it */
+    & > :nth-child(-n + 2) > :first-child {
+      margin-top: 0;
+    }
+  }
 }

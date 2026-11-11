@@ -3,14 +3,14 @@ import { Button } from "../../ui/Button.tsx";
 import { usePersisted } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 
-/** the width under which two columns of code are each too short to read: Monaco's own breakpoint
- * for falling back to one column, and the test for whether turning the split on takes the chat's
- * room first. One number, so the pane never shuts the chat for a split it would not draw, and
- * never draws one column in room it could have made. */
+/** the width under which two columns are each too short to read: Monaco's own breakpoint for
+ * falling back to one column, the rendered page's, and the test for whether turning the split on
+ * takes the chat's room first. One number, so the pane never shuts the chat for a split it would
+ * not draw, and never draws one column in room it could have made. */
 export const SPLIT_MIN = 900;
 
-/** whether a diff draws the old text beside the new: a choice about this window's panes, as the
- * wrap is, so it is kept with the pane's height and not the file */
+/** whether a diff draws the old text beside the new, as code or as the page it renders: a choice
+ * about this window's panes, as the wrap is, so it is kept with the pane's height and not the file */
 export function useSplit(): readonly [boolean, (on: boolean) => void] {
   return usePersisted(STORAGE.editorSplit, false, (raw) => (raw === null ? undefined : raw === "1"));
 }

@@ -69,6 +69,22 @@ const WINDOW_STORAGE = {
   set: (key: string, value: string) => localStorage.setItem(key, value),
 };
 
+/** whether the element is at least `min` wide, read again as it is resized. Measured before the
+ * first paint, so a layout that needs the room is never drawn for a frame in a box without it. */
+export function useAtLeast(ref: RefObject<HTMLElement | null>, min: number): boolean {
+  const [wide, setWide] = useState(true);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => setWide(el.clientWidth >= min);
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, min]);
+  return wide;
+}
+
 /** Pointer-drag resize: returns an onPointerDown for the handle. `measure` maps the pointer (and
  * the handle, for a size taken from where its own box sits) to a size; body gets `.resizing` and
  * the handle `.active` while dragging. */

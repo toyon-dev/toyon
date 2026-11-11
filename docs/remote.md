@@ -103,7 +103,7 @@ The Dockerfile for the Fly machine is in the package under `cloud/`. It runs on 
 | `TOYON_TOKEN` | A long random string. The link is `https://<host>/#token=<it>`. |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Keys for the agents. |
 | `GITHUB_TOKEN`, `TOYON_REPO_URL` | Optional. A repository to clone on first start, and a token with access to it. |
-| `TOYON_PROC_SLEEP_MS` | Optional. How long an unopened copy keeps its servers running, in milliseconds. Default on a deployed machine: five minutes. `off` keeps them running. |
+| `TOYON_PROC_SLEEP_MS` | Optional. How long an unopened copy keeps its servers running, in milliseconds. Default on a deployed machine: five minutes. Set to `off` to keep them running. |
 | `/data` | A disk that survives restarts. |
 | Ports | 4141 for Toyon, over https with the host's TLS in front. 10001-10008 when previews use ports. |
 

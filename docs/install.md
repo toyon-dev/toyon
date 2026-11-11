@@ -39,7 +39,7 @@ toyon ~/projects/app
 
 ## Update
 
-A global install updates itself. `toyon update` updates now, and `TOYON_UPDATES=off` turns updates off. With npx, run `npx toyon@latest`. See [commands.md](commands.md#toyon-update).
+A global install updates itself. Use `toyon update` to force an update. To disable updates, use `TOYON_UPDATES=off`. With npx, run `npx toyon@latest`. See [commands.md](commands.md#toyon-update).
 
 ## Uninstall
 

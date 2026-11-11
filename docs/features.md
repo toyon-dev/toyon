@@ -31,7 +31,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 | Page errors sent to the agent | Errors the previewed page throws are sent with your next message. See [preview.md](preview.md#what-the-agent-is-told). |
 | Git state sent to the agent | With every message the agent is told the uncommitted file count, how far the branch is ahead and behind, whether it landed, and its pull request. |
 | Next chat prepared | One copy per project is set up in advance. Your first message in a new chat uses it, and another is prepared. |
-| Finished chats archived | A finished chat with nothing left to keep is archived after two hours. `TOYON_ARCHIVE_AFTER_MS` changes the delay. |
+| Finished chats archived | A finished chat with nothing left to keep is archived after two hours. To change the delay, set `TOYON_ARCHIVE_AFTER_MS`. |
 | Drafts saved | Text in the chat box is saved by Toyon, so it shows in your other tabs and devices. |
 | Links | `owner/repo#123`, web addresses and file paths in the chat become links. A file link opens the file in the editor. |
 | Pictures in replies | A picture the agent refers to by its path is shown in the reply. |

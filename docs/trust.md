@@ -29,7 +29,7 @@ Every process a shell command starts runs in an OS sandbox: Seatbelt on macOS, b
 | Codex | Codex's. |
 | OpenCode | Toyon's. OpenCode has no sandbox, so Toyon runs all of OpenCode inside one. |
 
-File tools do not go through the shell. A permission policy applies the same write limits to them, and a refused write shows in the transcript.
+File tools do not go through the shell. A permission policy applies the same write limits to them. A refused write shows in the transcript.
 
 ### Files an agent cannot edit
 
@@ -92,7 +92,7 @@ Toyon sends no telemetry. These are the requests Toyon makes:
 
 | Request | When |
 |---|---|
-| Update check, to your npm registry | Every six hours. `TOYON_UPDATES=off` or the policy file turns it off. |
+| Update check, to your npm registry | Every six hours. To disable it, use `TOYON_UPDATES=off` or the policy file. |
 | Adapter download, from npm | On first start, for Claude Code and Codex. Again when you first pick OpenCode. |
 | Fly | When you deploy there. |
 

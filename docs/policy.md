@@ -99,4 +99,4 @@ If the running Toyon started before the file changed, `toyon doctor` adds a fail
 
 - The policy applies to this install of Toyon only. It does not stop a user from running another copy of Toyon, an older version, or the agents directly.
 - The sandbox and the permission modes are the same with or without a policy. See [trust.md](trust.md).
-- What the policy guarantees: on this machine, this Toyon has the listed features turned off for every user, and `toyon doctor` shows it.
+- What the policy guarantees: on this machine, this Toyon has the listed features turned off for every user. Run `toyon doctor` to confirm it.

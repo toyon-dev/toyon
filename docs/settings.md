@@ -34,7 +34,7 @@ Each copy uses the settings file from its own branch, plus your local overrides.
 | `teardown` | Commands run once, in order, when a copy is removed or archived. A restored copy runs `setup` again. |
 | `run` | Long-running commands, each with a name and a terminal tab. See [`run`](#run). |
 | `preview` | The `run` command the preview shows. Default: `web`, or the first one. |
-| `check` | A command that must exit 0 before a copy can land. It runs after every finished turn, and its output shows in the chat. It does not run again if no file changed since it passed. |
+| `check` | A command that must exit 0 before a copy can land. It runs after every finished turn. Its output shows in the chat. It does not run again if no file changed since it passed. |
 | `land` | How work lands. See [`land`](#land). |
 | `afterLand` | Commands run in the main checkout after work lands. See [`afterLand`](#afterland). |
 | `timeouts` | How long a run may take. See [`timeouts`](#timeouts). |
@@ -131,17 +131,17 @@ A copy's servers start when you open it.
 - A copy unopened for two hours stops its servers. On a deployed machine it is five minutes. It is sooner when the machine is low on memory.
 - The servers restart when you open the copy or its preview.
 - The chat and the agent keep running. One exception: a question from the agent that nobody answered in that time expires. It is back in the chat box when you reopen the copy, and your answer still reaches the agent.
-- `TOYON_PROC_SLEEP_MS` sets the delay in milliseconds. `off` turns it off.
+- To change the delay, set `TOYON_PROC_SLEEP_MS` in milliseconds. Set it to `off` to keep the servers running.
 
 Toyon itself exits after 30 minutes with no window or preview open and nothing running. The next `toyon` or Dock launch starts it again.
 
 - These count as running: an agent mid-turn, a command, a command the agent sent to the background, a wakeup it booked, a clone, and a build after a land.
 - Toyon does not exit automatically when it is reached over the network, runs on a deployed machine, or was started by hand in a terminal.
-- `TOYON_STOP_AFTER_MS` sets the delay in milliseconds. `off` turns it off.
+- To change the delay, set `TOYON_STOP_AFTER_MS` in milliseconds. Set it to `off` to keep Toyon running.
 
 On a Mac, Toyon also prevents idle sleep while it is in use: an agent is mid-turn, a command is running, or Toyon is open from another device.
 
 - After a phone disconnects, or while a question waits that a phone could answer, the Mac stays awake 30 minutes more.
 - Closing the lid still sleeps the Mac.
 - "keep awake" in Toyon's settings has three values: "while in use" (the default), "always" (as long as Toyon runs, on battery too) and "off".
-- `TOYON_KEEP_AWAKE=off` turns it off whatever the setting says.
+- To turn it off regardless of the setting, set `TOYON_KEEP_AWAKE=off`.

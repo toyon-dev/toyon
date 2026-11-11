@@ -32,7 +32,7 @@ Each feature with how to reach it. The short list, and what Toyon does on its ow
 | Jump to a file | <kbd>⌘P</kbd>. Changed files are listed first. |
 | Search in files | <kbd>⌘⇧F</kbd>. |
 | Files | <kbd>⌘⇧E</kbd>. Lists every file, ignored files included. Hover a file to outline what it draws in the preview. The menu adds a file to the chat, makes a new file, or asks the agent to rename or delete one. |
-| Changes | <kbd>⌘B</kbd>. Test files are listed separately, and a "last turn" section lists what the last turn changed. Shift-click selects several files to discard or add to the chat. |
+| Changes | <kbd>⌘B</kbd>. Test files are listed separately. A "last turn" section lists what the last turn changed. Shift-click selects several files to discard or add to the chat. |
 | History | The history tab of the same panel lists the branch's commits. A commit opens to its files. |
 | Panel tabs | <kbd>⌥→</kbd> and <kbd>⌥←</kbd> step through files, changes and history. In a field with text they stay the word jump. |
 | Editor | Saves when you stop typing; <kbd>⌘S</kbd> saves now. Shows who last changed the current line. Click that note to open the pull request or the commit. |

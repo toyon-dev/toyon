@@ -35,10 +35,28 @@ const { JsxEmit, ModuleKind, ModuleResolutionKind, ScriptTarget, javascriptDefau
 
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
   // ts/tsx models route language requests (inlay hints, hover) to the TS worker;
-  // everything else gets the base editor worker
+  // everything else gets the base editor worker, which answers no language request: the modes
+  // that would send it one are told below to register nothing that does
   getWorker: (_id: string, label: string) =>
     label === "typescript" || label === "javascript" ? new tsWorker() : new editorWorker(),
 };
+
+// The json, css and html modes each ask a worker of their own for hover, completion, validation
+// and the rest, and the pane ships only the TS one: the base worker refuses every such request,
+// and each refusal is an uncaught error. None of it is wanted here. JSON validation would flag the
+// comments and trailing commas a settings file may carry, and css and html are coloured by their
+// grammars. A mode registers only the features its configuration names, so an empty one registers
+// none. JSON keeps `tokens`: its colouring, a scanner on this thread and not a request.
+monaco.json.jsonDefaults.setModeConfiguration({ tokens: true });
+for (const d of [
+  monaco.css.cssDefaults,
+  monaco.css.scssDefaults,
+  monaco.css.lessDefaults,
+  monaco.html.htmlDefaults,
+  monaco.html.handlebarDefaults,
+  monaco.html.razorDefaults,
+])
+  d.setModeConfiguration({});
 
 // The TS worker has no node_modules to resolve against, so semantic checks would flag every
 // import and (with default options) every JSX tag. Keep syntax errors, drop the rest; hover and

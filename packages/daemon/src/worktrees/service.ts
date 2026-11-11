@@ -352,6 +352,8 @@ type Landed = {
   url?: string | undefined;
   /** what kept the row's landed mark back after a landing that put the work on the base */
   held?: string | undefined;
+  /** git did the landing and nothing of Toyon's ran, so no word of it goes on the transcript */
+  unsaid?: true;
 };
 
 /** the refusal for a found worktree another tool holds, with git's reason when it gave one */
@@ -401,6 +403,9 @@ export class WorktreeService {
   readonly tree: TreeState;
   /** the HEAD each clean, level worktree was last asked about a hand landing at: one reflog read per move */
   private handChecked = new Map<string, string>();
+  /** worktrees whose hand landing found an op out and left the row to it: read again as that op
+   * ends, since nothing else marks a row whose HEAD did not move */
+  private handWaits = new Set<string>();
   /** worktrees a name is being asked for: a turn that ends while the birth ask is still out does
    * not send a second one */
   private naming = new Set<string>();
@@ -1308,6 +1313,7 @@ export class WorktreeService {
     // before the agent is stopped: its stop settles the turn, and a sync waiting on that would
     // run in the directory on its way out
     this.syncQueued.delete(wt.id);
+    this.handWaits.delete(wt.id);
     try {
       return await this.removeAndRecord(wt, archive, reason);
     } finally {
@@ -2213,13 +2219,20 @@ export class WorktreeService {
     return pair;
   }
 
-  /** the message a land or a ship commits with: what the person typed, else what the landing
-   * verdict suggested. Neither means the press cannot commit, and the box to type one is named. */
-  private commitMessage(wt: WorktreeInfo, typed?: string): string {
+  /** what the newest work is called: the message typed for it, else the landing verdict's */
+  private suggestion(wt: WorktreeInfo, typed?: string): string | undefined {
     const m = typed?.trim();
     if (m) return m;
     const s = wt.landing?.subject;
-    if (s) return wt.landing?.body ? `${s}\n\n${wt.landing.body}` : s;
+    if (!s) return undefined;
+    return wt.landing?.body ? `${s}\n\n${wt.landing.body}` : s;
+  }
+
+  /** the message a land or a ship commits with (suggestion). None means the press cannot commit,
+   * and the box to type one is named. */
+  private commitMessage(wt: WorktreeInfo, typed?: string): string {
+    const m = this.suggestion(wt, typed);
+    if (m) return m;
     throw new UserError("no commit message yet: write one in the changes panel");
   }
 
@@ -2306,13 +2319,33 @@ export class WorktreeService {
    * the commits after this one, and the verdict gone with the work it described. */
   private async landedByHand(wt: WorktreeInfo, mark: LandingRange) {
     const repo = this.d.state.requireRepo(wt.repoId);
-    log.info(wt.id, `landed on ${baseOf(repo)} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
-    await this.noteLand(repo, wt, mark);
-    await this.restartFromMain(wt, baseOf(repo));
-    await this.settleLanded(wt);
-    // a hand landing writes no `landed` row, since nothing of Toyon's ran, but it is a landing the
-    // siblings and the origin wait on all the same
-    this.d.hub.emit("landed", wt.id);
+    const base = baseOf(repo);
+    log.info(wt.id, `landed on ${base} outside toyon: ${mark.base.slice(0, 7)}..${mark.tip.slice(0, 7)}`);
+    // Outside the repo lock, alone among the routes: this runs inside a tree read, and under the
+    // lock that read would wait behind another row's commit hook, with every recount behind it.
+    // A hand landing writes no `landed` row, since nothing of Toyon's ran, but it is a landing
+    // the siblings and the origin wait on all the same.
+    await this.landing(wt, "auto", async () => ({
+      result: { ok: true, message: `landed on ${base} outside toyon` },
+      landed: true,
+      unsaid: true,
+      ...(await this.settle(wt, repo, mark)),
+    }));
+  }
+
+  /** Every landing runs here, whoever started it: the press, the poll that heard GitHub merged
+   * the PR, the read that found the work on the base already. It is the op out on the row, so a
+   * second is refused and the agent's queue is held; the record's branch is the checkout's before
+   * anything is measured; and a landing that put the work on the base says so once, on the
+   * transcript and to the hub, after the op has let the row go. Nothing is awaited before the op
+   * is out: the read that lands by hand looks for an op and calls this in the same tick. */
+  private async landing(wt: WorktreeInfo, by: "press" | "auto", run: () => Promise<Landed>): Promise<Landed> {
+    const out = await this.ship(wt.id, "land", by, async () => {
+      await this.followBranch(wt);
+      return run();
+    });
+    if (out.result.ok && out.landed) this.noteLanded(wt, out);
+    return out;
   }
 
   /** The one press. Commit what is uncommitted, take main in (a rebase for toyon's own branch),
@@ -2325,8 +2358,7 @@ export class WorktreeService {
   async land(worktreeId: string, message?: string): Promise<{ result: ShipOutcome }> {
     const { wt, repo } = this.landable(worktreeId, "land");
     // inside the op, so the press is the one out on the row from its first tick
-    const out = await this.ship(wt.id, "land", "press", async (): Promise<Landed> => {
-      await this.followBranch(wt);
+    const out = await this.landing(wt, "press", async () => {
       // a detached HEAD has no branch to land: merging the record's branch would report a landing
       // of nothing, and the restart after it would move HEAD off the commits it holds
       const on = await git(wt.path, "branch", "--show-current");
@@ -2335,7 +2367,6 @@ export class WorktreeService {
       if (moved) return { result: moved };
       return this.landOp(wt, repo, message);
     });
-    if (out.result.ok && out.landed) this.noteLanded(wt, out.result.message, out);
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
@@ -2404,15 +2435,17 @@ export class WorktreeService {
   /** the word on a land that put the work on main, on the transcript the way a graft's marker is:
    * the row reads it back after a reload, where a frame to the sockets open at the time would not.
    * The siblings ride along for the row to offer, for as long as they are still rows. */
-  private noteLanded(wt: WorktreeInfo, message: string, o: Pick<Landed, "mark" | "url" | "held">) {
-    this.d.runtime.ensureAgent(wt).agent.note({
-      type: "landed",
-      message,
-      ...(o.mark ? { mark: o.mark } : {}),
-      ...(o.url ? { url: o.url } : {}),
-      ...(o.held ? { held: o.held } : {}),
-      ts: Date.now(),
-    });
+  private noteLanded(wt: WorktreeInfo, o: Landed) {
+    if (!o.unsaid) {
+      this.d.runtime.ensureAgent(wt).agent.note({
+        type: "landed",
+        message: o.result.message,
+        ...(o.mark ? { mark: o.mark } : {}),
+        ...(o.url ? { url: o.url } : {}),
+        ...(o.held ? { held: o.held } : {}),
+        ts: Date.now(),
+      });
+    }
     // after the row's own word: a worktree that handed this work off hears of it from here
     this.d.hub.emit("landed", wt.id);
   }
@@ -2470,6 +2503,9 @@ export class WorktreeService {
       clearInterval(watchdog);
       this.ops.delete(id);
       release?.();
+      // a landing by hand that left the row to this op is asked about again in the read this
+      // frame sets off
+      if (this.handWaits.delete(id)) this.tree.invalidate(id);
       this.d.hub.emit("worktreesChanged");
       // a sync that waited for the turn and then for this op runs now, while the tree is still
       if (!isBusy(this.d.runtime.agentFor(id)?.status)) this.syncAfterTurn(id);
@@ -2486,160 +2522,151 @@ export class WorktreeService {
 
   private async landOp(wt: WorktreeInfo, repo: RepoInfo, message?: string): Promise<Landed> {
     const policy = landPolicy(repo.config);
-    const own = hasOwnBranch(wt);
     const w = this.landWatch(wt);
     // what the newest commit's work is called: the message typed for it, else the verdict's.
     // Where the whole branch is named at once (a squash, a PR), squashMessage puts the branch's
     // earlier subjects under it.
-    const typed = message?.trim();
-    const suggested =
-      typed ||
-      (wt.landing?.subject
-        ? wt.landing.body
-          ? `${wt.landing.subject}\n\n${wt.landing.body}`
-          : wt.landing.subject
-        : undefined);
+    const suggested = this.suggestion(wt, message);
+    if (policy.land === "pr") return this.landPr(wt, repo, policy, message, suggested, w);
+    if (policy.land === "push") return this.landPush(wt, repo, policy, message, suggested, w);
+    return this.landLocal(wt, repo, policy, message, suggested, w);
+  }
 
+  /** The PR route: the branch pushed and a PR opened on it, or, with one open, the work it is
+   * missing pushed to it, else the PR merged. Nothing here touches the main checkout, and gh
+   * holds the network for seconds, so the route runs outside the repo lock. */
+  private async landPr(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    policy: LandPolicy,
+    message: string | undefined,
+    suggested: string | undefined,
+    w: LandWatch,
+  ): Promise<Landed> {
     const base = baseOf(repo);
-    if (policy.land === "pr") {
-      // GitHub merged the PR while an op was out on the row, so the poll left the landing to this
-      // press: it lands the merge, never a second PR of the same commit
-      if (wt.pr?.state === "merged" && !prTaken(wt)) {
-        const { mark, held, ...result } = await this.prMergedOp(wt.id, undefined, w);
-        return result.ok ? { result, landed: true, mark, held, url: wt.pr.url } : { result };
-      }
-      // the branch is measured against origin's main, fetched now: main here is not pulled on
-      // this route and can trail origin by days
-      const fetched = await this.fetchBase(wt, repo, w);
-      if (!fetched.ok) return { result: fetched };
-      // nothing here touches the main checkout, and gh holds the network for seconds: outside the lock
-      if (wt.pr?.state === "open") {
-        // work since the PR opened goes to the PR, never under it: a merge now would take the
-        // PR as GitHub has it and strand what is here
-        const dirty = (await statusFiles(wt.path)).length > 0;
-        const missing = dirty || ((await aheadUpstream(wt.path, wt.branch)) ?? 0) > 0;
-        if (!missing) {
-          const result = await mergePr(wt.path, wt.pr.number, policy.merge, w);
-          // queued rather than merged: the row says so now, not on the poll's next pass
-          if (result.ok && result.queued)
-            this.setPr(wt.id, { ...wt.pr, queue: true, queued: "waiting", at: Date.now() });
-          return { result };
-        }
-        const committed = await this.commitIfDirty(wt, message);
-        if (committed && !committed.ok) return { result: committed };
-        // marked before each move: a read out across it answers for the tree before, and is dropped
-        this.tree.invalidate(wt.id);
-        const taken = await takeMainIn(wt.path, base, own, w);
-        if (!taken.ok) return { result: taken };
-        await this.headMoved(wt.id);
-        this.tree.invalidate(wt.id);
-        const pushed = await pushBranch(wt.path, wt.branch, own, w);
-        if (!pushed.ok) return { result: pushed };
-        await this.headMoved(wt.id);
-        this.setLanding(wt.id, undefined);
-        const did = committed ? "committed and pushed" : "pushed";
-        // GitHub drops a PR from the merge queue when its head moves: the row says so now rather
-        // than "in the merge queue" until the poll, and the land word comes back with it
-        if (wt.pr.queued) {
-          const { queued: _, ...left } = wt.pr;
-          this.setPr(wt.id, { ...left, at: Date.now() });
-          return {
-            result: {
-              ok: true,
-              url: wt.pr.url,
-              message: `${did}; PR #${wt.pr.number} has the new commits and left the merge queue: land it again once it is ready`,
-            },
-          };
-        }
-        return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
+    const own = hasOwnBranch(wt);
+    // GitHub merged the PR while an op was out on the row, so the poll left the landing to this
+    // press: it lands the merge, never a second PR of the same commit
+    if (wt.pr?.state === "merged" && !prTaken(wt)) return this.prMergedOp(wt, undefined, w);
+    // the branch is measured against origin's main, fetched now: main here is not pulled on
+    // this route and can trail origin by days
+    const fetched = await this.fetchBase(wt, repo, w);
+    if (!fetched.ok) return { result: fetched };
+    if (wt.pr?.state === "open") {
+      // work since the PR opened goes to the PR, never under it: a merge now would take the
+      // PR as GitHub has it and strand what is here
+      const dirty = (await statusFiles(wt.path)).length > 0;
+      const missing = dirty || ((await aheadUpstream(wt.path, wt.branch)) ?? 0) > 0;
+      if (!missing) {
+        const result = await mergePr(wt.path, wt.pr.number, policy.merge, w);
+        // queued rather than merged: the row says so now, not on the poll's next pass
+        if (result.ok && result.queued) this.setPr(wt.id, { ...wt.pr, queue: true, queued: "waiting", at: Date.now() });
+        return { result };
       }
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
-      // read before the rebase: what the branch carried, in case the rebase finds it all on origin
-      const mark = await landingMark(wt.path, base);
+      // marked before each move: a read out across it answers for the tree before, and is dropped
       this.tree.invalidate(wt.id);
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
       await this.headMoved(wt.id);
-      // the rebase dropped every commit: origin's main holds this work already, through a PR
-      // merged where toyon did not see it. The row lands the way a merged PR lands it.
-      const ahead = await aheadOf(wt.path, base);
-      if (ahead === null) return { result: uncounted(base) };
-      if (ahead === 0) {
-        const { mark: noted, held, ...r } = await this.prMergedOp(wt.id, mark, w);
-        const on = `origin's ${repo.defaultBranch} has this work already`;
-        const result = { ...r, message: r.ok ? `${on}; ${r.message}` : `${on}, but ${r.message}` };
-        return r.ok ? { result, landed: true, mark: noted, held, url: wt.pr?.url } : { result };
+      this.tree.invalidate(wt.id);
+      const pushed = await pushBranch(wt.path, wt.branch, own, w);
+      if (!pushed.ok) return { result: pushed };
+      await this.headMoved(wt.id);
+      this.setLanding(wt.id, undefined);
+      const did = committed ? "committed and pushed" : "pushed";
+      // GitHub drops a PR from the merge queue when its head moves: the row says so now rather
+      // than "in the merge queue" until the poll, and the land word comes back with it
+      if (wt.pr.queued) {
+        const { queued: _, ...left } = wt.pr;
+        this.setPr(wt.id, { ...left, at: Date.now() });
+        return {
+          result: {
+            ok: true,
+            url: wt.pr.url,
+            message: `${did}; PR #${wt.pr.number} has the new commits and left the merge queue: land it again once it is ready`,
+          },
+        };
       }
-      // the branch's earlier subjects go under the title only where GitHub will squash them away;
-      // a PR merged by rebase or merge keeps its commits, and the message is the newest work's
-      const named = !suggested
-        ? undefined
-        : splitMessage(policy.merge === "squash" ? await squashMessage(wt.path, base, suggested, !!typed) : suggested);
-      const result = await openPr(
-        {
-          worktreePath: wt.path,
-          branch: wt.branch,
-          defaultBr: repo.defaultBranch,
-          base,
-          subject: named?.subject,
-          body: named?.body,
-          automerge: policy.automerge,
-          own,
-          method: policy.merge,
-        },
-        w,
-      );
-      if (result.ok) {
-        this.setLanding(wt.id, undefined);
-        if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
-      }
-      return { result };
+      return { result: { ok: true, url: wt.pr.url, message: `${did}; PR #${wt.pr.number} has the new commits` } };
     }
+    const committed = await this.commitIfDirty(wt, message);
+    if (committed && !committed.ok) return { result: committed };
+    // read before the rebase: what the branch carried, in case the rebase finds it all on origin
+    const mark = await landingMark(wt.path, base);
+    this.tree.invalidate(wt.id);
+    const taken = await takeMainIn(wt.path, base, own, w);
+    if (!taken.ok) return { result: taken };
+    await this.headMoved(wt.id);
+    // the rebase dropped every commit: origin's main holds this work already, through a PR
+    // merged where toyon did not see it. The row lands the way a merged PR lands it.
+    const ahead = await aheadOf(wt.path, base);
+    if (ahead === null) return { result: uncounted(base) };
+    if (ahead === 0) {
+      const landed = await this.prMergedOp(wt, mark, w);
+      const on = `origin's ${repo.defaultBranch} has this work already`;
+      return { ...landed, result: { ...landed.result, message: `${on}; ${landed.result.message}` } };
+    }
+    // the branch's earlier subjects go under the title only where GitHub will squash them away;
+    // a PR merged by rebase or merge keeps its commits, and the message is the newest work's
+    const named = !suggested
+      ? undefined
+      : splitMessage(
+          policy.merge === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : suggested,
+        );
+    const result = await openPr(
+      {
+        worktreePath: wt.path,
+        branch: wt.branch,
+        defaultBr: repo.defaultBranch,
+        base,
+        subject: named?.subject,
+        body: named?.body,
+        automerge: policy.automerge,
+        own,
+        method: policy.merge,
+      },
+      w,
+    );
+    if (result.ok) {
+      this.setLanding(wt.id, undefined);
+      if (result.pr) this.setPr(wt.id, { ...result.pr, at: Date.now() });
+    }
+    return { result };
+  }
 
-    if (policy.land === "push") return this.landPush(wt, repo, policy, message, suggested, w);
-
-    let mergedHere = false;
-    let committedHere = false;
-    let held: string | undefined;
-    let noted: LandMark | undefined;
-    const result = await withRepoLock(repo.path, async (): Promise<ShipResult> => {
+  /** The merge route: the branch lands on main in this checkout, by the repo's method, under the
+   * repo lock from the commit to the record, so main and the branch move as one. */
+  private landLocal(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    policy: LandPolicy,
+    message: string | undefined,
+    suggested: string | undefined,
+    w: LandWatch,
+  ): Promise<Landed> {
+    const base = baseOf(repo);
+    const own = hasOwnBranch(wt);
+    return withRepoLock(repo.path, async (): Promise<Landed> => {
       const committed = await this.commitIfDirty(wt, message);
-      if (committed && !committed.ok) return committed;
-      committedHere = committed !== null;
+      if (committed && !committed.ok) return { result: committed };
       const method = policy.merge ?? DEFAULT_MERGE_METHOD;
       const merged = own && method === "rebase" ? await requireLinear(wt.path, base) : null;
-      if (merged) return merged;
+      if (merged) return { result: merged };
       const taken = await takeMainIn(wt.path, base, own, w);
-      if (!taken.ok) return taken;
+      if (!taken.ok) return { result: taken };
       // read before the landing moves main and the branch restarts from it
       const mark = await landingMark(wt.path, base);
       const squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
       const landed = await landLocally(wt.path, wt.branch, repo.path, repo.defaultBranch, method, squash, w);
-      if (!landed.ok) return landed;
-      mergedHere = true;
-      noted = await this.noteLand(repo, wt, mark, { squash });
-      await this.restartFromMain(wt, base);
-      return landed;
+      if (!landed.ok) return { result: landed };
+      const settled = await this.settle(wt, repo, mark, { squash });
+      // the row says what the press did, not where the work sits: "is on main" read as the press
+      // having found it there and done nothing
+      const did = committed ? "committed and merged" : "merged";
+      return { result: { ...landed, message: `${did} into ${repo.defaultBranch}` }, landed: true, ...settled };
     });
-    if (mergedHere) {
-      // main moved, so every row of this repo counts against it now. The ref watcher clears this
-      // too, but on the fs event's schedule, and the frame the landed mark pushes must not carry
-      // the old ahead. The verdict was about work that is on main now; the landed mark is what
-      // the box reads next.
-      this.invalidateCounts();
-      held = await this.settleLanded(wt);
-    }
-    if (!result.ok) return { result };
-    // the row says what the press did, not where the work sits: "is on main" read as the press
-    // having found it there and done nothing
-    const did = committedHere ? "committed and merged" : "merged";
-    return {
-      result: { ...result, message: `${did} into ${repo.defaultBranch}` },
-      landed: true,
-      mark: noted,
-      held,
-    };
   }
 
   /** The push route: the landing built in the worktree and pushed straight to main on origin, so
@@ -2707,13 +2734,7 @@ export class WorktreeService {
     // origin's main is the pushed commit now, and the remote-tracking ref should say so from the
     // push itself; a fetch refspec that covers less than the branch is caught by reading it back
     if ((await commitOf(wt.path, base)) !== sha) await this.fetchBase(wt, repo, w);
-    let noted: LandMark | undefined;
-    await withRepoLock(repo.path, async () => {
-      noted = await this.noteLand(repo, wt, read, { squash });
-      await this.restartFromMain(wt, base);
-    });
-    this.invalidateCounts();
-    const held = await this.settleLanded(wt);
+    const settled = await withRepoLock(repo.path, () => this.settle(wt, repo, read, { squash }));
     const followed = await this.trunk.catchUp(repo.id);
     const here = followed.ok
       ? `${repo.defaultBranch} here ${followed.moved ? "pulled it" : "has it"}`
@@ -2722,7 +2743,24 @@ export class WorktreeService {
     const did = already
       ? `origin's ${repo.defaultBranch} has this work already`
       : `${committed ? `committed and ${how}` : how} ${repo.defaultBranch} and pushed`;
-    return { result: { ok: true, message: `${did}; ${here}` }, landed: true, mark: noted, held };
+    return { result: { ok: true, message: `${did}; ${here}` }, landed: true, ...settled };
+  }
+
+  /** The work is on the base: the one tail every route ends in. The range goes on the record
+   * under its ref; the branch restarts from the base, unless it holds commits the landing did not
+   * take (`stay`); every row is counted again, since the base moved under all of them and the
+   * frame the landed mark pushes must not carry the old ahead; and the verdict goes as the mark
+   * comes, in one frame. The caller holds the repo lock where its route has one. */
+  private async settle(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    mark: LandingRange | null,
+    opts: { pr?: PrState | undefined; squash?: string | undefined; stay?: boolean } = {},
+  ): Promise<Pick<Landed, "mark" | "held">> {
+    const noted = await this.noteLand(repo, wt, mark, opts);
+    if (!opts.stay) await this.restartFromMain(wt, baseOf(repo));
+    this.invalidateCounts();
+    return { mark: noted, held: await this.settleLanded(wt) };
   }
 
   /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from
@@ -2819,7 +2857,9 @@ export class WorktreeService {
    * the merged PR itself. */
   async prMerged(worktreeId: string): Promise<ShipResult> {
     const wt = this.d.state.worktree(worktreeId);
-    const pr = wt?.pr ? `PR #${wt.pr.number}` : "the PR";
+    // removed while GitHub was answering
+    if (!wt) return { ok: false, message: "that worktree is gone" };
+    const pr = wt.pr ? `PR #${wt.pr.number}` : "the PR";
     const out = this.ops.get(worktreeId);
     // said each time the poll comes round: nobody pressed this, so the log is the one place a
     // landing that waits on an op that never ends can be seen
@@ -2829,55 +2869,55 @@ export class WorktreeService {
       return { ok: false, message };
     }
     // landed once: a second poll, or one that raced the first, records nothing more
-    if (wt && prTaken(wt)) return { ok: true, message: `${pr} merged; landed already` };
+    if (prTaken(wt)) return { ok: true, message: `${pr} merged; landed already` };
     log.info(worktreeId, `${pr} merged on GitHub; landing it`);
-    const { mark, held, ...result } = await this.ship(worktreeId, "land", "auto", () => this.prMergedOp(worktreeId));
+    const { result } = await this.landing(wt, "auto", () => this.prMergedOp(wt));
     if (result.ok) log.info(worktreeId, `landed: ${result.message}`);
     else log.warn(worktreeId, `landing failed: ${result.message}`);
-    if (result.ok && wt) this.noteLanded(wt, result.message, { mark, url: wt.pr?.url, held });
     return result;
   }
 
-  private async prMergedOp(
-    worktreeId: string,
-    carried?: LandingRange | null,
-    w: LandWatch = UNWATCHED,
-  ): Promise<ShipResult & { mark?: LandMark | undefined; held?: string | undefined }> {
-    const { wt, repo } = this.d.state.requireWorktreeWithRepo(worktreeId);
+  private async prMergedOp(wt: WorktreeInfo, carried?: LandingRange | null, w: LandWatch = UNWATCHED): Promise<Landed> {
+    const repo = this.d.state.requireRepo(wt.repoId);
     const br = repo.defaultBranch;
     const base = baseOf(repo);
     // read before the base moves: a merge that kept the commits' hashes puts them on it, and
     // the range would then read as nothing to keep
     const read = carried === undefined ? await landingMark(wt.path, base) : carried;
     const pulled = await this.trunk.pull(repo.id, w);
-    let noted: LandMark | undefined;
     // after the pull, whose fetch is what puts a merge that kept the hashes on the base
     const past = await this.pastPr(wt, base);
-    await withRepoLock(repo.path, async () => {
-      // A PR goes on the record once, since the record is what says it was taken, and always:
-      // the trunk's own fetch often moves the base before the poll sees the merge, and a merge
-      // that kept the hashes leaves no range against it. Then the branch's own commits by its
-      // reflog, else the tip alone. A press with no PR behind it records a range or nothing,
-      // so a second press over a landed row adds no entry.
-      if (!prTaken(wt)) {
-        const own = read ?? (await handLanding(wt.path, wt.branch, base, wt.lands?.at(-1)?.tip));
-        const mark = own ?? (wt.pr ? await this.tipMark(wt) : null);
-        // what landed ends where the PR did: the commits past it are still the row's own work
-        noted = await this.noteLand(repo, wt, mark && past?.tip ? { ...mark, tip: past.tip } : mark, { pr: wt.pr });
-      }
-      // origin's main, fetched by the pull, whatever the checkout here could do with it. Not
-      // under commits the PR never had: the restart would take the branch off them.
-      if (!past) await this.restartFromMain(wt, base);
-    });
-    this.invalidateCounts();
-    const held = await this.settleLanded(wt);
+    // Origin's main, fetched by the pull, whatever the checkout here could do with it. The branch
+    // stays under commits the PR never had: the restart would take it off them.
+    const settled = await withRepoLock(repo.path, async () =>
+      this.settle(wt, repo, await this.prMark(wt, base, read, past), { pr: wt.pr, stay: !!past }),
+    );
     const took = pulled.ok
       ? `${br} here ${pulled.moved ? "pulled it" : "has it"}`
       : `${br} here was left where it is: ${pulled.message}`;
     const left = past?.count
       ? `; ${past.count === 1 ? "a commit" : `${past.count} commits`} made since its last push stayed on the branch`
       : "";
-    return { ok: true, message: `${wt.pr ? `PR #${wt.pr.number} merged; ${took}` : took}${left}`, mark: noted, held };
+    const message = `${wt.pr ? `PR #${wt.pr.number} merged; ${took}` : took}${left}`;
+    return { result: { ok: true, message }, landed: true, url: wt.pr?.url, ...settled };
+  }
+
+  /** What a merged PR puts on the record, or nothing once a landing has taken it. A PR goes on
+   * once, since the record is what says it was taken, and always: the trunk's own fetch often
+   * moves the base before the poll sees the merge, and a merge that kept the hashes leaves no
+   * range against it. Then the branch's own commits by its reflog, else the tip alone. A press
+   * with no PR behind it records a range or nothing, so a second press over a landed row adds no
+   * entry. What landed ends where the PR did: the commits past it are still the row's own work. */
+  private async prMark(
+    wt: WorktreeInfo,
+    base: string,
+    read: LandingRange | null,
+    past: { tip?: string } | null,
+  ): Promise<LandingRange | null> {
+    if (prTaken(wt)) return null;
+    const own = read ?? (await handLanding(wt.path, wt.branch, base, wt.lands?.at(-1)?.tip));
+    const mark = own ?? (wt.pr ? await this.tipMark(wt) : null);
+    return mark && past?.tip ? { ...mark, tip: past.tip } : mark;
   }
 
   /** The commits a merged PR never had: on HEAD, and in neither the base nor the PR's head, as
@@ -3303,6 +3343,18 @@ export class WorktreeService {
       this.handChecked.set(wt.id, head);
       const mark = await handLanding(r.path, wt.branch, r.base, wt.lands?.at(-1)?.tip);
       if (mark) {
+        // an op that started under this read owns the row until it ends: this HEAD is asked
+        // about again in the read its closing frame sets off
+        const out = this.ops.get(wt.id);
+        if (out) {
+          this.handChecked.delete(wt.id);
+          this.handWaits.add(wt.id);
+          log.info(
+            wt.id,
+            `landed on ${r.base} outside toyon; ${shipNoun(out.op)} is already running here, landing waits`,
+          );
+          return false;
+        }
         await this.landedByHand(wt, mark);
         return true;
       }

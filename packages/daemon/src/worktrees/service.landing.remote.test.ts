@@ -518,6 +518,71 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
   });
 
+  /** A PR GitHub merged with its hash kept, fetched here, on a branch a hand renamed in the
+   * worktree: the row is level with the base, and the record still names the branch it was made
+   * on. The moves are one blocking run with no read in flight, so the read the test starts is
+   * the first to see any of it. */
+  const renamedAndMerged = async (repoId: string) => {
+    const { other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    const before = (await git(w.repo, "rev-parse", "main")).out;
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "open", at: 1 });
+    await w.worktrees.settled();
+    sh(other, "git", "fetch", "-q", "origin", wt.branch);
+    sh(other, "git", "merge", "-q", "--ff-only", "FETCH_HEAD");
+    sh(other, "git", "push", "-q", "origin", "main");
+    sh(w.repo, "git", "fetch", "-q");
+    sh(wt.path, "git", "branch", "-m", "toyon/other");
+    w.worktrees.setPr(wt.id, { number: 7, url: "https://x/pull/7", state: "merged", at: 2 });
+    return { wt, before, tip };
+  };
+
+  test("a landing by hand yields to an op that started under its read, and the merged PR goes on the record once", async () => {
+    const repoId = await registered();
+    const { wt, before, tip } = await renamedAndMerged(repoId);
+    const landedIds: string[] = [];
+    w.hub.on("landed", (id) => landedIds.push(id));
+    // the poll comes round inside the read: the frame that says the row follows the checkout
+    // goes out past the read's own look for an op, and before its look at the reflog
+    let poll: Promise<unknown> | undefined;
+    let polled = false;
+    w.hub.on("worktreesChanged", () => {
+      // the poll's landing sends frames of its own, which come back in here before it has returned
+      if (polled || w.state.worktree(wt.id)?.branch !== "toyon/other") return;
+      polled = true;
+      poll = w.worktrees.prMerged(wt.id);
+    });
+    await w.worktrees.gitStatus(wt.id);
+    expect(poll).toBeDefined();
+    await poll;
+    await w.worktrees.gitStatus(wt.id);
+    // one landing, the PR's, with the branch's own commit under it
+    expect(w.state.worktree(wt.id)?.lands).toEqual([
+      { base: before, tip, at: expect.any(Number), pr: 7, subjects: ["add feature"] },
+    ]);
+    expect(landedIds).toEqual([wt.id]);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+  });
+
+  test("the poll lands a branch renamed by hand as the row's own", async () => {
+    const repoId = await registered();
+    const { wt, before, tip } = await renamedAndMerged(repoId);
+    // no read since the rename: the poll is the first to look
+    expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    expect(w.state.worktree(wt.id)?.branch).toBe("toyon/other");
+    // the range is read off the reflog of the branch the checkout is on
+    expect(w.state.worktree(wt.id)?.lands).toEqual([
+      { base: before, tip, at: expect.any(Number), pr: 7, subjects: ["add feature"] },
+    ]);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+  });
+
   test("with a PR open, land pushes the work the PR is missing rather than merging under it", async () => {
     const repoId = await registered();
     const origin = join(w.repo, "..", "origin.git");

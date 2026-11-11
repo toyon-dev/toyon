@@ -189,6 +189,63 @@ describe("landing", () => {
     expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
   });
 
+  test("a landing git did without toyon is the op out on the row while it settles, and leaves no word on the chat", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    // what each frame would carry of the op, and whether the queue was held when it went out
+    const seen: Array<{ op: string; held: boolean }> = [];
+    w.hub.on("worktreesChanged", () => {
+      const out = w.worktrees.shippingOf(wt.id);
+      if (out) seen.push({ op: out.op, held: agent.held });
+    });
+    expect((await git(w.repo, "merge", "--ff-only", wt.branch)).ok).toBe(true);
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+    // a land, with the queue held across the restart: a message sent meanwhile waits for it
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.filter((f) => f.op !== "land" || !f.held)).toEqual([]);
+    // over: off the frame, and the queue goes again
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    expect(agent.held).toBe(false);
+    // nothing of Toyon's ran, so the transcript holds no word on it
+    expect(agent.recorded.map((e) => e.type)).not.toContain("landed");
+  });
+
+  test("a press that starts under a landing by hand is the op, and the landing waits for the read after it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    await w.worktrees.settled();
+    // one blocking run with no read in flight: main takes the branch by hand, and the branch is
+    // renamed, so the first read to see either sends the frame that says the row follows it
+    sh(w.repo, "git", "merge", "-q", "--ff-only", wt.branch);
+    sh(wt.path, "git", "branch", "-m", "toyon/other");
+    // the press comes inside that read, past its own look for an op
+    let press: ReturnType<typeof w.worktrees.land> | undefined;
+    let pressed = false;
+    w.hub.on("worktreesChanged", () => {
+      // the press sends frames of its own, which come back in here before it has returned
+      if (pressed || w.state.worktree(wt.id)?.branch !== "toyon/other") return;
+      pressed = true;
+      press = w.worktrees.land(wt.id);
+    });
+    await w.worktrees.gitStatus(wt.id);
+    expect(press).toBeDefined();
+    // main has the work already, so the press has nothing to land; it lets the row go
+    expect((await press)?.result.ok).toBe(false);
+    expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    await w.worktrees.gitStatus(wt.id);
+    expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip, subjects: ["add feature"] }]);
+    expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
   /** a pre-commit hook for the repo that prints its complaint and refuses; repo-local hooksPath so
    * a global one on this machine does not stand in for it */
   const refusingHook = (lines: string[], hook = "pre-commit") => {

@@ -1,53 +1,83 @@
 # Agents
 
-Toyon drives coding agents over the Agent Client Protocol (ACP), one session per copy of your project. A copy is a chat's own branch and worktree, with the app running. Three agents come built in: Claude Code, Codex and OpenCode.
+Toyon works with three agents: Claude Code, Codex and OpenCode. Each chat runs one agent session, over the Agent Client Protocol (ACP).
 
-Each agent signs in with its own login, from the chat. MCP servers run as each agent runs them, outside Toyon's sandbox.
+Sign in to an agent from the chat, with that agent's account. MCP servers run the way each agent runs them, outside Toyon's sandbox.
 
-## Side by side
+## Compare
 
 |  | Claude Code | Codex | OpenCode |
 |---|---|---|---|
-| Installed | on first start | on first start | from its row's menu, a larger download |
+| Installed | on first start | on first start | from its row's menu; a larger download |
 | Signs in with | a Claude plan or an Anthropic API key | a ChatGPT plan or an OpenAI API key | `opencode auth login`, any provider |
 | Reads | your user, project and local settings | its own config file | a config Toyon writes |
-| Shell sandbox | its own, built from settings Toyon writes | its own | Toyon's |
+| Shell sandbox | Claude Code's, built from settings Toyon writes | Codex's | Toyon's |
 | `git push` refused by rule | yes | no | yes |
-| Can read Toyon's token | no | from its shell commands | no |
+| Can read Toyon's token | no | yes, from shell commands | no |
 | Subagents | yes | yes | no |
 | Effort levels | yes | yes | no |
 | Steering mid-turn | yes | yes | no |
-| Toyon's own tools | yes | yes | only if it announces HTTP MCP at start |
+| Toyon's tools | yes | yes | only if OpenCode announces HTTP MCP support at start |
 
-## Toyon's own tools
+## Tools
 
-Toyon serves three tools of its own to each agent over MCP, from the daemon on this machine. An agent gets them when it announces at session start that it takes an HTTP MCP server. Claude Code and Codex do; OpenCode gets them only if its own agent says so.
+Toyon gives each agent three tools over MCP.
 
-**`worktrees`** lists the project's other worktrees, open and archived: title, branch, where the chat is on disk, and what the person first asked there. With a query it keeps only the worktrees whose title, branch or chat mention it, so an agent asked about a ticket finds the worktree that worked on it without knowing the branch.
+| Tool | What it does |
+|---|---|
+| [`worktrees`](#worktrees) | Lists the project's other worktrees. |
+| [`handoff`](#handoff) | Proposes splitting work into pieces, each for a worktree. |
+| [`own`](#own) | Starts the copy's own instance of a shared command. |
 
-**`handoff`** splits planned work into pieces. The agent hands you a list, and each piece is bound for one of:
+An agent gets the tools if it announces HTTP MCP support when a session starts. Claude Code and Codex do. Who can call the tools is in [trust.md](trust.md).
+
+### `worktrees`
+
+Lists the project's other worktrees, open and archived. For each one it returns the title, the branch, the path of the chat on disk, and the first message sent there.
+
+With a query, it returns only the worktrees whose title, branch or chat mention it. An agent asked about a ticket can find the worktree that worked on it without knowing the branch.
+
+### `handoff`
+
+Splits planned work into pieces. The agent gives you a list, and each piece goes to one of:
 
 - this worktree,
-- a new worktree of this project, or of another project you have open,
-- an open worktree that is already on that part.
+- a new worktree, in this project or in another open project,
+- an open worktree that is already working on that part.
 
-In plan mode the list shows at the head of the plan on the right, one line per piece, and you can read each piece and move it before you approve. Outside plan mode it is a card of its own. Nothing starts until you approve.
+Before you approve:
 
-A piece's text becomes the plan its worktree is born with: the new worktree starts with it as an approved plan, and its first message says who wrote it. A worktree made this way starts its agent at once, and its dev servers the first time you look at it.
+- In plan mode, the list is at the top of the plan, one line per piece. You can read each piece and move it.
+- Outside plan mode, the list is a card in the chat.
+- The list shows any other project involved and the permission mode.
+- Nothing starts until you approve.
 
-**`own`** takes a shared command over for this worktree before the edit that would flip it: the agent about to change the backend asks for its own `api` first, so the page it tests is already talking to its branch by the time the edit lands. The command's own setup runs first, on its terminal tab, and the chat says what moved and why. It cannot hand a command back to main or point it at a remote; those are the chip's under the box, and the row menu's. It refuses in plan mode, where nothing runs.
+After you approve:
 
-The `/handoff` verb raises the same card from your own words, with no tool involved. `/handoff fix the footer` makes a piece for this project; leading with another open project's name, as the rail lists it, sends the piece there.
+- A new worktree starts with the piece as its approved plan. Its first message says who wrote it.
+- Its agent starts at once. Its dev servers start the first time you open it.
+- A piece sent to an open worktree arrives as a message that says which worktree sent it.
+
+`/handoff` does the same from your own message, without the tool. `/handoff fix the footer` makes a piece for this project. Start with another open project's name to send the piece there.
+
+### `own`
+
+Starts the copy's own instance of a shared command. See [backends.md](backends.md#shared-commands).
+
+- The agent calls it before it edits the backend, so the frontend already uses the copy's instance when the edit is saved.
+- The command's `setup` runs first, in its terminal tab. The chat shows what changed and why.
+- It cannot switch a command back to main or to a remote. Use the chip under the chat box for that.
+- It is refused in plan mode.
 
 ## Claude Code
 
-Claude Code is installed on first start. It loads your user, project and local settings, so permission rules, hooks, slash commands, installed plugins and MCP servers work as they do in the terminal.
+Claude Code installs on first start. It loads your user, project and local settings, so your permission rules, hooks, slash commands, plugins and MCP servers work as they do in the terminal.
 
-The adapter between Toyon and Claude Code is Toyon's own build of the official one, `@toyon-dev/claude-agent-acp`: the upstream adapter plus the changes it is waiting on upstream. It is fetched from npm like the others.
+Toyon connects to Claude Code through `@toyon-dev/claude-agent-acp`. This is Toyon's build of the official adapter, with changes that are waiting to be merged upstream. It is downloaded from npm.
 
 ### Flags and environment
 
-Toyon starts the agent from the Dock, with no shell in between, so what the terminal gets from a flag or from your shell profile does not arrive on its own. Give it those in `~/.toyon/agents.json`, under the agent's id, with no `command`:
+Toyon starts the agent without a shell, so flags and shell-profile variables you use in the terminal are not applied. Set them in `~/.toyon/agents.json`, under the agent's id, with no `command`:
 
 ```json
 {
@@ -64,24 +94,37 @@ Toyon starts the agent from the Dock, with no shell in between, so what the term
 }
 ```
 
-- `env` is added to the agent's environment, over what it starts with.
-- `meta` rides every chat session of that agent. It is the adapter's own extension channel: Claude's takes any option of the Agent SDK under `claudeCode.options`, so `plugins` loads a plugin from a folder the way `--plugin-dir` does, `agents` adds agents, and `mcpServers` adds servers. Paths are absolute.
-- Toyon's own rules are applied over `meta`, so they cannot be tuned away.
-- Codex takes the same two fields; what its `meta` carries is its adapter's to say.
-- The daemon reads the file when it starts.
+| Field | What it does |
+|---|---|
+| `env` | Variables added to the agent's environment. They override existing ones. |
+| `meta` | Options sent with every chat session of that agent. |
+
+- For Claude Code, any Agent SDK option goes under `claudeCode.options`. `plugins` loads a plugin from a folder, as `--plugin-dir` does. `agents` adds agents. `mcpServers` adds servers. Paths must be absolute.
+- Toyon's rules are applied after `meta` and cannot be overridden.
+- Codex accepts the same two fields. Its adapter defines what its `meta` accepts.
+- Toyon reads the file when it starts.
 
 ### Mods
 
-A mod is a plugin whose hooks are functions. Its hooks run here whether it is installed or loaded from a folder: a command it adds is in the command list, and its text reply lands in the chat. What a mod draws in the terminal, a pane or a line by the spinner, does not appear.
+A mod is a plugin whose hooks are functions. Mods work in Toyon, installed or loaded from a folder.
+
+- A command a mod adds is in the command list, and its text reply appears in the chat.
+- Anything a mod draws in the terminal, such as a pane or a line by the spinner, is not shown.
 
 ## Codex
 
-Codex is installed on first start and reads its own config file. Its sandbox takes no deny list, so its shell commands can still read Toyon's token, and only the instruction it is given stops it pushing. Keep a copy that matters on **ask**.
+Codex installs on first start and reads its own config file.
+
+- Its sandbox does not accept a list of denied files, so its shell commands can read Toyon's token.
+- Only its instructions stop it from pushing.
+- Use ask mode for a copy that matters.
 
 ## OpenCode
 
-OpenCode is a larger download, installed from its row's menu. It signs in with `opencode auth login` in the chat's terminal and uses whichever providers you have signed it into.
+OpenCode is a larger download. Install it from its row's menu, then sign in with `opencode auth login` in the chat's terminal. It uses the providers you signed in to.
 
-It runs on a config Toyon writes, so a repository's `opencode.json` cannot loosen it, and the whole of it runs inside Toyon's sandbox. It does less than the other two: no subagents, no effort levels, no steering mid-turn.
+- It runs on a config Toyon writes, so a repository's `opencode.json` cannot loosen its limits.
+- All of OpenCode runs inside Toyon's sandbox.
+- It has no subagents, no effort levels and no steering mid-turn.
 
-The full boundary for each agent is in [trust.md](trust.md).
+The limits for each agent are in [trust.md](trust.md).

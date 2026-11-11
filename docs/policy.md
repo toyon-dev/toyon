@@ -1,35 +1,36 @@
 # Managed policy
 
-A file IT pushes to a machine that turns parts of Toyon off for everyone who uses it. The person at the keyboard cannot change it, every key is locked, and `toyon doctor` shows what is in effect and where it came from. It is the same shape Chrome, Firefox, Docker Desktop and Claude Code use for managed settings, so the tooling that deploys those deploys this.
+A policy file turns parts of Toyon off for everyone on a machine. IT deploys it the same way as managed settings for Chrome, Firefox, Docker Desktop and Claude Code. The user of the machine cannot change it. `toyon doctor` shows the active policy and which file it came from.
 
-## Where it lives
+## File locations
 
 | Platform | Path | Format |
 |---|---|---|
-| macOS | `/Library/Managed Preferences/dev.toyon.plist` | a configuration profile for the `dev.toyon` domain, installed at computer scope |
-| macOS | `/Library/Managed Preferences/<user>/dev.toyon.plist` | the same profile installed at user scope |
-| macOS | `/Library/Application Support/toyon/policy.json` | JSON, for a shop that pushes files with a script |
+| macOS | `/Library/Managed Preferences/dev.toyon.plist` | Configuration profile for the `dev.toyon` domain, at computer scope |
+| macOS | `/Library/Managed Preferences/<user>/dev.toyon.plist` | The same profile, at user scope |
+| macOS | `/Library/Application Support/toyon/policy.json` | JSON, for deploying with a script |
 | Linux | `/etc/toyon/policy.json` | JSON |
 
-Every file that exists is read and merged. Where two set the same key, the stricter value wins. A JSON file must be owned by root and not writable by group or others; one that is not is treated as invalid. The profile plists are trusted as MDM's own location.
-
-The CLI reads the files on every run. The daemon reads them once, when it starts, so a file pushed while it is running takes effect at the next `toyon restart`; `toyon doctor` says when the running daemon is behind.
+- Toyon reads every file that exists and merges them. If two files set the same key, the stricter value applies.
+- A JSON file must be owned by root, and not writable by group or others. Otherwise it is treated as invalid.
+- The profile plists are trusted because MDM controls that location.
+- The CLI reads the files on every run. A running Toyon reads them once, at start. After you deploy a file, run `toyon restart`. `toyon doctor` reports when the running Toyon has an older policy.
 
 ## Keys
 
-Every key is optional. A key that is absent is allowed. Unknown keys are ignored, so a file written for a newer Toyon still reads.
+Every key is optional. A missing key means the feature is allowed. Unknown keys are ignored, so a file written for a newer Toyon still works.
 
 | Key | Type | What it turns off |
 |---|---|---|
-| `updates` | boolean | `false`: Toyon never checks for or installs a newer version, `toyon update` refuses, and a Toyon started with npx does not offer the global install. This governs self-update only; a person can still run `npx toyon@latest`, and pinning what runs is the job of your software allowlist. |
-| `deploy` | boolean | `false`: `toyon deploy` refuses. |
-| `remote` | `"any"`, `"tailscale"` or `"off"` | `off`: `toyon remote` refuses and the daemon ignores a `remote.json` it finds. `tailscale`: only a `*.ts.net` name is accepted, so the shell opens over your tailnet and nowhere else. |
-| `agents` | list of agent ids | Only the agents listed exist: the others are gone from the picker and are never installed. The builtin ids are `claude`, `codex` and `opencode`. |
-| `customAgents` | boolean | `false`: `~/.toyon/agents.json` is ignored, so nobody can add an agent of their own, shadow a builtin with one, or tune a builtin's environment and sessions. |
-| `brandedListener` | boolean | `false`: the daemon does not bind port 80 for `http://toyon.localhost`; the shell is at `http://toyon.localhost:4141` only. |
-| `planSignIn` | boolean | `false`: signing in with a personal Claude plan is not offered in the chat, and a request for it is refused. Keys and gateways still work. |
+| `updates` | boolean | `false`: Toyon does not check for or install updates, `toyon update` is refused, and a Toyon started with npx does not offer the global install. A user can still run `npx toyon@latest`. Use your software allowlist to pin versions. |
+| `deploy` | boolean | `false`: `toyon deploy` is refused. |
+| `remote` | `"any"`, `"tailscale"` or `"off"` | `"off"`: `toyon remote` is refused, and an existing `remote.json` is ignored. `"tailscale"`: only a `*.ts.net` hostname is accepted, so Toyon can be opened only over your tailnet. |
+| `agents` | list of agent ids | Only the listed agents are available. The others are not shown in the picker and are never installed. The built-in ids are `claude`, `codex` and `opencode`. |
+| `customAgents` | boolean | `false`: `~/.toyon/agents.json` is ignored. Users cannot add an agent, replace a built-in agent, or change a built-in agent's environment and session options. |
+| `brandedListener` | boolean | `false`: Toyon does not listen on port 80 for `http://toyon.localhost`. It is available at `http://toyon.localhost:4141` only. |
+| `planSignIn` | boolean | `false`: signing in with a personal Claude plan is not offered in the chat, and is refused if requested. API keys and gateways still work. |
 
-An example that keeps a company's laptops off the public internet and on its own accounts:
+This example keeps company laptops off the public internet and on company accounts:
 
 ```json
 {
@@ -42,7 +43,7 @@ An example that keeps a company's laptops off the public internet and on its own
 }
 ```
 
-The same file as a profile payload, for the `dev.toyon` preference domain:
+The same policy as a profile payload, for the `dev.toyon` preference domain:
 
 ```xml
 <dict>
@@ -55,17 +56,24 @@ The same file as a profile payload, for the `dev.toyon` preference domain:
 </dict>
 ```
 
-## What a person sees
+## What users see
 
-A verb the policy turns off says so and exits 1:
+A command the policy turns off prints the reason and exits with status 1:
 
 ```
 toyon: deploy is turned off by your organization's policy (/etc/toyon/policy.json)
 ```
 
-In the app, the update chip does not appear, a greyed menu row reads "managed by your organization", the chat's sign-in card leaves the plan login out and says why, and the settings card (⌘,) carries one line naming what is off.
+In the app:
 
-## Checking it took
+- The update chip is not shown.
+- A disabled menu row reads "managed by your organization".
+- The chat's sign-in card leaves out the plan login and says why.
+- The settings card (<kbd>⌘,</kbd>) has one line that lists what is turned off.
+
+## Verify the policy
+
+Run `toyon doctor`:
 
 ```
 $ toyon doctor
@@ -79,14 +87,16 @@ ok   running  2 of 5 worktrees started; the rest start when opened
 ok   updates  off by your organization's policy
 ```
 
-A file that will not read is a failing line, and everything the policy governs is off until it is fixed:
+A file that cannot be read is a failing line. Everything the policy controls is turned off until the file is fixed:
 
 ```
 FAIL policy   /etc/toyon/policy.json: not valid JSON (everything it governs is off)
 ```
 
-When the running daemon started before the file changed, doctor adds a failing `daemon` line saying `toyon restart` applies the current one.
+If the running Toyon started before the file changed, `toyon doctor` adds a failing `daemon` line that says to run `toyon restart`.
 
-## What it does not do
+## Limits
 
-It is a policy for Toyon, not a wall around the machine. It cannot stop a person running another copy of Toyon, an older one, or the agents directly. The sandbox and the permission modes in [trust.md](trust.md) are the same with or without it. What the policy guarantees is that this Toyon, on this machine, has the listed things off for everyone, and that doctor proves it.
+- The policy applies to this install of Toyon only. It does not stop a user from running another copy of Toyon, an older version, or the agents directly.
+- The sandbox and the permission modes are the same with or without a policy. See [trust.md](trust.md).
+- What the policy guarantees: on this machine, this Toyon has the listed features turned off for every user, and `toyon doctor` shows it.

@@ -100,7 +100,7 @@ export interface AgentAdapter {
   /** start the session now, under the worktree's agent, so the first message meets a process
    * that is already up; idle, the reaper takes it back as usual. Best effort. */
   warm(): Promise<void>;
-  /** the registry id of the agent whose process is up, or null while none is */
+  /** the registry id of the agent whose process is up or starting, or null while none is */
   readonly runningAgent: string | null;
   /** whether the agent's live session was given Toyon's own tools (the handoff tool over MCP):
    * null until a process is up and has said what it takes, so a caller can warm it first */

@@ -126,6 +126,8 @@ function fakeAgent(
     authMeta?: boolean;
     /** refuse initialize, as an adapter whose install is broken does */
     failInit?: boolean;
+    /** answer initialize only after this long, as a process still loading does */
+    slowInit?: number;
     /** advertise HTTP MCP servers the way the bundled adapters do, as a boolean */
     mcpHttp?: boolean;
     /** answer session/new only after this long, as an adapter still starting its SDK does */
@@ -214,6 +216,7 @@ function fakeAgent(
     .agent({ name: "fake" })
     .onRequest(acp.methods.agent.initialize, async (c) => {
       f.inits.push(c.params);
+      if (opts.slowInit) await Bun.sleep(opts.slowInit);
       if (opts.failInit) throw new acp.RequestError(-32603, "broken adapter");
       // the identity push goes out before the response, as both real adapters send it
       if (opts.authStatus) await c.client.notify(AUTH_STATUS_UPDATE_METHOD, { authStatus: opts.authStatus });
@@ -653,6 +656,34 @@ describe("AcpSession", () => {
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
     for (let i = 0; i < 100 && fake.cancels === 0; i++) await Bun.sleep(5);
     expect(fake.cancels).toBe(1);
+    await w.session.close();
+  });
+
+  test("a restart under the agent's own turn ends it", async () => {
+    const { w, call, working } = selfDriven();
+    w.session.send("go");
+    await w.idle();
+    await call();
+    await working();
+    await w.session.restart();
+    expect(w.session.status).toBe("idle");
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
+    await w.session.close();
+  });
+
+  test("a turn of the agent's own shows a held list at its end", async () => {
+    let mode: PermissionMode = "plan";
+    const { w, update, working } = selfDriven({ mode: () => mode });
+    w.session.send("go");
+    await w.idle();
+    await update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "splitting it" } });
+    await working();
+    // held in plan mode, as a list always is; the chip leaves plan mode before the turn settles
+    w.session.note({ type: "handoff-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 });
+    mode = "auto";
+    await w.idle();
+    expect(w.events.findLast((e) => e.type === "handoff-shown")).toMatchObject({ id: "l1" });
+    expect(w.session.status).toBe("waiting");
     await w.session.close();
   });
 
@@ -1602,6 +1633,34 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a restart while the agent is starting drops that process, and the next send spawns the record's agent", async () => {
+    const fake = fakeAgent(say("ok"), { slowInit: 50 });
+    let spec = claudeSpec;
+    const w = world(fake, claudeSpec, 60_000, undefined, { spec: () => spec });
+    const warm = w.session.warm();
+    await Bun.sleep(10);
+    // named from the spawn: a claim for another agent has to see the one already on its way
+    expect(w.session.runningAgent).toBe("claude");
+    spec = codexSpec;
+    await w.session.restart();
+    expect(w.links[0]!.killed).toBe(true);
+    await warm;
+    w.session.send("hi");
+    await w.idle();
+    expect(w.links).toHaveLength(2);
+    expect(w.session.runningAgent).toBe("codex");
+    await w.session.close();
+  });
+
+  test("an agent that fails to start leaves nothing starting", async () => {
+    const fake = fakeAgent(say("ok"), { failInit: true });
+    const w = world(fake);
+    await w.session.warm();
+    // so the next keystroke warms again
+    expect(w.session.runningAgent).toBeNull();
+    await w.session.close();
+  });
+
   test("the command list survives the reaper, so `/` still works with no process running", async () => {
     const fake = fakeAgent(say("ok"), { commands: { s1: [{ name: "review", description: "mine" }] } });
     const w = world(fake, claudeSpec, 10);
@@ -1730,6 +1789,50 @@ describe("AcpSession", () => {
     expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "end_turn" });
     expect(w.links).toHaveLength(1);
     await expect(w.session.authenticate("nope")).rejects.toThrow(/no login method/);
+    await w.session.close();
+  });
+
+  test("a message sent past a sign-in card is kept with the refused one, and both go after the login in order", async () => {
+    let failures = 2;
+    const fake = fakeAgent(async (p, client) => {
+      if (failures-- > 0) throw acp.RequestError.authRequired();
+      return say("ok")(p, client);
+    });
+    fake.app.onRequest(acp.methods.agent.authenticate, () => ({}));
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    w.session.send("b");
+    await w.idle();
+    expect(w.session.status).toBe("error");
+    expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
+    await w.idle();
+    expect(w.session.status).toBe("idle");
+    expect(fake.prompts.slice(-2).map((p) => (p.prompt[0] as { text: string }).text)).toEqual(["a", "b"]);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a login has its own idle window", async () => {
+    let failures = 1;
+    const fake = fakeAgent(async (p, client) => {
+      if (failures-- > 0) throw acp.RequestError.authRequired();
+      return say("ok")(p, client);
+    });
+    fake.app.onRequest(acp.methods.agent.authenticate, async () => {
+      await Bun.sleep(200);
+      return {};
+    });
+    const w = world(fake, claudeSpec, 300);
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.at(-2)).toMatchObject({ type: "agent-auth-required" });
+    // most of the window the refused turn's end opened is gone by the time the login is pressed
+    await Bun.sleep(200);
+    expect(await w.session.authenticate("api-key", "sk-test")).toEqual({ kind: "done" });
+    expect(w.links).toHaveLength(1);
+    expect(w.links[0]!.killed).toBe(false);
+    await w.idle();
     await w.session.close();
   });
 
@@ -3652,6 +3755,47 @@ describe("AcpSession process group", () => {
       [1000, false],
     ]);
     expect(w.links[0]!.killed).toBe(true);
+  });
+
+  test("closing while the agent is starting kills the process and clears its record", async () => {
+    const fake = fakeAgent(say("ok"), { slowInit: 50 });
+    const w = world(fake);
+    const warm = w.session.warm();
+    await Bun.sleep(10);
+    await w.session.close();
+    expect(w.links[0]!.killed).toBe(true);
+    await warm;
+    expect(w.session.pgid).toBeNull();
+    expect(w.processes).toEqual([
+      [1000, true],
+      [1000, false],
+    ]);
+  });
+
+  test("an agent that dies while starting is reported in its own words", async () => {
+    const fake = fakeAgent(say("ok"), { slowInit: 50 });
+    let exit = () => {};
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      connect: (app) => {
+        const conn = app.connect(fake.app);
+        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((r) => {
+          exit = () => r({ code: 1, signal: null });
+        });
+        // as the transport does: an exited process fails whatever is pending, saying how it went
+        exited.then(() => conn.close(new Error("agent process exited (code 1): cannot find module")));
+        return { conn, pid: 2000, kill: async () => conn.close(), exited, exitInfo: () => null };
+      },
+    });
+    w.session.send("hi");
+    await Bun.sleep(10);
+    exit();
+    await w.idle();
+    expect(w.events.find((e) => e.type === "agent-error")).toMatchObject({
+      message: "agent process exited (code 1): cannot find module",
+    });
+    expect(w.session.runningAgent).toBeNull();
+    expect(w.session.pgid).toBeNull();
+    await w.session.close();
   });
 
   test("a late exit of a replaced link does not clear the new one", async () => {

@@ -249,6 +249,13 @@ interface Conn {
   commands: Map<string, AgentCommand[]>;
 }
 
+/** the adapter process on its way up: prepared, spawned, not yet initialized */
+interface Starting {
+  spec: AgentSpec;
+  /** null until the launch is prepared and the process spawned */
+  link: AcpLink | null;
+}
+
 /** the worktree's conversation on that connection */
 interface Live {
   conn: Conn;
@@ -326,8 +333,9 @@ export class AcpSession implements AgentAdapter {
   private steerMark: string | undefined;
   /** the id of the message whose text arrived last */
   private streamingId: string | undefined;
-  /** the message refused for want of credentials; sent again after a login */
-  private refused: QueueItem | null = null;
+  /** the messages refused for want of credentials, in the order they were sent; sent again
+   * after a login */
+  private refused: QueueItem[] = [];
   /** The turn the drain loop is on, from the loop starting until it is done, a fresh record for
    * each message it takes; null while no loop runs, which is what `running` reads. `open` is the
    * transcript's bracket: a turn-start written and its turn-end not yet, which every exit closes
@@ -345,6 +353,10 @@ export class AcpSession implements AgentAdapter {
     return this.holds > 0;
   }
   private conn: Conn | null = null;
+  /** The adapter process between its spawn and the answer to initialize: the agent it is, and its
+   * link once there is one. Teardown reads this beside `conn`, so a process still starting is
+   * dropped like one that is up. */
+  private start: Starting | null = null;
   /** the spawn in flight, shared by whoever asks for the connection meanwhile */
   private connecting: Promise<Conn> | null = null;
   private opening: { conn: Conn; live: Promise<Live> } | null = null;
@@ -586,7 +598,7 @@ export class AcpSession implements AgentAdapter {
   }
 
   get runningAgent(): string | null {
-    return this.conn?.spec.id ?? null;
+    return this.conn?.spec.id ?? this.start?.spec.id ?? null;
   }
 
   get mcpTools(): boolean | null {
@@ -637,7 +649,7 @@ export class AcpSession implements AgentAdapter {
   }
 
   get unsettled(): boolean {
-    return this.queue.length > 0 || this.steered.length > 0 || this.refused !== null;
+    return this.queue.length > 0 || this.steered.length > 0 || this.refused.length > 0;
   }
 
   get queueItems(): QueuedMessage[] {
@@ -976,8 +988,9 @@ export class AcpSession implements AgentAdapter {
         // without them "not logged in" would contradict an agent that thinks it is. The AWS card
         // contradicts nothing, so its words ride the card instead of a row above it
         if (rejected && !aws) this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
-        // the process stays: a login runs over the same connection, then the message goes again
-        this.refused = item;
+        // the process stays: a login runs over the same connection, then the message goes again,
+        // behind any refused before it
+        if (item) this.refused.push(item);
         this.emit({
           type: "agent-auth-required",
           agent: this.conn.spec.id,
@@ -1022,10 +1035,15 @@ export class AcpSession implements AgentAdapter {
     const turn = this.turn;
     if (!turn?.open) return;
     turn.open = false;
-    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
-    // a pieces list handed over for a plan card that never came is the person's to answer anyway
-    this.showHeld();
+    this.turnOver(stopReason);
     this.setStopping(false);
+  }
+
+  /** The turn's last event, whichever kind it was, and what a turn's end owes: a pieces list
+   * handed over for a plan card that never came is the person's to answer anyway. */
+  private turnOver(stopReason: string) {
+    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+    this.showHeld();
   }
 
   /** A side question. Null is the agent's answer when it has none to give (no quick model, a
@@ -1088,6 +1106,9 @@ export class AcpSession implements AgentAdapter {
         },
       };
     }
+    // a full idle window from the login's own start, not what was left of the refused turn's: a
+    // reap that lands under the request reads as a failed login
+    this.armReaper();
     try {
       await conn.ctx.request(acp.methods.agent.authenticate, {
         methodId,
@@ -1131,11 +1152,15 @@ export class AcpSession implements AgentAdapter {
   }
 
   retry() {
-    const item = this.refused;
-    this.refused = null;
-    // the item itself, as it was recorded: its bubble is already on the chat and its attachments
-    // are written, and the uploads they were copied from went when that happened
-    if (item && !this.stopped) this.enqueue(item);
+    const items = this.refused;
+    this.refused = [];
+    if (items.length === 0 || this.stopped) return;
+    // the items themselves, as they were recorded: their bubbles are already on the chat and
+    // their attachments are written, and the uploads they were copied from went when that
+    // happened. Ahead of the queue, in the order they were sent: whatever waits there came after.
+    this.queue.unshift(...items);
+    this.queueChanged();
+    if (!this.running && !this.held) fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
   }
 
   /** a plan sign-in the managed policy withholds: the spec marks the method, the policy says no */
@@ -1270,47 +1295,52 @@ export class AcpSession implements AgentAdapter {
   private ensureConn(why: string): Promise<Conn> {
     if (this.conn) return Promise.resolve(this.conn);
     if (this.connecting) return this.connecting;
-    this.connecting = this.openConn(why).finally(() => {
-      this.connecting = null;
+    const connecting = this.openConn(why).finally(() => {
+      // a drop has cleared it already, and the slot may hold the start that came after
+      if (this.connecting === connecting) this.connecting = null;
     });
-    return this.connecting;
+    this.connecting = connecting;
+    return connecting;
   }
 
   private async openConn(why: string): Promise<Conn> {
+    // nothing reaps a process spawned on a closed session: the reaper is never armed there
+    if (this.stopped) throw new UserError("this worktree's agent is closed");
     const spec = this.d.spec();
-    const prepared = await (this.d.prepare ?? prepareLaunch)(this.d.cwd, spec);
-    const { bounds } = prepared;
-    const sandboxed = spec.confinement !== "none";
-    const side = new Map<string, (text: string) => void>();
-    const commands = new Map<string, AgentCommand[]>();
-    const app = acp
-      .client({ name: "toyon" })
-      .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds, sandboxed))
-      .onRequest(acp.methods.client.elicitation.create, (c) => this.onElicit(c.params, c.signal))
-      .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side, commands))
-      // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
-      .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
-        if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
-      });
-    const link = this.d.connect(app, spec, prepared);
-    this.noteProcess(link, true);
-    log.info(this.d.worktreeId, `agent ${spec.id} started for ${why} (pid ${link.pid ?? "unknown"})`);
-    const ctx = link.conn.agent;
-    // the process dying while idle must not leave a dead handle for the next prompt to use
-    link.exited.then(() => {
-      this.noteProcess(link, false);
-      if (this.conn?.link === link) {
-        log.warn(this.d.worktreeId, "agent process exited while idle");
-        this.conn = null;
-        this.live = null;
-        this.d.mcp?.close();
-        this.cancelAsks();
-        this.tasks.endAll("the agent stopped, and the command with it");
-        this.wakeups.endAll("the agent stopped before it woke");
-        this.endOwn("interrupted");
-      }
-    });
+    const start: Starting = { spec, link: null };
+    this.start = start;
     try {
+      const prepared = await (this.d.prepare ?? prepareLaunch)(this.d.cwd, spec);
+      // dropped while the launch was being prepared: nothing is spawned for a start nobody holds
+      if (this.start !== start) throw stoppedStarting();
+      const { bounds } = prepared;
+      const sandboxed = spec.confinement !== "none";
+      const side = new Map<string, (text: string) => void>();
+      const commands = new Map<string, AgentCommand[]>();
+      const app = acp
+        .client({ name: "toyon" })
+        .onRequest(acp.methods.client.session.requestPermission, (c) => this.onPermission(c.params, bounds, sandboxed))
+        .onRequest(acp.methods.client.elicitation.create, (c) => this.onElicit(c.params, c.signal))
+        .onNotification(acp.methods.client.session.update, (c) => this.onUpdate(c.params, side, commands))
+        // the agent pushes its identity unasked, here and whenever it changes; settings shows the last one
+        .onNotification(AUTH_STATUS_UPDATE_METHOD, parseAuthStatus, (c) => {
+          if (c.params) this.d.onAuth?.(spec.id, { status: c.params });
+        });
+      const link = this.d.connect(app, spec, prepared);
+      start.link = link;
+      this.noteProcess(link, true);
+      log.info(this.d.worktreeId, `agent ${spec.id} started for ${why} (pid ${link.pid ?? "unknown"})`);
+      const ctx = link.conn.agent;
+      // the process dying while idle must not leave a dead handle for the next prompt to use.
+      // One that dies while starting fails its own initialize, and the catch below reports that
+      // with the exit's own words, so the start is not this handler's to take.
+      link.exited.then(() => {
+        this.noteProcess(link, false);
+        if (this.conn?.link === link) {
+          log.warn(this.d.worktreeId, "agent process exited while idle");
+          this.processGone();
+        }
+      });
       const init = await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: {
@@ -1326,7 +1356,8 @@ export class AcpSession implements AgentAdapter {
         },
         clientInfo: { name: "toyon", version: "0" },
       });
-      this.conn = {
+      if (this.start !== start) throw stoppedStarting();
+      const conn: Conn = {
         link,
         ctx,
         spec,
@@ -1343,10 +1374,20 @@ export class AcpSession implements AgentAdapter {
         commands,
       };
       this.d.onAuth?.(spec.id, { canLogout: supportsLogout(init.agentCapabilities) });
-      return this.conn;
+      // the last two steps, with nothing awaited or thrown between them: the process is always
+      // one or the other to a teardown, and the catch below never meets a start it handed on
+      this.start = null;
+      this.conn = conn;
+      return conn;
     } catch (e) {
-      fireAndForget(this.d.worktreeId, link.kill(), "kill agent after failed start");
-      this.noteProcess(link, false);
+      // a drop took the start, and killed and un-recorded its process with it. What the drop did
+      // to the connection is all `e` says by now, so the caller hears the reason instead.
+      if (this.start !== start) throw stoppedStarting();
+      this.start = null;
+      if (start.link) {
+        fireAndForget(this.d.worktreeId, start.link.kill(), "kill agent after failed start");
+        this.noteProcess(start.link, false);
+      }
       throw e;
     }
   }
@@ -1405,6 +1446,9 @@ export class AcpSession implements AgentAdapter {
       configOptions = r.configOptions;
       if (!this.stopped) this.d.setSessionId(sessionId);
     }
+    // the connection was dropped as the session opened: a session on a process that is gone is
+    // not the worktree's, and adopting it would leave `live` pointing at a dead handle
+    if (this.conn !== conn) throw stoppedStarting();
     const options = readOptions(configOptions);
     this.emit({ type: "session-info", sessionId: sessionId!, ...currentValues(options) });
     // before the record's own choices go on below: a fresh session's values are the agent's defaults
@@ -1953,7 +1997,7 @@ export class AcpSession implements AgentAdapter {
     if (!this.own) return;
     if (this.own.settle) clearTimeout(this.own.settle);
     this.own = null;
-    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+    this.turnOver(stopReason);
     this.syncStatus();
     this.maybeArmReaper();
   }
@@ -1987,24 +2031,45 @@ export class AcpSession implements AgentAdapter {
     this.reaper = null;
   }
 
-  private async dropConn(why: string) {
+  /** The process is gone or going, and everything that lived on it goes with it: the cards it was
+   * blocked on, the commands it ran in the background, the wakeups it booked, a turn it was on
+   * alone, the bearer it held. One list for a drop and for an exit, so neither leaves a piece
+   * behind. Hands back what was up or starting, for the caller that has to kill it. */
+  private processGone(): Starting | null {
+    const was = this.conn ?? this.start;
+    // gone before the endings below run: each of them looks for a process to arm the reaper on
+    this.conn = null;
+    this.live = null;
+    this.start = null;
+    // whoever asks for the connection next spawns afresh instead of joining a start that is going
+    this.connecting = null;
+    // the bearer the process held goes with it; the next spawn mints its own
+    this.d.mcp?.close();
     // closing the connection aborts outbound requests only, so a card the agent is blocked on
     // would otherwise sit here forever with no process left to answer
     this.cancelAsks();
     this.tasks.endAll("the agent stopped, and the command with it");
     this.wakeups.endAll("the agent stopped before it woke");
-    const conn = this.conn;
-    this.conn = null;
-    this.live = null;
-    // the bearer the process held goes with it; the next spawn mints its own
-    this.d.mcp?.close();
-    if (!conn) return;
-    log.info(this.d.worktreeId, `agent ${conn.spec.id} stopped: ${why} (pid ${conn.link.pid ?? "unknown"})`);
-    conn.link.conn.close();
-    await conn.link.kill();
-    this.noteProcess(conn.link, false);
+    this.endOwn("interrupted");
+    return was ? { link: was.link, spec: was.spec } : null;
+  }
+
+  private async dropConn(why: string) {
+    const was = this.processGone();
+    if (!was) return;
+    const { link, spec } = was;
+    // dropped while its launch was being prepared: the start sees it is no longer held and
+    // spawns nothing
+    if (!link) return log.info(this.d.worktreeId, `agent ${spec.id} stopped before it was spawned: ${why}`);
+    log.info(this.d.worktreeId, `agent ${spec.id} stopped: ${why} (pid ${link.pid ?? "unknown"})`);
+    link.conn.close();
+    await link.kill();
+    this.noteProcess(link, false);
   }
 }
+
+/** what a start hears when a restart, a close or a failed turn took its process from under it */
+const stoppedStarting = () => new UserError("the agent was stopped while it was starting");
 
 /** whether the agent takes an HTTP MCP server at session start. The SDK types the flag as an
  * object or null; both bundled adapters send a boolean, so either spelling of yes counts. */

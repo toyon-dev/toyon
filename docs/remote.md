@@ -27,10 +27,10 @@ Serverless hosts, and hosts that scale to zero with no disk, do not work.
 
    ```
    toyon.example.com, *.toyon.example.com {
-   	tls {
-   		dns cloudflare {env.CF_API_TOKEN}
-   	}
-   	reverse_proxy 127.0.0.1:4141
+       tls {
+           dns cloudflare {env.CF_API_TOKEN}
+       }
+       reverse_proxy 127.0.0.1:4141
    }
    ```
 

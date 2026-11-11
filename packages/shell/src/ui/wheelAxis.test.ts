@@ -43,6 +43,35 @@ describe("wheelAxis", () => {
     expect(gesture.axis).toBe("x");
   });
 
+  test("a slow sideways gesture turns on its travel when the fingers landed leaning down", () => {
+    const { scrolled, gesture } = run([
+      [1, 2],
+      [2, 0],
+      [1, 0],
+      [2, 1],
+      [2, 0],
+      [1, 0],
+    ]);
+    expect(scrolled).toEqual([true, false, false, true, true, true]);
+    expect(gesture.axis).toBe("x");
+  });
+
+  test("a resting hand's jitter during a vertical gesture never adds up to a turn", () => {
+    const { scrolled, gesture } = run([
+      [0, 12],
+      [1, 0],
+      [0, 1],
+      [1, 0],
+      [0, 1],
+      [1, 0],
+      [0, 1],
+      [1, 0],
+      [0, 12],
+    ]);
+    expect(scrolled).toEqual([true, false, true, false, true, false, true, false, true]);
+    expect(gesture.axis).toBe("y");
+  });
+
   test("a slow sideways gesture settles on its travel and then takes every fraction", () => {
     const { scrolled } = run([
       [0.8, 0],

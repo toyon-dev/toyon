@@ -562,14 +562,18 @@ export interface WheelGesture {
   /** travel along each axis while the axis is unsettled */
   dx: number;
   dy: number;
+  /** once the axis is settled, how much further the hand has gone across it than along it */
+  across: number;
   /** when the last event came, to tell one gesture from the next */
   at: number;
 }
-export const NO_GESTURE: WheelGesture = { axis: null, dx: 0, dy: 0, at: Number.NEGATIVE_INFINITY };
+export const NO_GESTURE: WheelGesture = { axis: null, dx: 0, dy: 0, across: 0, at: Number.NEGATIVE_INFINITY };
 /** travel along one axis before a gesture's axis is settled: a mouse wheel's tick settles it at
  * once, a trackpad's first fraction of a pixel does not */
 const AXIS_PX = 2;
-/** a single event this far along the other axis is a turn, not a lean */
+/** a hand this much further across the axis than along it has turned, not leaned. Summed over the
+ * gesture and not asked of one event: a slow sideways scroll sends a pixel or two at a time, and
+ * every event dropped still keeps the gesture alive, so no single one of them would ever turn it */
 const TURN_PX = 4;
 /** quiet after which the next event begins a new gesture */
 const GESTURE_GAP = 300;
@@ -579,8 +583,8 @@ const GESTURE_GAP = 300;
  * fingers land. Monaco keeps each event's larger axis and rounds the amount up to a whole pixel,
  * so that lean put the text a pixel under the gutter, and the vertical gesture after it never
  * moved it back. A gesture has one axis, the one the hand has clearly moved along: until that is
- * known nothing scrolls, and after it an event leaning the other way is dropped unless it is far
- * enough along to be a turn. */
+ * known nothing scrolls, and after it events leaning the other way are dropped until the hand has
+ * gone far enough across to be a turn. */
 export function wheelAxis(
   g: WheelGesture,
   e: { deltaX: number; deltaY: number },
@@ -595,12 +599,12 @@ export function wheelAxis(
     const dx = same.dx + ax;
     const dy = same.dy + ay;
     const axis = Math.max(dx, dy) >= AXIS_PX ? (dx > dy ? "x" : "y") : null;
-    return { scrolls: axis !== null && axis === lean, next: { axis, dx, dy, at: now } };
+    return { scrolls: axis !== null && axis === lean, next: { axis, dx, dy, across: 0, at: now } };
   }
-  if (lean === same.axis) return { scrolls: true, next: { ...same, at: now } };
-  const across = lean === "x" ? ax : ay;
-  if (across >= TURN_PX) return { scrolls: true, next: { ...same, axis: lean, at: now } };
-  return { scrolls: false, next: { ...same, at: now } };
+  const across = Math.max(0, same.across + (same.axis === "x" ? ay - ax : ax - ay));
+  if (lean === same.axis) return { scrolls: true, next: { ...same, across, at: now } };
+  if (across >= TURN_PX) return { scrolls: true, next: { ...same, axis: lean, across: 0, at: now } };
+  return { scrolls: false, next: { ...same, across, at: now } };
 }
 
 /** Holds the box's wheel events to one axis per gesture (`wheelAxis`) ahead of the widget inside:

@@ -6,6 +6,8 @@ import {
   clientMsgSchema,
   FILE_MAX_CHARS,
   LOGIN_STREAM,
+  listedFiles,
+  listingDelta,
   parseClientMsg,
   type RepoInfo,
   type ServerMsg,
@@ -28,6 +30,7 @@ import { ExecService } from "../exec/service.ts";
 import { OpenService } from "../files/open.ts";
 import { FileService } from "../files/service.ts";
 import { GIT } from "../git/exec.ts";
+import { statusFiles } from "../git/status.ts";
 import { PageErrorService } from "../preview/errors.ts";
 import { AfterLand } from "../repos/afterLand.ts";
 import { RepoRegistry } from "../repos/registry.ts";
@@ -315,24 +318,79 @@ function lastOf<T extends ServerMsg["t"]>(replies: ServerMsg[], t: T) {
 }
 
 describe("list-files", () => {
-  test("lists what is on disk: a deleted file leaves, a moved one shows once, ignored files never", async () => {
-    const { services, ctx, replies, repo } = make();
-    const main = await mainOf(services, repo);
+  const seeded = async () => {
+    const made = make();
+    const main = await mainOf(made.services, made.repo);
+    const { repo } = made;
     mkdirSync(join(repo, "docs"));
     writeFileSync(join(repo, "docs/c.md"), "c\n");
-    writeFileSync(join(repo, "gone.ts"), "x\n");
+    for (const name of ["gone.ts", "kept.ts", "staged.ts"]) writeFileSync(join(repo, name), "x\n");
     writeFileSync(join(repo, ".gitignore"), ".env\n");
     sh(repo, "git", "add", "-A");
     sh(repo, "git", "commit", "-qm", "files");
+    return { ...made, main };
+  };
+
+  test("answers with the index's paths, and with what git ignores apart", async () => {
+    const { services, ctx, replies, repo, main } = await seeded();
     rmSync(join(repo, "gone.ts"));
-    sh(repo, "mv", "docs/c.md", "docs/renamed.md");
+    writeFileSync(join(repo, "new.ts"), "n\n");
     writeFileSync(join(repo, ".env"), "SECRET=1\n");
 
-    await dispatch({ t: "list-files", worktreeId: main.id }, ctx, services);
+    await dispatch({ t: "list-files", worktreeId: main.id, tracked: true }, ctx, services);
     const files = lastOf(replies, "files");
-    expect(files?.paths.sort()).toEqual([".gitignore", "README.md", "docs/renamed.md"]);
+    // the index: the file deleted on disk is still in it, and the untracked one is not
+    expect(files?.paths.sort()).toEqual([".gitignore", "README.md", "docs/c.md", "gone.ts", "kept.ts", "staged.ts"]);
     expect(files?.submodules).toEqual([]);
-    expect(files?.ignored).toEqual([".env"]);
+    expect(lastOf(replies, "ignored-files")?.ignored).toEqual([".env"]);
+  });
+
+  test("with the index in hand, only what git ignores is walked again", async () => {
+    const { services, ctx, replies, repo, main } = await seeded();
+    writeFileSync(join(repo, ".env"), "SECRET=1\n");
+    await dispatch({ t: "list-files", worktreeId: main.id, tracked: false }, ctx, services);
+    expect(lastOf(replies, "files")).toBeUndefined();
+    expect(lastOf(replies, "ignored-files")?.ignored).toEqual([".env"]);
+  });
+
+  test("an unmerged path is listed when its file is on disk and not when it is gone", async () => {
+    const { services, ctx, replies, repo, main } = await seeded();
+    sh(repo, "git", "checkout", "-q", "-b", "theirs");
+    writeFileSync(join(repo, "kept.ts"), "theirs\n");
+    writeFileSync(join(repo, "gone.ts"), "theirs\n");
+    sh(repo, "git", "commit", "-qam", "theirs");
+    sh(repo, "git", "checkout", "-q", "-");
+    sh(repo, "git", "rm", "-q", "kept.ts", "gone.ts");
+    sh(repo, "git", "commit", "-qm", "ours");
+    // both conflict as deleted here and modified there, and the merge leaves both files; one is
+    // then removed by hand, which the status reads no differently
+    Bun.spawnSync([GIT, "merge", "theirs"], { cwd: repo });
+    rmSync(join(repo, "gone.ts"));
+    const status = await statusFiles(repo);
+    expect(status.filter((f) => f.xy === "DU").map((f) => f.path)).toEqual(["gone.ts", "kept.ts"]);
+
+    await dispatch({ t: "list-files", worktreeId: main.id, tracked: true }, ctx, services);
+    const tracked = lastOf(replies, "files")?.paths ?? [];
+    const files = listedFiles(tracked, listingDelta(tracked, status));
+    expect([...files].sort()).toEqual([".gitignore", "README.md", "docs/c.md", "kept.ts", "staged.ts"]);
+  });
+
+  test("the index and the status make the files on disk, whatever was done to them", async () => {
+    const { services, ctx, replies, repo, main } = await seeded();
+    rmSync(join(repo, "gone.ts"));
+    sh(repo, "mv", "docs/c.md", "docs/renamed.md");
+    writeFileSync(join(repo, "new.ts"), "n\n");
+    // dropped from the index and still on disk, removed from both, and new to the index
+    sh(repo, "git", "rm", "-q", "--cached", "kept.ts");
+    sh(repo, "git", "rm", "-q", "staged.ts");
+    writeFileSync(join(repo, "added.ts"), "a\n");
+    sh(repo, "git", "add", "added.ts");
+    writeFileSync(join(repo, ".env"), "SECRET=1\n");
+
+    await dispatch({ t: "list-files", worktreeId: main.id, tracked: true }, ctx, services);
+    const tracked = lastOf(replies, "files")?.paths ?? [];
+    const files = listedFiles(tracked, listingDelta(tracked, await statusFiles(repo)));
+    expect([...files].sort()).toEqual([".gitignore", "README.md", "added.ts", "docs/renamed.md", "kept.ts", "new.ts"]);
   });
 });
 

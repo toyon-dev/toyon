@@ -75,9 +75,10 @@ export function FileTree({
   const connected = useStore((s) => s.connected);
 
   // Listed when the tab opens, and again on each new tree state, which listFiles turns into a
-  // request only when the set of files can have changed: a state arrives after every tool call,
-  // and an edit to a file that exists changes nothing here. The socket coming back asks again
-  // for a listing lost with it.
+  // request only when one is owed: a state arrives after every tool call, the store keeps the
+  // files in step with it, and what is left to ask for is the index after a commit and what git
+  // ignores after a file comes or goes. The socket coming back asks again for a listing lost
+  // with it.
   useOnChange([worktreeId, version, connected, sock], () =>
     listFiles(worktreeId, store.getState(), { sock, dispatch }),
   );

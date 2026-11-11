@@ -78,13 +78,17 @@ import {
   cardBox,
   DEFAULT_PERMISSION_MODE,
   defaultThemePrefs,
+  diskKey,
   encodeKnown,
+  indexKey,
   isBusy,
   isEditTool,
   isLead,
   isMain,
   isOwned,
   isProvisional,
+  listedFiles,
+  listingDelta,
   MANAGED_NONE,
   newer,
   PROJECTS_FOLDER,
@@ -336,15 +340,24 @@ export interface WorktreeLocal {
   running?: { id: string; at: number };
   log: LogLine[];
   git?: GitInfo;
-  /** the files on disk: quick open, the @ menu and the files tab ask for it */
+  /** the files on disk, which quick open, the @ menu and the files tab read. Made here from the
+   * index's paths and the status (`withFiles`), so a file that is new or gone is in it as soon as
+   * the status says so, with nothing asked of the daemon. */
   files?: string[];
+  /** the paths in git's index as the daemon last read them */
+  tracked?: string[];
+  /** the `indexKey` those paths were read under: a status under another says the index has moved */
+  trackedAt?: string;
+  /** how the status last moved `files` away from `tracked` (a `ListingDelta` key); the same
+   * difference again keeps the list, and everything built on it */
+  filesDelta?: string;
   /** the submodules, listed with the files: entries the tree shows but cannot open */
   submodules?: string[];
   /** what git ignores, for the tree alone: a file to read, or a folder ignored whole (trailing
    * slash) that stands as one row and opens nothing */
   ignored?: string[];
-  /** the listing key (actions/file.ts) the files were last asked for; the same key asks nothing */
-  filesFor?: string;
+  /** the keys the listing was last asked under (`indexKey`, `diskKey`); the same pair asks nothing */
+  filesFor?: { index: string; disk: string };
   queue: QueuedMessage[];
   /** a message sent to an agent that is not mid-turn, until the daemon's word catches up: the log
    * shows the bubble and the working mark from the press, so the wait reads as the turn it becomes
@@ -1849,8 +1862,8 @@ export type Action =
   | { a: "tree-folder"; worktreeId: string; path: string; open: boolean }
   /** a folder named in the chat: shown in the files tab, opened along with what holds it */
   | { a: "tree-reveal"; worktreeId: string; path: string }
-  /** the files were asked for under this key; the same key again asks nothing */
-  | { a: "files-asked"; worktreeId: string; key: string }
+  /** the files were asked for under these keys; the same pair again asks nothing */
+  | { a: "files-asked"; worktreeId: string; index: string; disk: string }
   /** open or close the active project's archived section */
   | { a: "toggle-archived" }
   | { a: "toggle-zen" }
@@ -2684,7 +2697,7 @@ function reduce(s: State, action: Action): State {
       };
     }
     case "files-asked":
-      return withLocal(s, action.worktreeId, (l) => ({ ...l, filesFor: action.key }));
+      return withLocal(s, action.worktreeId, (l) => ({ ...l, filesFor: { index: action.index, disk: action.disk } }));
     case "toggle-zen":
       // zen gives the window to the page, and a project with nothing to run has no page to give it to
       if (isChatCentred(s)) return s;
@@ -2827,6 +2840,32 @@ function forgetVersions(local: State["local"]): State["local"] {
     out[id] = { ...l, git: { ...l.git, version: 0 } };
   }
   return out;
+}
+
+/** whether a list in hand holds what the one just sent does, in the same order; git lists paths
+ * in one order, so the same paths are the same list */
+function sameList(held: string[] | undefined, sent: string[]): held is string[] {
+  return held !== undefined && held.length === sent.length && held.every((p, i) => p === sent[i]);
+}
+
+/** The files after a status: the index's paths in hand, read against it. A status under another
+ * index key says the index has moved since the read, so the list stands until the next read
+ * lands; one that moves no file in or out keeps the list as it is. */
+function withFiles(l: WorktreeLocal): WorktreeLocal {
+  if (!l.tracked || !l.git || indexKey(l.git.head, l.git.files) !== l.trackedAt) return l;
+  const delta = listingDelta(l.tracked, l.git.files);
+  if (delta.key === l.filesDelta) return l;
+  return { ...l, files: listedFiles(l.tracked, delta), filesDelta: delta.key };
+}
+
+/** A listing asked for before the worktree's first status was asked under no key worth the name,
+ * since nothing was known of the commit or the index. That status is the state the listing reads,
+ * a moment apart, so the ask is taken as made under it: a tab that opens on the files otherwise
+ * reads the whole index twice, the second time for a key that only says what the first lacked. */
+function askedUnder(l: WorktreeLocal, git: GitInfo): WorktreeLocal {
+  if (!l.filesFor) return l;
+  const index = indexKey(git.head, git.files);
+  return { ...l, filesFor: { index, disk: diskKey(git.files) }, ...(l.tracked ? { trackedAt: index } : {}) };
 }
 
 /** The socket went: a listing asked for and never answered is asked again on the next one. The
@@ -3398,7 +3437,8 @@ function onServer(s: State, msg: StoreServerMsg): State {
       if (page && (msg.files.length > 0 || committed > 0 || page.landed)) changes = true;
       const next = withLocal(s, msg.worktreeId, (l) => {
         const git = mergeGit(l.git, msg);
-        return { ...l, git, changedRanges: rangesKept(l.git, git, l.changedRanges) };
+        const landed = { ...l, git, changedRanges: rangesKept(l.git, git, l.changedRanges) };
+        return withFiles(l.git ? landed : askedUnder(landed, git));
       });
       return { ...withLayout(next, { changes }), changesAuto };
     }
@@ -3433,12 +3473,32 @@ function onServer(s: State, msg: StoreServerMsg): State {
       return next;
     }
     case "files":
-      return withLocal(s, msg.worktreeId, (l) => ({
-        ...l,
-        files: msg.paths,
-        submodules: msg.submodules,
-        ignored: msg.ignored,
-      }));
+      return withLocal(s, msg.worktreeId, (l) => {
+        // Most commits add and remove no file, and the index read after one comes back as it was:
+        // the lists in hand stay, and with them the tree, the composer's folders and the mention
+        // index built on them, which at a hundred thousand files is a fifth of a second of work.
+        const tracked = sameList(l.tracked, msg.paths) ? l.tracked : msg.paths;
+        const submodules = sameList(l.submodules, msg.submodules) ? l.submodules : msg.submodules;
+        // read against the status in hand whatever key that is under: the index just read is
+        // nearer to it than the one it replaces
+        const delta = listingDelta(tracked, l.git?.files ?? []);
+        const kept = tracked === l.tracked && delta.key === l.filesDelta ? l.files : undefined;
+        const { trackedAt: _was, ...rest } = l;
+        return {
+          ...rest,
+          tracked,
+          ...(l.filesFor ? { trackedAt: l.filesFor.index } : {}),
+          submodules,
+          files: kept ?? listedFiles(tracked, delta),
+          filesDelta: delta.key,
+        };
+      });
+    case "ignored-files": {
+      // the walk is run again whenever a file comes or goes, and mostly finds what it found: the
+      // list in hand stays, and with it the tree built on it
+      if (sameList(s.local[msg.worktreeId]?.ignored, msg.ignored)) return s;
+      return withLocal(s, msg.worktreeId, (l) => ({ ...l, ignored: msg.ignored }));
+    }
     case "search-results":
       return withLocal(s, msg.worktreeId, (l) => ({
         ...l,

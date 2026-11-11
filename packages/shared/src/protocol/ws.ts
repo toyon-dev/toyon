@@ -317,9 +317,14 @@ export type ServerMsg =
        * there is nothing to draw for it here */
       asked?: true;
     }
-  /** the files on disk now; the submodules, which are entries but not files; and what git ignores,
-   * a folder ignored whole named once with a trailing slash */
-  | { t: "files"; worktreeId: string; paths: string[]; submodules: string[]; ignored: string[] }
+  /** the paths in git's index (with any it dropped whose file is still on disk), and the
+   * submodules among its entries, which are not files. What is on disk differs from it by what
+   * the git-status already says, the untracked files and the deleted ones, so the shell makes the
+   * list of files from the two. */
+  | { t: "files"; worktreeId: string; paths: string[]; submodules: string[] }
+  /** what git ignores, a folder ignored whole named once with a trailing slash. Apart from the
+   * files because finding it walks the checkout, and the tree does not wait for that. */
+  | { t: "ignored-files"; worktreeId: string; ignored: string[] }
   | { t: "search-results"; worktreeId: string; query: string; hits: SearchHit[]; truncated: boolean }
   /** where a picked element with no recorded source may be written, best first; `sure` when the first
    * is clearly it. `seq` is the find-element's, so a file opened since is not taken over. */
@@ -760,7 +765,9 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
     base: z.string().max(64).nullable(),
     seq,
   }),
-  z.object({ t: z.literal("list-files"), worktreeId: id }),
+  /** answered by a `files`, when `tracked` asks for the index to be read again, and always by
+   * an `ignored-files`, in whichever order they are ready */
+  z.object({ t: z.literal("list-files"), worktreeId: id, tracked: z.boolean() }),
   /** open the `/` menu on a worktree whose agent has not run yet: start it so it says what
    * commands it has. Answered by an `agent-commands` push, or by nothing if it will not start. */
   z.object({ t: z.literal("list-commands"), worktreeId: id }),

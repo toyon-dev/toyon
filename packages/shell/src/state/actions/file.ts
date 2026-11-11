@@ -1,35 +1,24 @@
-import { type FileServerMsg, type GitFileStatus, renderedAs } from "@toyon/shared";
+import { diskKey, type FileServerMsg, indexKey, renderedAs } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
 import { type EditorView, EMPTY_LOCAL, type OpenFile, readingView, type State } from "../store.ts";
 import { copyText, type Deps } from "./deps.ts";
 import { daemonHost, revealItems } from "./editor.ts";
 
-/**
- * What decides that the file list is stale: the commit checked out, and the paths git says were
- * added, deleted or are untracked. An edit to a file that exists changes none of it, so an agent's
- * tool calls do not refetch the list. HEAD catches a rebase or pull that adds files while the
- * status stays clean; it also refetches after a plain commit, which costs one listing.
- */
-export function listingKey(head: string | undefined, status: readonly GitFileStatus[]): string {
-  const moved: string[] = [];
-  for (const s of status) {
-    if (s.xy.includes("D")) moved.push(`-${s.path}`);
-    else if (/[?ARC]/.test(s.xy)) moved.push(`+${s.path}`);
-  }
-  return `${head ?? ""}\n${moved.sort().join("\n")}`;
-}
-
-/** Ask for the worktree's files unless the list in hand is still good. Every reader comes here
- * (⌘P, the @ menu, the files tab), so the one cached list is refreshed by whichever opens first
- * and left alone by the rest; git-status arrives after every tool call, and the key says whether
- * the set of files can have moved since the list was asked for. */
+/** Ask for the worktree's files unless what is in hand is still good. Every reader comes here
+ * (⌘P, the @ menu, the files tab), so the one list is refreshed by whichever opens first and left
+ * alone by the rest. Git-status arrives after every tool call, and two keys read off it say what
+ * can have moved since the last ask: the index's paths, which are read again only when a commit
+ * or something staged changes them, and what git ignores, walked again when a file comes or goes.
+ * The files themselves need no ask for that: the store makes them from the index and the status. */
 export function listFiles(worktreeId: string, s: Pick<State, "local">, { sock, dispatch }: Deps) {
   if (!sock) return;
   const l = s.local[worktreeId] ?? EMPTY_LOCAL;
-  const key = listingKey(l.git?.head, l.git?.files ?? []);
-  if (l.filesFor === key) return;
-  dispatch({ a: "files-asked", worktreeId, key });
-  sock.send({ t: "list-files", worktreeId });
+  const status = l.git?.files ?? [];
+  const index = indexKey(l.git?.head, status);
+  const disk = diskKey(status);
+  if (l.filesFor?.index === index && l.filesFor.disk === disk) return;
+  dispatch({ a: "files-asked", worktreeId, index, disk });
+  sock.send({ t: "list-files", worktreeId, tracked: l.filesFor?.index !== index });
 }
 
 const VIEWS: EditorView[] = ["diff", "file", "preview"];

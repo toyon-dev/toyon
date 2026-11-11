@@ -3,6 +3,9 @@ import {
   type AgentEvent,
   type ArchivedWorktree,
   type AttachmentInput,
+  diskKey,
+  type GitFileStatus,
+  indexKey,
   MANAGED_NONE,
   nextNumbers,
   type OwnedWorktree,
@@ -2070,9 +2073,9 @@ describe("git status", () => {
     const s = run([
       hello(wt("a")),
       server({ t: "git-status", worktreeId: "a", version: 9, files: [{ xy: " M", path: "x" }] }),
-      { a: "files-asked", worktreeId: "a", key: "k" },
+      { a: "files-asked", worktreeId: "a", index: "i", disk: "d" },
     ]);
-    expect(s.local.a?.filesFor).toBe("k");
+    expect(s.local.a?.filesFor).toEqual({ index: "i", disk: "d" });
     const down = reducer(s, { a: "connected", v: false });
     expect(down.local.a?.filesFor).toBeUndefined();
     expect(down.local.a?.git?.files).toHaveLength(1);
@@ -2080,6 +2083,78 @@ describe("git status", () => {
     expect(back.local.a?.git?.version).toBe(0);
     const first = reducer(back, server({ t: "git-status", worktreeId: "a", version: 1, files: [] }));
     expect(first.local.a?.git?.files).toEqual([]);
+  });
+  describe("the files, made from the index and the status", () => {
+    const status = (version: number, files: GitFileStatus[], head = "h1") =>
+      server({ t: "git-status", worktreeId: "a", version, head, files });
+    const asked = (files: GitFileStatus[], head: string | undefined = "h1"): Action => ({
+      a: "files-asked",
+      worktreeId: "a",
+      index: indexKey(head, files),
+      disk: diskKey(files),
+    });
+    const index = (...paths: string[]) => server({ t: "files", worktreeId: "a", paths, submodules: [] });
+    const dirty: GitFileStatus[] = [
+      { xy: " D", path: "gone.ts" },
+      { xy: "??", path: "new.ts" },
+    ];
+    const listed = run([hello(wt("a")), status(1, dirty), asked(dirty), index("a.ts", "gone.ts")]);
+
+    test("the index's paths are read against the status in hand", () => {
+      expect(listed.local.a?.files).toEqual(["a.ts", "new.ts"]);
+    });
+    test("an edit moves no file in or out, so the list in hand stays", () => {
+      const edited = reducer(listed, status(2, [...dirty, { xy: " M", path: "a.ts" }]));
+      expect(edited.local.a?.files).toBe(listed.local.a?.files);
+    });
+    test("a file that is new or gone is in the list as the status says so, with nothing asked", () => {
+      const more = reducer(listed, status(2, [...dirty, { xy: "??", path: "b.ts" }]));
+      expect(more.local.a?.files).toEqual(["a.ts", "new.ts", "b.ts"]);
+      const back = reducer(more, status(3, [{ xy: "??", path: "new.ts" }]));
+      expect(back.local.a?.files).toEqual(["a.ts", "gone.ts", "new.ts"]);
+    });
+    test("a status under another index stands the list still until the index is read again", () => {
+      // the commit took new.ts out of the status, and the index in hand was read before it held
+      // the file: read against that, the file would leave the list
+      const committed = reducer(listed, status(2, [], "h2"));
+      expect(committed.local.a?.files).toBe(listed.local.a?.files);
+      const reread = run([asked([], "h2"), index("a.ts", "new.ts")], committed);
+      expect(reread.local.a?.files).toEqual(["a.ts", "new.ts"]);
+      const after = reducer(reread, status(3, [{ xy: " D", path: "a.ts" }], "h2"));
+      expect(after.local.a?.files).toEqual(["new.ts"]);
+    });
+    test("an index read back the same after a commit keeps the lists in hand, and stays in step from there", () => {
+      // an edit committed: HEAD moves, the paths do not, and the status still names what it named
+      const edited = run([status(2, dirty, "h2"), asked(dirty, "h2"), index("a.ts", "gone.ts")], listed);
+      expect(edited.local.a?.tracked).toBe(listed.local.a?.tracked);
+      expect(edited.local.a?.files).toBe(listed.local.a?.files);
+      expect(edited.local.a?.submodules).toBe(listed.local.a?.submodules);
+      const more = reducer(edited, status(3, [...dirty, { xy: "??", path: "b.ts" }], "h2"));
+      expect(more.local.a?.files).toEqual(["a.ts", "new.ts", "b.ts"]);
+      // the same paths under a status that moved a file: the index's list stays, the files do not
+      const cleaned = run([status(4, [], "h3"), asked([], "h3"), index("a.ts", "gone.ts")], more);
+      expect(cleaned.local.a?.tracked).toBe(listed.local.a?.tracked);
+      expect(cleaned.local.a?.files).toEqual(["a.ts", "gone.ts"]);
+    });
+    test("the ignored files found again leave the list in hand where it is", () => {
+      const first = reducer(listed, server({ t: "ignored-files", worktreeId: "a", ignored: [".env", "dist/"] }));
+      expect(first.local.a?.ignored).toEqual([".env", "dist/"]);
+      const again = reducer(first, server({ t: "ignored-files", worktreeId: "a", ignored: [".env", "dist/"] }));
+      expect(again).toBe(first);
+    });
+    test("a listing asked before the first status is taken as asked under it, whichever lands first", () => {
+      const under = { index: indexKey("h1", dirty), disk: diskKey(dirty) };
+      const early = run([hello(wt("a")), asked([], undefined)]);
+      const statusFirst = run([status(1, dirty), index("a.ts", "gone.ts")], early);
+      expect(statusFirst.local.a?.filesFor).toEqual(under);
+      expect(statusFirst.local.a?.files).toEqual(["a.ts", "new.ts"]);
+      const indexFirst = run([index("a.ts", "gone.ts"), status(1, dirty)], early);
+      expect(indexFirst.local.a?.filesFor).toEqual(under);
+      expect(indexFirst.local.a?.files).toEqual(["a.ts", "new.ts"]);
+      // and from there the status keeps the list in step, as it does for one asked under it
+      const more = reducer(indexFirst, status(2, [...dirty, { xy: "??", path: "b.ts" }]));
+      expect(more.local.a?.files).toEqual(["a.ts", "new.ts", "b.ts"]);
+    });
   });
   test("the changes panel starts closed and opens itself once, at the first diff", () => {
     const clean = run([

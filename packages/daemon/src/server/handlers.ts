@@ -511,7 +511,13 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   },
 
   async "list-files"(msg, ctx, s) {
-    ctx.reply({ t: "files", worktreeId: msg.worktreeId, ...(await s.files.list(msg.worktreeId)) });
+    const { worktreeId } = msg;
+    // each is sent as it is ready: the index is one read and the ignored files are a walk of the
+    // checkout, which the tree's first rows do not wait for
+    await Promise.all([
+      msg.tracked && s.files.tracked(worktreeId).then((l) => ctx.reply({ t: "files", worktreeId, ...l })),
+      s.files.ignored(worktreeId).then((ignored) => ctx.reply({ t: "ignored-files", worktreeId, ignored })),
+    ]);
   },
 
   async search(msg, ctx, s) {

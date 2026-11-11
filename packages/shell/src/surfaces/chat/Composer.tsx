@@ -1035,9 +1035,9 @@ export function Composer({
             ? (said ?? landing?.subject ?? null)
             : null;
 
-  // On open: the file listing is refreshed if the files can have moved since it was asked for
-  // (the agent may have written one this turn); cached rows render meanwhile so the menu never
-  // looks empty. An empty command list means that worktree's agent has not run, so ask the daemon
+  // On open: the file listing is asked for again if the index can have moved since the last ask
+  // (a commit, a pull); the rows in hand render meanwhile so the menu never looks empty, and a
+  // file the agent wrote this turn is already among them. An empty command list means that worktree's agent has not run, so ask the daemon
   // to start it rather than making the person send a message to find out what they could have typed.
   const wasOpen = useRef(false);
   useEffect(() => {

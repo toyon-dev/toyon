@@ -4,7 +4,8 @@
 
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
-import { stat, unlink } from "node:fs/promises";
+import { lstat, stat, unlink } from "node:fs/promises";
+import { join } from "node:path";
 import {
   type ElementTraits,
   FILE_MAX_CHARS,
@@ -16,7 +17,7 @@ import {
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { blameFile } from "../git/blame.ts";
-import { GIT, git, runRows } from "../git/exec.ts";
+import { GIT, git, gitRaw, nulSplit, runRows } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileAt, fileBefore, statusFiles } from "../git/status.ts";
@@ -25,7 +26,7 @@ import { resolveInside } from "../worktrees/paths.ts";
 import type { ReadableWorktree } from "../worktrees/service.ts";
 import { decodeText, encodeText, hasBom, looksBinary, versionOf } from "./content.ts";
 import { type ElementSources, needlesOf, rankElementSources } from "./elementSource.ts";
-import { type Listing, parseListing } from "./listing.ts";
+import { parseIgnored, parseTracked, type Tracked } from "./listing.ts";
 import { viteLineOffset } from "./vite-offset.ts";
 
 /** the page a search answers with; git is stopped once it is full */
@@ -248,18 +249,47 @@ export class FileService {
     });
   }
 
-  /** the files on disk, tracked and untracked, with the submodules and what git ignores apart */
-  async list(worktreeId: string): Promise<Listing> {
+  /**
+   * The paths in the index, with the submodules apart. Git reads them out of one file, so this
+   * costs the same whatever the checkout holds, where asking what is on disk walks every folder
+   * and stats every tracked file. The status already says how the disk differs, by the untracked
+   * files and the deleted ones, and the shell holds it and makes the files from the two.
+   */
+  async tracked(worktreeId: string): Promise<Tracked> {
     const cwd = this.require(worktreeId).path;
+    const [staged, dropped] = await Promise.all([
+      git(cwd, "ls-files", "-z", "-s"),
+      // the index against HEAD, which reads nothing in the checkout
+      gitRaw(cwd, "diff", "--cached", "--name-only", "-z", "--diff-filter=D"),
+    ]);
+    const { paths, submodules, unmerged } = parseTracked(staged.out);
+    // Two kinds of path the status cannot be trusted to settle, so the disk is asked, and both
+    // are few. An unmerged one is in the index whether or not the merge left its file. One the
+    // index dropped and the disk kept (`git rm --cached`) is still a file, and with HEAD's bytes
+    // the status is silent about it: no change at all, since the commit's `add -A` puts it back.
+    const there = async (list: string[]) => {
+      const found = await Promise.all(
+        list.map((p) =>
+          lstat(join(cwd, p)).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      );
+      return new Set(list.filter((_, i) => found[i]));
+    };
+    const [merging, kept] = await Promise.all([there(unmerged), there(nulSplit(dropped.out))]);
+    const absent = new Set(unmerged.filter((p) => !merging.has(p)));
+    return { paths: [...(absent.size > 0 ? paths.filter((p) => !absent.has(p)) : paths), ...kept], submodules };
+  }
+
+  /** what git ignores: a file by its path, a folder ignored whole by its path and a slash */
+  async ignored(worktreeId: string): Promise<string[]> {
     // --directory names a folder ignored whole once and never walks it, so node_modules is one
     // entry here rather than every file in it
-    const [staged, untracked, deleted, ignored] = await Promise.all([
-      git(cwd, "ls-files", "-z", "-s"),
-      git(cwd, "ls-files", "-z", "-o", "--exclude-standard"),
-      git(cwd, "ls-files", "-z", "-d"),
-      git(cwd, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory"),
-    ]);
-    return parseListing(staged.out, untracked.out, deleted.out, ignored.out);
+    const cwd = this.require(worktreeId).path;
+    const ignored = await git(cwd, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory");
+    return parseIgnored(ignored.out);
   }
 
   /**

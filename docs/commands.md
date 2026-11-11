@@ -19,7 +19,7 @@ Every `toyon` command. `toyon --help` prints the same list.
 | `toyon remote --tailscale` | Open Toyon from your tailnet, at this machine's Tailscale name. |
 | `toyon remote` | Print the remote setting. |
 | `toyon remote off` | Turn remote access off, and remove the `tailscale serve` entries Toyon set. |
-| `toyon pair` | Show this machine's address as a QR code, and let devices in from the terminal. |
+| `toyon pair` | Show this machine's address as a QR code, and let devices in from the terminal. See [phone.md](phone.md). |
 | `toyon deploy fly up <name>` | Run Toyon on your own Fly account at `https://name.fly.dev`. `--region <code>` picks the region; `--repo <url>` clones a repository onto it the first time. |
 | `toyon deploy fly url <name>` | Print the link to that machine again. |
 | `toyon deploy fly destroy <name>` | Delete that app and its volume. `--yes` skips the confirmation. |

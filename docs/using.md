@@ -44,6 +44,7 @@ The preview shows the copy's app. Your dev server reloads it as the agent writes
 - **See the design.** Press <kbd>⌘D</kbd> for the design pane. It lists the copy's tokens, components and class families. Hover a row to outline its matches on the page; click it to open its source.
 - **Fix it yourself.** Browse the files, edit a file or a diff, and run a terminal.
 - **Debug the page.** Open your browser's devtools on the preview. They work in the installed app too.
+- **Check it on a phone.** Pair your phone to open the chat and the preview there. See [phone.md](phone.md).
 - **Run your check.** If the settings have a `check` command, it runs after every finished turn and its output shows in the chat. `/check` runs it now.
 
 If the server crashed, a card replaces the page. See [preview.md](preview.md#when-the-page-is-empty).
@@ -71,6 +72,15 @@ To keep a change, press land or type `/land`. Land merges the chat's branch into
 ## Shortcuts
 
 Press <kbd>⌘,</kbd> for the full list.
+
+## Disk
+
+- Each copy is a git worktree in `~/.toyon/worktrees.noindex`, with its own `node_modules`.
+- On APFS, btrfs and XFS a copy is cloned copy-on-write. It takes seconds, and almost no space until its files change.
+- On ext4 and other filesystems without reflinks, each copy is a full copy, `node_modules` included.
+- The setup log shows which kind of copy was made.
+- Toyon keeps one spare copy per project set up in advance, so the next chat starts faster.
+- A copy is deleted only when you remove it.
 
 ## Limits
 

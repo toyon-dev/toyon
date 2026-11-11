@@ -42,7 +42,7 @@ Shared commands keep running as long as any copy that uses them is running.
 
 ### Switch between main and the copy
 
-A copy's chat box shows a chip for each shared command: `api · main` when the copy uses main's instance, `api · here` when it runs its own.
+A copy's chat box shows a chip for each shared command: `api · main` when the copy uses main's instance, `api · here` when it runs its own instance.
 
 - Pick `here` to start an instance in the copy. The command's `setup` runs first.
 - Pick `main` to stop the copy's instance and use main's again. Data in the copy's instance, such as a database, is not moved over.
@@ -107,7 +107,7 @@ Each copy gets a database created from a template. The database is dropped when 
 ```
 
 - Creating the database takes as long, and as much disk, as the template is big. Keep the template seed-sized, not a production dump.
-- Postgres refuses to copy a database that has open connections, so nothing may be connected to the template.
+- Postgres refuses to copy a database that has open connections, so close every connection to the template first.
 - `setup` does not see variables set in `cmd`, so the migration step sets `DATABASE_URL` again.
 
 ### Neon

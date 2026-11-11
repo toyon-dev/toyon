@@ -136,7 +136,7 @@ A copy's servers start when you open it.
 Toyon itself exits after 30 minutes with no window or preview open and nothing running. The next `toyon` or Dock launch starts it again.
 
 - These count as running: an agent mid-turn, a command, a command the agent sent to the background, a wakeup it booked, a clone, and a build after a land.
-- Toyon never exits on its own when it is reached over the network, runs on a deployed machine, or was started by hand in a terminal.
+- Toyon does not exit automatically when it is reached over the network, runs on a deployed machine, or was started by hand in a terminal.
 - `TOYON_STOP_AFTER_MS` sets the delay in milliseconds. `off` turns it off.
 
 On a Mac, Toyon also prevents idle sleep while it is in use: an agent is mid-turn, a command is running, or Toyon is open from another device.

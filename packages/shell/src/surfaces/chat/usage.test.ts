@@ -121,7 +121,7 @@ describe("limitRows", () => {
   });
 
   test("the agent's warning lands on the window it is about", () => {
-    expect(limitRows({ ...both, status: "allowed_warning" }, NOW, clock)[0]?.sub).toBe("resets t+1h, nearly out");
+    expect(limitRows({ ...both, status: "allowed_warning" }, NOW, clock)[0]?.sub).toBe("resets t+1h");
     expect(limitRows({ ...both, status: "rejected" }, NOW, clock).map((r) => r.sub)).toEqual([
       "resets t+1h, out until then",
       "resets t+120h",

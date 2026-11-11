@@ -99,8 +99,8 @@ export interface LimitRow {
   name: string;
   /** the fraction spent, as reported: past 1 when the window is overrun */
   used: number;
-  /** the line under the bar: when it resets, with the agent's warning when the window is the one
-   * it is about; or that it has reset and nothing has read it since */
+  /** the line under the bar: when it resets, and that it is out until then when the agent has
+   * refused on this window; or that it has reset and nothing has read it since */
   sub: string;
 }
 
@@ -113,12 +113,7 @@ export function limitRows(limits: AgentLimits, now: number, when = (ms: number) 
     const name = WINDOW_NAME[key];
     if (w.resetsAt <= now)
       return [{ key, name, used: 0, sub: `reset ${when(w.resetsAt)}, read again on the next reply` }];
-    const warn =
-      limits.binding === key && limits.status === "rejected"
-        ? ", out until then"
-        : limits.binding === key && limits.status === "allowed_warning"
-          ? ", nearly out"
-          : "";
+    const warn = limits.binding === key && limits.status === "rejected" ? ", out until then" : "";
     return [{ key, name, used: w.used, sub: `resets ${when(w.resetsAt)}${warn}` }];
   });
 }

@@ -12,12 +12,14 @@
 
     /* zen: full-bleed preview, all chrome hidden (⌘. exits; esc belongs to the page). The panes
        stacked under the preview (editor, design, terminal) are chrome too: hidden, not closed, so
-       they are back where they were on the way out. */
+       they are back where they were on the way out. On a file (.zen-file) the editor pane is what
+       the window was given to: it stays, the centre gives it the column, and esc closes it. */
     &.zen .changes-dock,
     &.zen .chat-dock,
     &.zen .rail,
     &.zen .dock-resize,
-    &.zen .pane {
+    &.zen:not(.zen-file) .pane,
+    &.zen-file .pane:not([data-pane="editor"]) {
       display: none;
     }
   }

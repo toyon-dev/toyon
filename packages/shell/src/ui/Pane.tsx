@@ -19,6 +19,14 @@ import { Tabs, type TabsProps } from "./Tabs.tsx";
  */
 export type PaneKind = "editor" | "design" | "terminal";
 
+/** Whether the pane of this kind has the column to itself or the keyboard in it: the pane a key
+ * pressed now is about, rather than the page above it. Read off the page, since a pane's shape is
+ * the centre's own and focus is the browser's. */
+export function paneInHand(kind: PaneKind): boolean {
+  const pane = document.querySelector<HTMLElement>(`.pane[data-pane="${kind}"]`);
+  return !!pane && (pane.classList.contains("full") || pane.contains(document.activeElement));
+}
+
 export function Pane({
   kind,
   className,

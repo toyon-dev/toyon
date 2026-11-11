@@ -1,6 +1,7 @@
 import { unseenJump } from "../../app/unseenJump.ts";
 import { chord } from "../../surfaces/util.ts";
 import { grouped, type MenuEntry, type MenuItem } from "../../ui/menu.ts";
+import { paneInHand } from "../../ui/Pane.tsx";
 import { changesTabShown, isChatCentred, routeTarget, type State, worktreeById } from "../store.ts";
 import type { Deps } from "./deps.ts";
 
@@ -136,7 +137,12 @@ export function appItems(s: AppState, { sock, dispatch }: Deps): MenuEntry[] {
       key: chord("design"),
       onClick: () => dispatch({ a: "toggle-design" }),
     },
-    { id: "zen", label: "full-bleed preview", key: chord("zen"), onClick: () => dispatch({ a: "toggle-zen" }) },
+    {
+      id: "zen",
+      label: "full-bleed preview",
+      key: chord("zen"),
+      onClick: () => dispatch({ a: "toggle-zen", file: paneInHand("editor") }),
+    },
   ];
   const app: MenuItem[] = [
     {

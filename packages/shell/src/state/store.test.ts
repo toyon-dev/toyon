@@ -62,6 +62,7 @@ import {
   sentAttachments,
   startsTurn,
   whatsNew,
+  zenShowsFile,
 } from "./store.ts";
 
 // The reducer's rules the UI depends on and nothing else documents: which worktree becomes active,
@@ -2365,6 +2366,52 @@ describe("streams and notices", () => {
     expect(on.zen).toBe(true);
     const off = run([{ a: "toggle-zen" }], on);
     expect(off.zen).toBe(false);
+  });
+  test("zen asked for from the file gives the file the window, and closing it leaves zen on the page", () => {
+    const open = run([hello(wt("a")), opening({ path: "README.md", seq: 1 })]);
+    const onFile = run([{ a: "toggle-zen", file: true }], open);
+    expect([onFile.zen, zenShowsFile(onFile)]).toEqual([true, true]);
+    const closed = run([{ a: "close-editor" }], onFile);
+    expect([closed.zen, zenShowsFile(closed)]).toEqual([true, false]);
+    // a file opened under zen after that is a pane, off screen with the others
+    expect(zenShowsFile(run([opening({ path: "b.ts", seq: 2 })], closed))).toBe(false);
+    // and the way out takes the file's turn with it: the next zen is asked afresh
+    const out = run([{ a: "toggle-zen" }], onFile);
+    expect([out.zen, out.zenFile, out.editor?.path]).toEqual([false, false, "README.md"]);
+  });
+  test("zen on a file ends when a panel, the keyboard in one, or another row is asked for", () => {
+    const onFile = run([
+      hello(wt("a"), wt("b")),
+      { a: "activate", id: "a" },
+      opening({ path: "README.md", seq: 1 }),
+      { a: "toggle-zen", file: true },
+    ]);
+    expect(zenShowsFile(onFile)).toBe(true);
+    const asks: Action[] = [
+      { a: "focus-chat" },
+      { a: "focus-changes", tab: "files" },
+      { a: "focus-rail" },
+      { a: "focus-terminal" },
+      { a: "toggle-chat" },
+      { a: "toggle-design" },
+      { a: "activate", id: "b" },
+    ];
+    for (const ask of asks) {
+      const next = run([ask], onFile);
+      expect([ask.a, next.zen, next.zenFile]).toEqual([ask.a, false, false]);
+    }
+    // a palette over the file, and a file opened in its place, are the file's window still
+    const stays: Action[] = [{ a: "open", overlay: { kind: "quick-open" } }, opening({ path: "b.ts", seq: 2 })];
+    for (const stay of stays) expect([stay.a, zenShowsFile(run([stay], onFile))]).toEqual([stay.a, true]);
+    // zen on the page is left alone by all of it
+    const onPage = run([hello(wt("a")), { a: "toggle-zen" }]);
+    expect(run([{ a: "focus-chat" }], onPage).zen).toBe(true);
+  });
+  test("zen from the file with no file open is the page's, and a file run hands the window over", () => {
+    expect(zenShowsFile(run([hello(wt("a")), { a: "toggle-zen", file: true }]))).toBe(false);
+    const onFile = run([hello(wt("a")), opening({ path: "index.html", seq: 1 }), { a: "toggle-zen", file: true }]);
+    const page = run([{ a: "zen-page" }], onFile);
+    expect([page.zen, zenShowsFile(page), page.editor?.path]).toEqual([true, false, "index.html"]);
   });
   test("the terminal pane starts hidden and toggles", () => {
     expect(initial.layout.term).toBe(false);

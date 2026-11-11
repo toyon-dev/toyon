@@ -27,10 +27,11 @@ import {
   routeTarget,
   viewedCurrent,
   viewedReach,
+  zenShowsFile,
 } from "../state/store.ts";
 import { viewedStep } from "../state/viewed.ts";
 import { isInstalledApp } from "../surfaces/util.ts";
-import type { PaneKind } from "../ui/Pane.tsx";
+import { type PaneKind, paneInHand } from "../ui/Pane.tsx";
 import { previewBus, togglePick } from "./previewBus.ts";
 import { createHeldRun, createWalkPeek } from "./railPeek.ts";
 import { railWalk } from "./railWalk.ts";
@@ -79,9 +80,15 @@ export function useChords() {
       heldRun.mods(e);
     };
     /** the pane holding the keyboard, since a click into a pane says which is meant. With none
-     * holding it, terminal first (a full-screen program in it keeps Escape for itself). */
+     * holding it, terminal first (a full-screen program in it keeps Escape for itself). Zen on a
+     * file shows one pane, and that one closes whatever held the keyboard before the rest went
+     * off screen. */
     const closePane = () => {
       const s = store.getState();
+      if (zenShowsFile(s)) {
+        store.dispatch({ a: "close-editor" });
+        return;
+      }
       const held = document.activeElement?.closest<HTMLElement>("[data-pane]")?.dataset.pane as PaneKind | undefined;
       const pane = held ?? (s.layout.term ? "terminal" : s.editor ? "editor" : s.layout.design ? "design" : null);
       if (pane === "terminal") store.dispatch({ a: "toggle-terminal" });
@@ -123,9 +130,15 @@ export function useChords() {
       // hotkeys. An overlay or the element picker holds shell focus, so those keep the full ladder
       // or there is no way back out. A zen left on by another project is not in force on one with
       // nothing to run, which has no page. With zen in force ⌘←/→ are the page's history (zenChord).
-      const inZen = s.zen && !isChatCentred(s);
+      // Zen on a file is not this mode: no page is on screen to own the keyboard, so the whole
+      // table and the ladder stand, and a chord for what zen has off screen ends zen (the reducer).
+      const onFile = zenShowsFile(s);
+      const inZen = s.zen && !isChatCentred(s) && !onFile;
       const chord = inZen ? zenChord(pressed) : pressed;
       if (inZen && !s.overlay && !s.picking && !(chord && ZEN_CHORDS.has(chord.id))) return;
+      // a panel's chord shuts the panel when it is on screen, and zen on a file has none on
+      // screen: there the chord always asks for the panel, with the keyboard in it
+      const up = (open: boolean) => open && !onFile;
       // ⌘W is only ever swallowed in an installed app, where it would close the window. A browser
       // tab takes it before the page sees it, and one that hands it over is asking about the tab.
       if (chord?.id === "close" && !isInstalledApp()) return;
@@ -258,14 +271,14 @@ export function useChords() {
             dispatch({ a: "toggle", overlay: { kind: "commands" } });
             break;
           case "zen":
-            dispatch({ a: "toggle-zen" });
+            dispatch({ a: "toggle-zen", file: paneInHand("editor") });
             break;
           case "close":
             // the preventDefault above keeps the window; what closes is the pane Escape would, the
             // one the hand pressing ⌘W was closing in the terminal or editor it learned it from. In
-            // zen the panes are off screen, and under a palette the pane is not what is being
-            // looked at, so there the window staying is the whole chord.
-            if (!(s.zen && !isChatCentred(s)) && !s.overlay) closePane();
+            // zen on the page the panes are off screen, and under a palette the pane is not what is
+            // being looked at, so there the window staying is the whole chord.
+            if (!inZen && !s.overlay) closePane();
             break;
           // the panel chords toggle, wherever the keyboard is: a panel on screen shuts, and a shut
           // one opens with the keyboard in it (the changes list, the chat box, the terminal, the
@@ -275,14 +288,14 @@ export function useChords() {
           // list is its changes list.
           case "changes":
             dispatch(
-              s.layout.changes && (changesTabShown(s) === "changes" || archivedPageOf(s) !== null)
+              up(s.layout.changes) && (changesTabShown(s) === "changes" || archivedPageOf(s) !== null)
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "changes" },
             );
             break;
           case "files":
             dispatch(
-              s.layout.changes && changesTabShown(s) === "files"
+              up(s.layout.changes) && changesTabShown(s) === "files"
                 ? { a: "toggle-changes" }
                 : { a: "focus-changes", tab: "files" },
             );
@@ -300,21 +313,27 @@ export function useChords() {
             );
             break;
           case "composer":
-            dispatch(chatChordAction(s));
+            dispatch(onFile ? { a: "focus-chat" } : chatChordAction(s));
             break;
           case "rail":
-            dispatch(s.railOpen ? { a: "toggle-rail" } : { a: "focus-rail" });
+            dispatch(up(s.railOpen) ? { a: "toggle-rail" } : { a: "focus-rail" });
             break;
           case "keys":
             dispatch({ a: "toggle", overlay: { kind: "keys" } });
             break;
           case "terminal":
-            dispatch(s.layout.term ? { a: "toggle-terminal" } : { a: "focus-terminal" });
+            dispatch(up(s.layout.term) ? { a: "toggle-terminal" } : { a: "focus-terminal" });
             break;
           case "design":
-            dispatch({ a: "toggle-design" });
+            // open already, and only off screen: the way to it is out of zen
+            dispatch(onFile && s.layout.design ? { a: "toggle-zen" } : { a: "toggle-design" });
             break;
           case "term-tab": {
+            // nothing on screen to step from: the terminal as it was left
+            if (onFile) {
+              dispatch({ a: "focus-terminal" });
+              break;
+            }
             const wt = s.rows.find((w) => w.id === s.activeId);
             if (!wt) break;
             const current = localOf(s, s.activeId).termStream;
@@ -350,7 +369,8 @@ export function useChords() {
         // a five-minute download to one is not a trade worth making. Stopping it is the button.
         else if (s.activeImportId) dispatch({ a: "watch-import", id: null });
         // bottom panes, the ladder's last rung, which ⌘W reaches directly.
-        // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key
+        // Zen is not on this ladder: it only leaves on ⌘., so Escape stays the page's own key,
+        // and on a file this rung closes the file and leaves zen on the page
         else closePane();
       }
     };

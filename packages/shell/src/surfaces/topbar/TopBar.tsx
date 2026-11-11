@@ -22,6 +22,7 @@ import { cx } from "../../ui/cx.ts";
 import { useEdges, useEdgesOf, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
+import { paneInHand } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord } from "../util.ts";
@@ -189,7 +190,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
             tone="chrome"
             on={zen}
             {...fromEnd}
-            onClick={() => dispatch({ a: "toggle-zen" })}
+            onClick={() => dispatch({ a: "toggle-zen", file: paneInHand("editor") })}
           />
         )}
       </span>

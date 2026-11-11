@@ -924,8 +924,12 @@ export interface State {
   /** one-shot: the changes panel starts closed and opens itself the first time the active
    * worktree has something to show, unless a remembered layout or a hand has already decided it */
   changesAuto: boolean;
-  /** full-bleed preview: all chrome hidden */
+  /** full-bleed: all chrome hidden, and the window given to the page */
   zen: boolean;
+  /** zen gave the window to the open file instead: the editor had the column to itself or the
+   * keyboard in it when zen was asked for. Never set without a file open (reducer); read through
+   * `zenShowsFile`, which knows when zen is in force. */
+  zenFile: boolean;
   /** bumped to put the keyboard in the terminal (the pane is `layout.term`; one shell per worktree,
    * kept running while hidden) */
   focusTerm: number;
@@ -1153,6 +1157,7 @@ export function initialState(opts: InitialOpts): State {
     typing: false,
     changesAuto: true,
     zen: false,
+    zenFile: false,
     focusTerm: 0,
     termRun: null,
     termTall: 0,
@@ -1309,6 +1314,15 @@ export function isChatCentred(
 ): boolean {
   const repo = repoById(s, activeWorktreeRepoId(s));
   return !!repo && runsNothing(repo);
+}
+
+/** Zen is showing the open file rather than the page: the file at the window's size, with the
+ * keyboard the shell's as it is outside zen. Escape closes the file down to the page, which zen
+ * then shows and hands the keyboard. */
+export function zenShowsFile(
+  s: Pick<State, "zen" | "zenFile" | "repos" | "rows" | "activeId" | "activeRepoId" | "archivedPage">,
+): boolean {
+  return s.zen && s.zenFile && !isChatCentred(s);
 }
 
 /** what ⌘L does: an open chat dock shuts, a shut one opens with the caret in the box. A chat in the
@@ -1866,7 +1880,12 @@ export type Action =
   | { a: "files-asked"; worktreeId: string; index: string; disk: string }
   /** open or close the active project's archived section */
   | { a: "toggle-archived" }
-  | { a: "toggle-zen" }
+  /** `file`: the editor pane fills the column or holds the keyboard (ui/Pane.tsx, paneInHand), so
+   * the file is what zen gives the window to */
+  | { a: "toggle-zen"; file?: boolean }
+  /** zen hands the window from the file to the page; the file stays open, off screen with the
+   * other panes, and is back in its pane on the way out */
+  | { a: "zen-page" }
   | { a: "toggle-terminal" }
   /** open the terminal pane if it is shut, and ask the terminal for the keyboard either way */
   | { a: "focus-terminal" }
@@ -2075,10 +2094,38 @@ function withKnocks(s: State, knocks: Knock[], letIn: boolean): State {
 export const canOfferPhone = (s: Pick<State, "frame" | "remote" | "tailscale">): boolean =>
   s.frame === "desk" && (s.remote !== null || s.tailscale?.state === "ready");
 
+/** what a hand does to a panel's place in the layout: zen on a file has every panel off screen,
+ * so one of these from there ends zen (reducer) */
+const PANEL_MOVES: ReadonlySet<Action["a"]> = new Set<Action["a"]>([
+  "toggle-chat",
+  "toggle-changes",
+  "toggle-rail",
+  "toggle-terminal",
+  "toggle-design",
+]);
+
 export function reducer(s: State, action: Action): State {
   let next = withLauncher(strayed(reduce(s, action)));
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
+  // zen on a file is the file at the window's size, and the rest of the shell still answers:
+  // asking for a panel or the keyboard in one, moving to another row, or the file going any way
+  // but closed by hand ends zen, so what was asked for is in sight. Checked here, so a chord, a
+  // palette's command and the editor's own keys all count.
+  if (zenShowsFile(s) && next.zen) {
+    const asked =
+      PANEL_MOVES.has(action.a) ||
+      next.activeId !== s.activeId ||
+      next.focusChat !== s.focusChat ||
+      next.focusChanges !== s.focusChanges ||
+      next.focusRail !== s.focusRail ||
+      next.focusTerm !== s.focusTerm ||
+      (!next.editor && action.a !== "close-editor");
+    if (asked) next = { ...next, zen: false };
+  }
+  // the file zen gave the window to is closed, or zen is over: the window is the page's, and a
+  // file opened after that is a pane again, off screen with the rest
+  if (next.zenFile && !(next.zen && next.editor)) next = { ...next, zenFile: false };
   // the page is for an item in the project on screen: the item restored or deleted, or the project
   // switched under it, and it is gone. Checked here, so every list refresh and repo move counts.
   // A restore lists the row before the archive list catches up, and the page ends on the row: its
@@ -2701,7 +2748,9 @@ function reduce(s: State, action: Action): State {
     case "toggle-zen":
       // zen gives the window to the page, and a project with nothing to run has no page to give it to
       if (isChatCentred(s)) return s;
-      return { ...s, zen: !s.zen };
+      return { ...s, zen: !s.zen, zenFile: !s.zen && !!action.file && !!s.editor };
+    case "zen-page":
+      return s.zenFile ? { ...s, zenFile: false } : s;
     case "toggle-terminal":
       return withLayout(s, { term: !s.layout.term });
     case "focus-terminal":

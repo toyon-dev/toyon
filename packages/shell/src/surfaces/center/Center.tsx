@@ -29,7 +29,7 @@ import {
   useRows,
   useTheme,
 } from "../../state/selectors.ts";
-import { worktreeById } from "../../state/store.ts";
+import { worktreeById, zenShowsFile } from "../../state/store.ts";
 import { bridgeThemeMsg } from "../../theme.ts";
 import { cx } from "../../ui/cx.ts";
 import { useDragResize, usePersisted } from "../../ui/hooks.ts";
@@ -169,6 +169,7 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const zen = useStore((s) => s.zen);
+  const zenFile = useStore(zenShowsFile);
   // a file held over the centre: it opens here, and the area says so
   const dropOver = useStore((s) => s.dragFiles?.at === "centre");
   const zenRef = useRef(zen);
@@ -598,16 +599,18 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
   return (
     <div className="center-root" ref={rootRef}>
       {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
-          the preview comes back for the window rather than leaving the column blank. A page of
-          toyon's own over the centre hides the panes instead (below), so the area stays. */}
+          the preview comes back for the window rather than leaving the column blank, unless zen
+          gave the window to the file, which then has the column whatever its height was. A page
+          of toyon's own over the centre hides the panes instead (below), so the area stays. */}
       <div
         className={cx("center-area", dropOver && "drop-over")}
         style={{
           display:
-            !(zen && !chatCentred) &&
-            !archivedPage &&
-            !notesPage &&
-            ((editor && editorFull) || (designOpen && designFull))
+            zenFile ||
+            (!(zen && !chatCentred) &&
+              !archivedPage &&
+              !notesPage &&
+              ((editor && editorFull) || (designOpen && designFull)))
               ? "none"
               : undefined,
         }}
@@ -700,8 +703,9 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
         <EditorPane
           editor={editor}
           height={editorFull ? "100%" : editorH > 0 ? editorH : "45%"}
-          full={editorFull}
-          onToggleFull={() => setEditorFull(!editorFull)}
+          full={editorFull || zenFile}
+          // the window is the file's in zen, with no preview above to split with
+          onToggleFull={zenFile ? undefined : () => setEditorFull(!editorFull)}
           onDragStart={startEditorDrag}
         />
       )}

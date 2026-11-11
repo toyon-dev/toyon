@@ -21,7 +21,7 @@ import { type DaemonUrls, uploadAttachment } from "../ws.ts";
 import type { Store } from "./context.tsx";
 import { outBoxOf } from "./outbox.ts";
 import type { PendingAttachment } from "./pending.ts";
-import { chatChordAction, composerBoxOf, type State, worktreeById } from "./store.ts";
+import { chatChordAction, composerBoxOf, type State, worktreeById, zenShowsFile } from "./store.ts";
 
 export { toInput } from "./pending.ts";
 
@@ -191,7 +191,8 @@ export function addToChat(store: Store, taken: Taken | null) {
     });
     if (!waiting) attachText(store, boxId, taken.text, from);
   }
-  store.dispatch(taken ? { a: "focus-chat" } : chatChordAction(s));
+  // zen on a file has no chat on screen for the bare chord to shut: there it asks for the chat
+  store.dispatch(taken || zenShowsFile(s) ? { a: "focus-chat" } : chatChordAction(s));
 }
 
 /** The box the files tab's words go into: the composer on screen, for the worktree the tab shows.

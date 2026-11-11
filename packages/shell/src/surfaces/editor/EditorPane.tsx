@@ -18,6 +18,7 @@ import {
   localOf,
   routeTarget,
   worktreeById,
+  zenShowsFile,
 } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
@@ -250,7 +251,8 @@ export function EditorPane({
     if (!tookChat.current) return;
     tookChat.current = false;
     const s = store.getState();
-    if (!s.layout.chat && !isChatCentred(s)) dispatch({ a: "toggle-chat" });
+    // shown rather than toggled: this is the split's bookkeeping, not a hand asking for a panel
+    if (!s.layout.chat && !isChatCentred(s)) dispatch({ a: "show-chat" });
   }, [store, dispatch]);
   const onSplit = (on: boolean) => {
     setSplit(on);
@@ -262,7 +264,8 @@ export function EditorPane({
     // only then, so a wide window keeps the chat beside the split
     const s = store.getState();
     const width = bodyRef.current?.clientWidth ?? Number.POSITIVE_INFINITY;
-    if (s.layout.chat && !isChatCentred(s) && width < SPLIT_MIN) {
+    // (in zen the file has the window, and the chat is not what the columns are short of)
+    if (s.layout.chat && !isChatCentred(s) && !zenShowsFile(s) && width < SPLIT_MIN) {
       tookChat.current = true;
       dispatch({ a: "toggle-chat" });
     }
@@ -278,8 +281,10 @@ export function EditorPane({
   const runnable = live && !onScreen && !history && !kept && !loose && rendering === "html";
   const runPage = () => {
     previewBus.post(worktreeId, { type: "navigate", path: servedPath(path) });
-    // a full pane covers the preview the page just went to
-    if (full) onToggleFull?.();
+    // a full pane covers the preview the page just went to, and so does a file zen gave the
+    // window to, which hands it over to the page
+    if (zenShowsFile(store.getState())) dispatch({ a: "zen-page" });
+    else if (full) onToggleFull?.();
   };
   return (
     // full mode takes whatever the terminal pane leaves rather than a fixed 100%

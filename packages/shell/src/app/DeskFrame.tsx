@@ -3,6 +3,7 @@ import { appItems } from "../state/actions/app.ts";
 import { useDispatch, useSock, useStore, useStoreInstance } from "../state/context.tsx";
 import { STORAGE } from "../state/keys.ts";
 import { useArchivedPage, useBare, useChatCentred, useFoundPage, useTouch } from "../state/selectors.ts";
+import { zenShowsFile } from "../state/store.ts";
 import { Center } from "../surfaces/center/Center.tsx";
 import { ChangesDock } from "../surfaces/changes/ChangesDock.tsx";
 import { ChatDock } from "../surfaces/chat/ChatDock.tsx";
@@ -39,6 +40,7 @@ export function DeskFrame() {
   // zen to give the window to (a zen left on by another project waits for that one)
   const chatCentred = useChatCentred();
   const zen = useStore((s) => s.zen) && !chatCentred;
+  const zenFile = useStore(zenShowsFile);
   // both docks are hidden, not closed, on the new-project view and while the composer sits in the
   // centre of an empty project. So is the rail: on the page it lists a project that is not the one
   // being made, and on an empty project its only row is main, already open, with no new worktree to
@@ -107,7 +109,7 @@ export function DeskFrame() {
 
   return (
     <div
-      className={cx("app", zen && "zen")}
+      className={cx("app", zen && "zen", zenFile && "zen-file")}
       data-chat-side={chatSide}
       // present while the window has no hover: the stylesheets that show something on hover key
       // a tap's route to it on this, on either frame

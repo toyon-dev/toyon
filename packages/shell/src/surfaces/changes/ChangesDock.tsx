@@ -15,7 +15,7 @@ import {
   useLocalField,
   useTurnOpen,
 } from "../../state/selectors.ts";
-import { type ChangesTab, changesTabShown, repoById } from "../../state/store.ts";
+import { type ChangesTab, changesTabShown, type EditorView, repoById } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { step } from "../../ui/listNav.ts";
@@ -199,8 +199,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // walking the list opens each file as it arrives, and the keyboard stays here for the next arrow;
   // Enter is the one that takes it into the file
   const open = useCallback(
-    (path: string, focus = false, since?: string) =>
-      shownId && openFile({ sock, dispatch }, { worktreeId: shownId, path, focus, ref: snapRef ?? undefined, since }),
+    // a view named here is a row's eye, so it is the person's pick
+    (path: string, focus = false, since?: string, view?: EditorView) =>
+      shownId &&
+      openFile(
+        { sock, dispatch },
+        { worktreeId: shownId, path, focus, ref: snapRef ?? undefined, since, ...(view ? { view, picked: true } : {}) },
+      ),
     [shownId, snapRef, sock, dispatch],
   );
 
@@ -369,9 +374,14 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   );
   /** open a file as one commit left it. The sha is the expanded commit's: only one is ever open. */
   const openAt = useCallback(
-    (path: string, focus = false) => {
+    (path: string, focus = false, view?: EditorView) => {
       const ref = openShaRef.current;
-      if (shownId && ref) openFile({ sock, dispatch }, { worktreeId: shownId, path, ref, focus });
+      if (shownId && ref) {
+        openFile(
+          { sock, dispatch },
+          { worktreeId: shownId, path, ref, focus, ...(view ? { view, picked: true } : {}) },
+        );
+      }
     },
     [shownId, sock, dispatch],
   );
@@ -607,18 +617,22 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // One press for every section of the changes list. `at` is where the section's rows start: a
   // path can sit in more than one section, and the cursor lands on the row that was pressed. The
   // rows are memoized on their props, so each section's handler reads the latest press through a ref.
-  const press = (at: number, path: string) => {
+  // A press on a row's eye names the view, and opens the file in it whatever the row showed before.
+  const press = (at: number, path: string, view?: EditorView) => {
     const i = rows.findIndex((f, n) => n >= at && f.path === path);
     setSel(i);
     // a press on the open test file folds its names and opens them again, as a commit's row does
-    if (opensAt(i) && openTests.length > 0) setFolded((f) => !f);
-    else open(path, false, sinceAt(i));
+    if (!view && opensAt(i) && openTests.length > 0) setFolded((f) => !f);
+    else open(path, false, sinceAt(i), view);
   };
   const pressRef = useRef(press);
   pressRef.current = press;
   const clickRow = useCallback((path: string) => pressRef.current(0, path), []);
   const clickTurn = useCallback((path: string) => pressRef.current(turnAt, path), [turnAt]);
   const clickCommitted = useCallback((path: string) => pressRef.current(committedAt, path), [committedAt]);
+  const readRow = useCallback((path: string) => pressRef.current(0, path, "preview"), []);
+  const readTurn = useCallback((path: string) => pressRef.current(turnAt, path, "preview"), [turnAt]);
+  const readCommitted = useCallback((path: string) => pressRef.current(committedAt, path, "preview"), [committedAt]);
   const clickCommit = useCallback(
     (sha: string) => {
       setSel(above + histRows.findIndex((r) => !r.file && r.commit.sha === sha));
@@ -633,6 +647,13 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       else openAt(path);
     },
     [histRows, above, openAt, openPath, openRef, openTests],
+  );
+  const readHistFile = useCallback(
+    (path: string) => {
+      setSel(above + histRows.findIndex((r) => r.file?.path === path));
+      openAt(path, false, "preview");
+    },
+    [histRows, above, openAt],
   );
   // the preview shows the working tree, so a line in a commit has nowhere on the page to light up
   const noHover = useCallback(() => {}, []);
@@ -732,6 +753,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     checked={checked.includes(f.path)}
                     onOpen={clickRow}
                     onCheck={kept ? undefined : check}
+                    onRead={readRow}
                     menu={menuUncommitted}
                     onHover={hoverFile}
                     onDragStart={dragPicked}
@@ -766,6 +788,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     active={marked(turnAt + i, rowIsOpen(turnAt + i))}
                     selected={cursorOn(turnAt + i)}
                     onOpen={clickTurn}
+                    onRead={readTurn}
                     menu={menuTurn}
                     onHover={hoverFile}
                     onDragStart={dragOne}
@@ -804,6 +827,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                     active={marked(committedAt + i, rowIsOpen(committedAt + i))}
                     selected={cursorOn(committedAt + i)}
                     onOpen={clickCommitted}
+                    onRead={readCommitted}
                     menu={menuCommitted}
                     onHover={hoverFile}
                     onDragStart={dragOne}
@@ -837,6 +861,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
                       active={marked(above + i, rowIsOpen(above + i))}
                       selected={cursorOn(above + i)}
                       onOpen={clickHistFile}
+                      onRead={readHistFile}
                       menu={menuAtCommit}
                       onHover={noHover}
                       onDragStart={dragOne}

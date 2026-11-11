@@ -2584,6 +2584,28 @@ describe("the editor's open file", () => {
     expect(reducer(initial, { a: "editor-view", v: "file" }).editor).toBeNull();
   });
 
+  test("the rendered view picked by hand holds for the files opened after it", () => {
+    const changed = { before: "a", after: "b" };
+    const first = [hello(wt("a")), opening({ path: "a.md", seq: 1 }), readInto("a.md", changed)];
+    const next = (path: string, seq: number) => [opening({ path, seq }), readInto(path, changed)];
+    const toggled: Action[] = [...first, { a: "editor-view", v: "preview" }];
+    expect(run(first).editor?.view).toBe("diff");
+    expect(run([...first, ...next("b.md", 2)]).editor?.view).toBe("diff");
+    expect(run([...toggled, ...next("b.md", 2)]).editor?.view).toBe("preview");
+    // a file that does not render opens on its diff, and the pick is there for the one after it
+    expect(run([...toggled, ...next("x.tsx", 2)]).editor?.view).toBe("diff");
+    expect(run([...toggled, ...next("x.tsx", 2), ...next("b.md", 3)]).editor?.view).toBe("preview");
+    // picking another view ends it, and an open that names its view is not second-guessed
+    expect(run([...toggled, { a: "editor-view", v: "diff" }, ...next("b.md", 2)]).editor?.view).toBe("diff");
+    const asked = [opening({ path: "b.md", seq: 2, view: "diff" }), readInto("b.md", changed)];
+    expect(run([...toggled, ...asked]).editor?.view).toBe("diff");
+    // a row's eye is a pick; a caller that opens every markdown file rendered is not
+    const eye = [opening({ path: "a.md", seq: 1, view: "preview", picked: true }), readInto("a.md", changed)];
+    expect(run([hello(wt("a")), ...eye, ...next("b.md", 2)]).editor?.view).toBe("preview");
+    const tree = [opening({ path: "a.md", seq: 1, view: "preview" }), readInto("a.md", changed)];
+    expect(run([hello(wt("a")), ...tree, ...next("b.md", 2)]).editor?.view).toBe("diff");
+  });
+
   test("a read that failed closes a pane with nothing in it, and over text only says why", () => {
     const empty = run([
       hello(wt("a")),

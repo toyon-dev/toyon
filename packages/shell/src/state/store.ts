@@ -650,6 +650,9 @@ export interface OpenFile {
    * turn changed, beside the tree it started from */
   since?: string;
   view?: EditorView;
+  /** `view` was picked by hand for this open (a row's eye, its menu) rather than being how the
+   * caller opens every file, so it counts as the pane's own switch does */
+  picked?: boolean;
   line?: EditorLine;
   /** the tab the pane opens on when the file heads a list of pieces: that piece's, by its id */
   piece?: string;
@@ -712,9 +715,13 @@ export const sameFile = (a: FileRef, b: FileRef) =>
 
 /** The file the editor pane has open. The pane shows it before the daemon has read it; fileSync
  * reads it and keeps what the pane shows in step with the disk. */
-export interface EditorFile extends Omit<OpenFile, "view"> {
+export interface EditorFile extends Omit<OpenFile, "view" | "picked"> {
   /** null until the first read decides: a changed file opens on its diff, an unchanged one as the file */
   view: EditorView | null;
+  /** the person picked the rendered view by hand and has not picked another since. It outlives
+   * the file: the next one opened with no view asked for (a walk down the changes list) is read
+   * rendered too, where it can be */
+  reads?: boolean;
   /** null while the first read is out */
   disk: EditorDisk | null;
   /** the file changed on disk under unsaved edits: what is there now, until reload or keep mine settles it */
@@ -2429,6 +2436,7 @@ function reduce(s: State, action: Action): State {
           ...(v.ref ? { ref: v.ref } : {}),
           ...(v.since ? { since: v.since } : {}),
           view: v.view ?? same?.view ?? null,
+          ...((v.picked ? v.view === "preview" : e?.reads) ? { reads: true } : {}),
           seq: v.seq,
           disk: same?.disk ?? null,
           ...(line ? { line } : {}),
@@ -2482,13 +2490,17 @@ function reduce(s: State, action: Action): State {
       // show, so it opens to be read. A file with nothing on the other side (new to the branch) is
       // never shown as its diff: that would be every line added, which the changes row already says,
       // over a phantom removed line that Monaco draws for the empty side.
+      // Someone who picked the rendered view is reading the changes, not comparing them, and is
+      // not sent back to the diff by every row: a file that renders opens rendered until they
+      // pick another view.
       const reading = readingView(e.path);
+      const held = e.reads && reading === "preview" ? reading : null;
       const view =
         disk.before === ""
           ? e.view && e.view !== "diff"
             ? e.view
             : reading
-          : (e.view ?? (disk.before === disk.after ? reading : "diff"));
+          : (e.view ?? held ?? (disk.before === disk.after ? reading : "diff"));
       return { ...s, editor: { ...e, view, disk } };
     }
     case "editor-conflict": {
@@ -2498,7 +2510,9 @@ function reduce(s: State, action: Action): State {
     case "editor-view":
       // the line was a one-time jump; past a switch the editor carries its own place, and a line
       // kept for the diff view would land inside a collapsed region the next time the file is read
-      return s.editor ? { ...s, editor: { ...s.editor, view: action.v, line: undefined } } : s;
+      return s.editor
+        ? { ...s, editor: { ...s.editor, view: action.v, reads: action.v === "preview", line: undefined } }
+        : s;
     case "editor-refused": {
       const e = s.editor;
       if (!e || !sameFile(e, action.file)) return s;

@@ -178,7 +178,11 @@
     margin-left: auto;
   }
 
+  /* a div, since it holds a button: the pointer and the text a drag does not select are a
+     button's, named here */
   .git-file {
+    cursor: pointer;
+    user-select: none;
     & .xy {
       width: 18px;
     }
@@ -212,6 +216,48 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+  }
+  /* The file read rendered, on a row whose file can be: the eye a tool call's line carries in the
+   chat. It is there only under the pointer, since a glyph at rest on every markdown row was a
+   column down the list, and it stands where the status letter does, centred on the letter and
+   over a patch of the row's own fill that covers it: one column for every row, with the name and
+   the counts left as they are read. A phone has no hover to find it with and the row's menu
+   holds the same view, so there it never shows. */
+  .git-file {
+    & .xy {
+      position: relative;
+    }
+    & .git-file-read {
+      visibility: hidden;
+      position: absolute;
+      /* half the letter's width, in whole pixels so the glyph is not drawn across two */
+      left: 4px;
+      top: 50%;
+      translate: -50% -50%;
+      &::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: var(--radius);
+        background: var(--git-file-fill, var(--element0));
+      }
+      /* at the size of the row's own type, and positioned so it paints over the fill */
+      & > svg {
+        position: relative;
+        width: 13px;
+        height: 13px;
+      }
+    }
+    :where([data-hover]) &:hover .git-file-read {
+      visibility: visible;
+    }
+  }
+  /* the fill under the eye is the band's on a marked row, which the pointer does not repaint */
+  .changes-dock .git-file {
+    &[data-state~="current"],
+    &[data-state~="checked"] {
+      --git-file-fill: var(--element1);
     }
   }
   .counts {

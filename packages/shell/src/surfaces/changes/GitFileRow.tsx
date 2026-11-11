@@ -1,6 +1,7 @@
-import type { GitFileStatus } from "@toyon/shared";
+import { type GitFileStatus, renderedAs } from "@toyon/shared";
 import { type DragEvent, memo } from "react";
 import { useTowardCentre } from "../../state/selectors.ts";
+import { IconButton } from "../../ui/Button.tsx";
 import { type MenuEntry, useContextMenu } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { useCarries } from "../chat/carried.ts";
@@ -26,6 +27,7 @@ export const GitFileRow = memo(function GitFileRow({
   checked = false,
   onOpen,
   onCheck,
+  onRead,
   menu,
   onHover,
   onDragStart,
@@ -47,6 +49,9 @@ export const GitFileRow = memo(function GitFileRow({
   onOpen: (path: string) => void;
   /** check or uncheck this row; a shift-click starts the pick from a row that has none showing */
   onCheck?: (path: string) => void;
+  /** open the file rendered instead of as its diff: the eye a row shows under the pointer when its
+   * file is one that can be read that way */
+  onRead?: (path: string) => void;
   /** what a right-click on this file offers */
   menu: (path: string) => MenuEntry[];
   onHover: (path: string, entering: boolean) => void;
@@ -59,8 +64,13 @@ export const GitFileRow = memo(function GitFileRow({
   const carries = useCarries();
   const tipSide = useTowardCentre("changes");
   const { name, dir } = splitPath(f.path);
+  // a deleted file has nothing left to render
+  const readable = !!onRead && !!renderedAs(f.path) && !f.xy.includes("D");
   return (
-    <button
+    // A div and not a button, since the row holds a button of its own and a button cannot hold
+    // one. Nothing a button gives is lost: the list has the keyboard and opens the row itself.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the list holds focus and answers the keys for its rows
+    <div
       className="row row-sm git-file row-edge"
       id={id}
       data-state={rowState({ current: active, cursor: selected, checked })}
@@ -81,12 +91,29 @@ export const GitFileRow = memo(function GitFileRow({
       data-tip-placement={tipSide}
     >
       {checking && <input type="checkbox" className="changes-check" checked={checked} readOnly tabIndex={-1} />}
-      <span className={`xy ${xyClass(f.xy)}`}>{xyLetter(f.xy)}</span>
+      <span className={`xy ${xyClass(f.xy)}`}>
+        {xyLetter(f.xy)}
+        {readable && (
+          <IconButton
+            icon="eye"
+            className="git-file-read"
+            label="Read this file rendered"
+            placement={tipSide}
+            // the list owns the keyboard, and its menu holds the same view
+            tabIndex={-1}
+            onClick={(e) => {
+              // the press is the button's, not the row's: a click on the row opens the diff
+              e.stopPropagation();
+              onRead(f.path);
+            }}
+          />
+        )}
+      </span>
       <span className="path">
         <span className="name">{name}</span>
         {dir && <span className="dir row-dim">{dir}</span>}
       </span>
       <LineCounts f={f} />
-    </button>
+    </div>
   );
 });

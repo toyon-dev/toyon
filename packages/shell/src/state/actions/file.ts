@@ -138,7 +138,9 @@ export function fileItems(
       id: `view:${v}`,
       label: `view ${v}`,
       onClick: () =>
-        showing ? dispatch({ a: "editor-view", v }) : openFile(deps, { worktreeId: wt.id, path, view: v, ref, since }),
+        showing
+          ? dispatch({ a: "editor-view", v })
+          : openFile(deps, { worktreeId: wt.id, path, view: v, picked: true, ref, since }),
     }));
   const abs = `${wt.dir}/${path}`;
   const open = kept ? [] : revealItems(() => sock?.send({ t: "reveal", worktreeId: wt.id, path }), daemonHost(sock));

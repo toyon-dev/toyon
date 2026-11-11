@@ -9,7 +9,7 @@ npx toyon
 
 Toyon opens in a browser tab. To install it as an app, press the install button in the top bar. This works in Chrome, Arc, Brave and Edge.
 
-What happens when it opens a project is in [project.md](project.md). To run it on your own server instead, see [remote.md](remote.md).
+How to use it is in [using.md](using.md). To run it on your own server instead, see [remote.md](remote.md).
 
 ## Requirements
 
@@ -24,7 +24,7 @@ What happens when it opens a project is in [project.md](project.md). To run it o
 toyon doctor
 ```
 
-It checks git, the sandbox, the agents and the rest of what Toyon needs, and says what failed. On Linux it also prints the AppArmor profile that Ubuntu 24.04 and later need.
+It checks that git, the sandbox and the agents are set up, and reports what failed. On Linux it also prints the AppArmor profile that Ubuntu 24.04 and later need.
 
 ## Install it globally
 
@@ -35,7 +35,7 @@ toyon ~/projects/app
 
 - `toyon .` opens the current folder, in the app if you installed it.
 - `toyon --help` lists every command, and so does [commands.md](commands.md).
-- Started with npx, Toyon offers the global install above the chat box after it has answered you.
+- If you started with npx, Toyon offers the global install above the chat box.
 
 ## Update
 

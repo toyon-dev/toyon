@@ -5,16 +5,16 @@ Every `toyon` command. `toyon --help` prints the same list.
 | Command | What it does |
 |---|---|
 | `toyon [path]` | Open the project at `path`, or the current folder. A path to a file opens that file. |
-| `toyon <git url>` | Open Toyon ready to clone that repository into the current folder. See [project.md](project.md). |
+| `toyon <git url>` | Open Toyon ready to clone that repository into the current folder. See [using.md](using.md#new-project). |
 | `toyon send [text]` | Send a message about the current folder. From the main checkout it starts a new copy; from a copy it goes to that chat; a worktree Toyon does not run is taken over. Takes the text, `--file <path>` or stdin. `--carry` moves main's uncommitted changes into the new copy. |
 | `toyon start` | Start Toyon without opening it. |
 | `toyon stop` | Stop Toyon, and every dev server and agent it runs. |
 | `toyon restart` | Restart Toyon on the installed version. Open windows reconnect. |
 | `toyon update` | Install the newest version, then restart once no chat is mid-reply. [More](#toyon-update). |
 | `toyon version` | Print the installed version, and the running one. |
-| `toyon doctor` | Check what Toyon needs and say what failed. |
+| `toyon doctor` | Check the setup and report what failed. |
 | `toyon logs` | Print Toyon's log. `-f` follows it; `-n N` sets how many lines. |
-| `toyon uninstall` | Remove what Toyon put on this machine. Your projects and `toyon/` branches stay. [More](#toyon-uninstall). |
+| `toyon uninstall` | Remove Toyon's files from this machine. Your projects and `toyon/` branches are kept. [More](#toyon-uninstall). |
 | `toyon remote <name>` | Open Toyon from another device at `https://name`, through a reverse proxy on this machine. `--ports` puts each preview on its own port, for a proxy without a wildcard certificate. See [remote.md](remote.md). |
 | `toyon remote --tailscale` | Open Toyon from your tailnet, at this machine's Tailscale name. |
 | `toyon remote` | Print the remote setting. |
@@ -26,7 +26,7 @@ Every `toyon` command. `toyon --help` prints the same list.
 
 ## `toyon update`
 
-A global install updates itself. Every six hours it checks npm, installs the newest version, and restarts after no agent has worked for a couple of minutes. Open tabs reload on their own. `toyon update` does this now.
+A global install updates itself. Every six hours it checks npm, installs the newest version, and restarts after no agent has worked for a couple of minutes. Open tabs reload on their own. `toyon update` runs the update now.
 
 - `toyon version` prints the installed and the running version.
 - `TOYON_UPDATES=off` in the environment turns off the check and the install.

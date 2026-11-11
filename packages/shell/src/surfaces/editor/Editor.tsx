@@ -24,9 +24,13 @@ import { blameCommit, blameLine } from "./blameLine.ts";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
+import { registerMenus } from "./monacoMenu.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
 import { SPLIT_MIN } from "./SplitToggle.tsx";
 import { languageFor, registerTsx } from "./tsx.ts";
+
+// ahead of every other call into Monaco: the first one to need a service fixes the set
+registerMenus();
 
 // monaco 0.56 moved the TS language API off `monaco.languages.typescript` (now a deprecated stub)
 // to a top-level `typescript` export

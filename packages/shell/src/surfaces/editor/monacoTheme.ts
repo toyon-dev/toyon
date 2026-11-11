@@ -141,12 +141,6 @@ export function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "editorStickyScroll.background": c.surface1,
       "editorStickyScrollHover.background": c.element0,
 
-      "menu.background": c.surface2,
-      "menu.foreground": c.text0,
-      "menu.border": c.border0,
-      "menu.selectionBackground": c.element1,
-      "menu.selectionForeground": c.text0,
-      "menu.separatorBackground": c.border0,
       "input.background": c.surface0,
       "input.foreground": c.text0,
       "input.border": c.border0,

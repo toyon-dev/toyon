@@ -371,6 +371,20 @@ export function EditorPane({
       // same list the file's row in the changes panel has
       actions={
         <>
+          {/* a toolbar switch, chosen once and left, so it takes an icon's room and no word. First,
+              because it comes and goes with the form: the head is set from its end, so what leads
+              it can leave without moving a control after it, and lit, its seat stands the head's
+              gap from the strip beside it, as the strips do from each other */}
+          {wrappable && (
+            <IconButton
+              icon="wrap"
+              tone="chrome"
+              on={wrap}
+              aria-pressed={wrap}
+              label="Wrap lines: fold a long line at the pane's edge"
+              onClick={() => setWrap(!wrap)}
+            />
+          )}
           {forms && (
             <span className="editor-pair">
               <Tabs
@@ -419,18 +433,6 @@ export function EditorPane({
             >
               <Icon name="run" className="icon-inline" /> run
             </Button>
-          )}
-          {/* a toolbar switch, last, so it stands with the pane's own beside it: chosen once and
-              left, it takes an icon's room and no word */}
-          {wrappable && (
-            <IconButton
-              icon="wrap"
-              tone="chrome"
-              on={wrap}
-              aria-pressed={wrap}
-              label="Wrap lines: fold a long line at the pane's edge"
-              onClick={() => setWrap(!wrap)}
-            />
           )}
         </>
       }

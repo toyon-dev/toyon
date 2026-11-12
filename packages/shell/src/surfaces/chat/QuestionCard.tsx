@@ -31,6 +31,7 @@ import {
   dropBlankNote,
   emptyDraft,
   enterMovesOn,
+  enterSends,
   isOwnRow,
   openNote,
   ownChosen,
@@ -183,11 +184,11 @@ export function QuestionCard({
     moveOn(next);
   };
   /** enter on a row: the pick, except on a multi-select with something ticked, where the ticks
-   * are the answer and enter is what it is in the composer, the send. A multi-select card looks
-   * like every other, and with enter only ticking, the first row ticked and the next enter
-   * unticked it, with nothing on screen saying the send was ⌘⏎. With nothing ticked enter ticks
-   * the cursor's row, so enter twice on one row is "this one, go"; the skip has its own key. The
-   * "other" row is walked to for its field, so enter there opens it whatever is ticked. */
+   * are the answer and enter is what it is in the composer, the send. With enter only ticking,
+   * the first row ticked and the next enter unticked it, and the send was ⌘⏎ alone. With nothing
+   * ticked enter ticks the cursor's row, so enter twice on one row is "this one, go"; the skip
+   * has its own key. The "other" row is walked to for its field, so enter there opens it
+   * whatever is ticked. */
   const enter = (oi: number) => {
     if (!multi || isOwnRow(q, oi) || !enterMovesOn(q, draft[current])) return pick(oi);
     moveOn(dropBlankNote(draft, current));
@@ -262,13 +263,16 @@ export function QuestionCard({
    * a row is, on every keyboard, and a button arriving under the list moved the box; on touch
    * the field carries its own send, since this foot is what the keyboard covers. Nothing lists
    * the keys: the arrows, enter and escape are what they are everywhere, and the one key that
-   * is not says so on its row. Each page carries its own foot; it sits at the page's floor so
+   * is not says so on its row. The exception is a lone multi-select, where enter ticks until
+   * something is ticked and sends after: the send wears the key from then (`enterSends`), the
+   * way the skip and the note wear theirs. Each page carries its own foot; it sits at the page's floor so
    * the send is in one place whichever page is open. The agent's stop is not here: it keeps the
    * box's corner, as it does over the plain field. */
   const foot = (qq?: AskQuestion, a?: AskAnswer) => (
     <CardFoot>
       {(!qq || !pickSends(qq)) && (
         <Button variant="outline" size="md" disabled={refused || !canSubmit(questions, draft)} onClick={submit}>
+          {enterSends(questions, qq, a) && <Kbd k="enter" chip />}
           send
         </Button>
       )}
@@ -370,6 +374,7 @@ export function QuestionCard({
         {open && chips}
         <Choices
           rows={rows}
+          multi={!!qq.multi}
           cursor={open ? cursor : undefined}
           onCursor={(oi) => {
             setCursor(oi);

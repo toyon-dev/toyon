@@ -16,6 +16,7 @@ import {
   dropBlankNote,
   emptyDraft,
   enterMovesOn,
+  enterSends,
   isOwnRow,
   nextUnanswered,
   openAsk,
@@ -237,6 +238,20 @@ describe("the keyboard's view of the ask", () => {
     // a single-select's enter is the pick, which moves on by itself
     expect(enterMovesOn(one[0], { selected: ["cookies"] })).toBe(false);
     expect(enterMovesOn(undefined, { selected: ["cookies"] })).toBe(false);
+  });
+
+  test("enter is the send on a lone multi-select once it is answered, and nowhere else", () => {
+    const multi = q("stack", ["Redis", "Postgres"], { multi: true, note: { label: "Other" } });
+    // until the first tick enter is the tick, so the send names no key
+    expect(enterSends([multi], multi, { selected: [] })).toBe(false);
+    expect(enterSends([multi], multi, { selected: ["redis"] })).toBe(true);
+    expect(enterSends([multi], multi, { selected: [], note: "neither" })).toBe(true);
+    // with several questions enter walks on to the next, or to the send page
+    expect(enterSends([multi, ...one], multi, { selected: ["redis"] })).toBe(false);
+    // a single-select's enter is the pick, and the lone one has no send button to wear a key
+    expect(enterSends(one, one[0], { selected: ["cookies"] })).toBe(false);
+    // the send page has no question open
+    expect(enterSends([multi], undefined, undefined)).toBe(false);
   });
 
   test("the send page follows the questions when there is more than one", () => {

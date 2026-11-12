@@ -107,6 +107,13 @@ export function enterMovesOn(q: AskQuestion | undefined, a: AskAnswer | undefine
   return !!q?.multi && answered(a);
 }
 
+/** enter on a row is the ask's send: a lone multi-select once it is answered, where moving on has
+ * nowhere to go but out. The send button says the key then, since on that card alone enter has
+ * been a tick up to here; with several questions enter walks on and the send is a page of its own. */
+export function enterSends(questions: AskQuestion[], q: AskQuestion | undefined, a: AskAnswer | undefined): boolean {
+  return sendPage(questions) === -1 && enterMovesOn(q, a);
+}
+
 /** a question the agent marked required needs a pick or a note before the ask can go back */
 export function canSubmit(questions: AskQuestion[], draft: AskAnswer[]): boolean {
   return questions.every((q, i) => !q.required || answered(draft[i]));

@@ -17,6 +17,8 @@ export type IconName =
   | "close"
   | "edit"
   | "check"
+  | "tickbox"
+  | "tickbox-on"
   | "split"
   | "columns"
   | "full"
@@ -83,6 +85,11 @@ const ICON_PATHS: Record<IconName, string> = {
   // pencil on the same diagonal as the crosshair ticks, with the nib split off
   edit: "M10.6 2.6 13.4 5.4 5.8 13H3v-2.8z M9.2 4l2.8 2.8 M3 10.2l2.8 2.8",
   check: "M3.4 8.4 6.4 11.4 12.6 4.6",
+  // a tick box, empty and ticked: a row that is one of several to pick wears it, so the box is
+  // there before anything is ticked. The tick is `check` drawn to stand inside the box, clear of
+  // its stroke on every side at 13px, where the full-size one would cross it
+  tickbox: "M4.5 2.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z",
+  "tickbox-on": "M4.5 2.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M5.3 8.2 7.2 10.1 10.7 6",
   // a pane with a divider (split) and the same pane without one (full height)
   split: "M2.5 2.5h11v11h-11z M2.5 8h11",
   // the same pane divided the other way: two columns, for a diff drawn side by side

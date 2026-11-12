@@ -1,5 +1,6 @@
-/* Choices (Choices.tsx): the numbered rows a card offers, the digit gutter, the cursor, the
-   description, the row's own key, and the field a row holds once something is typed against it. */
+/* Choices (Choices.tsx): the numbered rows a card offers, the digit gutter, the tick box of a row
+   that is one of several to pick, the cursor, the description, the row's own key, and the field a
+   row holds once something is typed against it. */
 @layer tokens, base, surfaces;
 @layer base {
   /* the rows are a picker's rows and bleed out of the padded box they sit in, the way .picker-list
@@ -10,10 +11,11 @@
   }
   /* a picker's row (the seat under the cursor, the bleed and inset) with a shape of its own; the
      compound selector is what makes the shape win over .picker-item's single line whichever of
-     the two stylesheets reached the page first */
+     the two stylesheets reached the page first. The columns are named, and each part sits on its
+     name, so a list whose rows wear a tick box adds a column without moving any part's rule. */
   .picker-item.choice {
     display: grid;
-    grid-template-columns: 14px 1fr auto;
+    grid-template-columns: [num] 14px [label] 1fr [hint] auto;
     column-gap: 8px;
     align-items: baseline;
     padding-block: 5px;
@@ -32,23 +34,40 @@
      other however many rows there are. Each part names its column, so on a touch window or a
      plain list, where no digit is drawn, the gutter closes and the label does not fall into it. */
   .choice-num {
-    grid-column: 1;
+    grid-column: num;
     justify-content: flex-end;
   }
   .choices-touch .picker-item.choice,
   .choices-plain .picker-item.choice {
-    grid-template-columns: 0 1fr auto;
+    grid-template-columns: [num] 0 [label] 1fr [hint] auto;
     column-gap: 0;
   }
+  /* the tick box of a row that is one of several to pick, in a gutter of its own after the digit,
+     so the label and everything under it start in one column whether or not the row is ticked.
+     Empty it is the digit's tier; ticked it is the accent, the colour of the row's edge. With no
+     digit drawn the box leads the row, and keeps its gap from the label. */
+  .choices-multi .picker-item.choice {
+    grid-template-columns: [num] 14px [box] auto [label] 1fr [hint] auto;
+  }
+  .choices-multi:is(.choices-touch, .choices-plain) .picker-item.choice {
+    grid-template-columns: [box] auto [label] 1fr [hint] auto;
+    column-gap: 8px;
+  }
+  .choice-box {
+    grid-column: box;
+    [data-state~="checked"] > & {
+      color: var(--accent);
+    }
+  }
   .choice-label {
-    grid-column: 2;
+    grid-column: label;
     color: var(--text0);
   }
   /* the scan tier, the row's own, held still under the cursor: the seat's lift would carry it to
      the label's tier, and a row whose label, description and note are one colour has no first
      line to find */
   .choice-desc {
-    grid-column: 2 / -1;
+    grid-column: label / -1;
     color: var(--ink1);
   }
   /* the sample under the description: a mockup or a snippet, so the mono face with its lines
@@ -57,7 +76,7 @@
      sits in its band; left-aligned because the row is a button. A long one scrolls inside its
      cap rather than taking the card. */
   .choice-sample {
-    grid-column: 2 / -1;
+    grid-column: label / -1;
     max-height: 12lh;
     overflow-y: auto;
     margin: 4px 0 2px;
@@ -71,7 +90,7 @@
   }
   /* the cursor row's own key, at the far end of the label's line */
   .choice-hint {
-    grid-column: 3;
+    grid-column: hint;
     grid-row: 1;
     font: var(--type-ui-sm);
     white-space: nowrap;
@@ -82,7 +101,7 @@
   }
   /* the field takes the description's line, so opening it moves nothing */
   .choice-field {
-    grid-column: 2 / -1;
+    grid-column: label / -1;
     min-width: 0;
     resize: none;
     field-sizing: content;
@@ -92,13 +111,13 @@
     }
     /* the send on touch takes the line's far end, beside the field rather than under it */
     &:has(+ .choice-send) {
-      grid-column: 2;
+      grid-column: label;
     }
   }
   /* at the foot of the field's lines, where a thumb finds the send of every messaging app, on the
      line the caret is on once the note has grown */
   .choice-send {
-    grid-column: 3;
+    grid-column: hint;
     align-self: end;
   }
   /* no cursor walks these rows, so the pointer's seat is theirs to draw */

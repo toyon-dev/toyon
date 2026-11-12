@@ -28,4 +28,10 @@
     border: 1px solid var(--border0);
     border-radius: var(--radius);
   }
+  /* in a bordered button the chip gives back the two pixels its own border adds, so the button
+     stands as tall with a key in it as without: a key that arrives in a button already on screen
+     (the question card's send) must not move the row it is in */
+  .btn-outline > .kbd-chip {
+    margin-block: -1px;
+  }
 }

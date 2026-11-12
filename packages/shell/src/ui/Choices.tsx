@@ -67,6 +67,11 @@ export type Choice = {
  * On touch a row's own key has no key to be pressed on, so the row slides instead (ui/slide.ts):
  * a drag along it toward its start uncovers the hint's words, and letting go there does what the
  * key does, through `onHint`. A tap stays the pick.
+ *
+ * Rows that are one of several to pick (`multi`) each wear a tick box ahead of the label: a press
+ * there ticks and does not answer, and a list that looked like a pick-one list until its first
+ * tick was read as one. The box is on every row from the first paint, empty until its row is
+ * checked, and the checked row keeps the edge every selection in the app wears.
  */
 export function Choices({
   rows,
@@ -74,10 +79,13 @@ export function Choices({
   onCursor,
   onPick,
   onHint,
+  multi = false,
   hover = false,
   plain = false,
 }: {
   rows: Choice[];
+  /** several rows can be checked at once, so each wears a tick box */
+  multi?: boolean;
   cursor?: number;
   onCursor?: (i: number) => void;
   onPick: (i: number) => void;
@@ -118,7 +126,13 @@ export function Choices({
     // the digits are a hardware keyboard's idiom: on a touch window the rows are tapped, and the
     // gutter goes with the digit
     <div
-      className={cx("choices", hover && "choices-hover", touch && "choices-touch", plain && "choices-plain")}
+      className={cx(
+        "choices",
+        multi && "choices-multi",
+        hover && "choices-hover",
+        touch && "choices-touch",
+        plain && "choices-plain",
+      )}
       ref={list}
     >
       {rows.map((row, i) => {
@@ -151,6 +165,11 @@ export function Choices({
         const body = (
           <>
             {keyed && <Kbd k={String(i + 1)} className="choice-num row-dim" />}
+            {multi && (
+              <span className={cx("choice-box", !row.checked && "row-dim")}>
+                <Icon name={row.checked ? "tickbox-on" : "tickbox"} className="icon-inline" />
+              </span>
+            )}
             <span className="choice-label">{row.label}</span>
             {keyed && row.hint && (
               <span className={cx("choice-hint row-dim", on && row.hint.on !== false && "on")}>
@@ -204,6 +223,7 @@ export function Choices({
             type="button"
             className={cx("picker-item choice row-edge", deny)}
             data-state={state}
+            aria-pressed={multi ? !!row.checked : undefined}
             disabled={row.disabled}
             onMouseMove={toRow}
             onClick={() => onPick(i)}

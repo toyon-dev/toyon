@@ -450,15 +450,17 @@ export type AgentEvent =
    * `held` is what kept the worktree's landed mark back right after, when something did: the work
    * is on the base, and the row says why the rail does not show it */
   | { type: "landed"; message: string; mark?: LandMark; url?: string; held?: string; ts: number }
-  /** a worktree made from a piece of this one's work has landed; `url` is its pull request when
-   * the landing was one. Kept on the transcript so the row reads back after a reload, and read by
-   * the next prompt so the agent here hears it too. `same`: a sibling of this project, not work in
+  /** a worktree made from a piece of this one's work has landed, or an open one a piece
+   * of it was sent into; `url` is its pull request when the landing was one. Kept on the
+   * transcript so the row reads back after a reload, and read by the next prompt so the
+   * agent here hears it too. `same`: a sibling of this project, not work in
    * another one. `again`: the branch this worktree waited for before it started landed once more,
    * with follow-up commits; written on the waiting worktree's own transcript. `awaited`: a branch
    * this worktree's own work waited for, named by a here piece of its list, landed; written on
    * the origin's transcript, where its wait stood under the box. `subjects` is what the landing
    * put on that main, as its mark says it (`LandMark.subjects`); absent when there is nothing to
-   * say. */
+   * say. `sent`: this worktree sent a piece into the landed one and did not make it, so the
+   * landing is that worktree's own and may not hold the piece. */
   | {
       type: "piece-landed";
       worktreeId: string;
@@ -469,6 +471,7 @@ export type AgentEvent =
       same?: true;
       again?: true;
       awaited?: true;
+      sent?: true;
       ts: number;
     }
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list

@@ -123,6 +123,13 @@ describe("prompts for work in another project", () => {
     expect(pieceLandedContext({ ...first, again: true })).toBe(
       'The branch this worktree waited for before it started, "First", landed again on this project\'s main with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.',
     );
+    // an open worktree a piece was sent into: the landing is its own, and may not hold the piece
+    expect(pieceLandedContext({ title: "Composer", repoName: "toyon", same: true, sent: true })).toBe(
+      "The worktree this one sent a piece to, \"Composer\", has landed on this project's main; the landing is that worktree's own, so check that it holds the piece before anything here relies on it.",
+    );
+    expect(pieceLandedContext({ title: "Form", repoName: "acp", sent: true })).toStartWith(
+      'The worktree this one sent a piece to, "Form" in acp, has landed on that project\'s main; the landing',
+    );
     // the branch the origin's own piece waited for
     expect(pieceLandedContext({ ...first, awaited: true })).toBe(
       'The branch your own piece waited for, "First", has landed on this project\'s main; that piece can go ahead now, and Toyon rebases onto main when this lands.',
@@ -169,6 +176,10 @@ describe("prompts for work in another project", () => {
     // a branch of another project: its main, and no rebase here
     expect(pieceWakePrompt([{ title: "First", branch: "acp/first", project: "acp", pieces: ["Mine"] }])).toBe(
       'The branch your own piece "Mine" waited for, "First" (acp/first), has landed on main in the project acp. Do "Mine" here now, and only that. What "First" landed is readable on main now.',
+    );
+    // a piece sent into an open worktree: the same ask, with the word that the landing may not hold it
+    expect(pieceWakePrompt([{ title: "Composer", branch: "toyon/composer", pieces: [], sent: true }])).toBe(
+      'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; check that the landing holds the piece. Nothing here was set to wait for it. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it. What "Composer" landed is readable on main now, and Toyon rebases onto main when this lands.',
     );
     // work handed off with nothing set to wait: the agent brings in line what depends on it and reports
     expect(pieceWakePrompt([{ title: "Docs", branch: "toyon/docs", project: "toyon", pieces: [], handed: true }])).toBe(

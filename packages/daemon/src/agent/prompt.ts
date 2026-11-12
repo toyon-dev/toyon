@@ -381,7 +381,7 @@ const chatAt = (transcript: string) =>
 export function pieceLandedContext(
   landed: Pick<
     Extract<AgentEvent, { type: "piece-landed" }>,
-    "title" | "repoName" | "url" | "subjects" | "same" | "again" | "awaited"
+    "title" | "repoName" | "url" | "subjects" | "same" | "again" | "awaited" | "sent"
   >,
   chat?: string,
 ): string {
@@ -395,9 +395,11 @@ export function pieceLandedContext(
     ? `The branch your own piece waited for, "${title}", has landed on this project's main${where}; that piece can go ahead now, and Toyon rebases onto main when this lands.`
     : landed.again
       ? `The branch this worktree waited for before it started, "${title}", landed again on this project's main${where} with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.`
-      : landed.same
-        ? `The sibling worktree "${title}", a piece of the work planned here, has landed on this project's main${where}; anything here that waited on it can take the real change now, and a later piece that waited for it has started.`
-        : `The work this worktree handed off to ${landed.repoName}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
+      : landed.sent
+        ? `The worktree this one sent a piece to, "${title}"${landed.same ? "" : ` in ${landed.repoName}`}, has landed on ${landed.same ? "this project's" : "that project's"} main${where}; the landing is that worktree's own, so check that it holds the piece before anything here relies on it.`
+        : landed.same
+          ? `The sibling worktree "${title}", a piece of the work planned here, has landed on this project's main${where}; anything here that waited on it can take the real change now, and a later piece that waited for it has started.`
+          : `The work this worktree handed off to ${landed.repoName}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
   return said + what + read;
 }
 
@@ -407,7 +409,9 @@ export function pieceLandedContext(
  * then nothing of it is on this project's main. `pieces` may be empty for a wait recorded
  * without them. `handed` is work this worktree handed off and set nothing to wait for: when no
  * landing here was waited for, the agent is asked to bring in line what depends on it, if
- * anything does, and to say what it did, which is the piece reporting back. */
+ * anything does, and to say what it did, which is the piece reporting back. `sent` is the same
+ * for a piece sent into a worktree that was already open: the landing is that worktree's own,
+ * so the agent is told to check that it holds the piece. */
 export function pieceWakePrompt(
   landed: ReadonlyArray<{
     title: string;
@@ -416,6 +420,7 @@ export function pieceWakePrompt(
     project?: string;
     pieces: readonly string[];
     handed?: boolean;
+    sent?: boolean;
   }>,
 ): string {
   const quoted = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(", ");
@@ -424,13 +429,15 @@ export function pieceWakePrompt(
     const main = l.project ? `main in the project ${l.project}` : "this project's main";
     if (l.handed)
       return `The work this worktree handed off, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
+    if (l.sent)
+      return `The worktree this one sent a piece to, "${l.title}" (${l.branch}), has landed on ${main}${where}; check that the landing holds the piece.`;
     const own =
       l.pieces.length === 0
         ? "your own piece"
         : `your own ${l.pieces.length === 1 ? "piece" : "pieces"} ${quoted(l.pieces)}`;
     return `The branch ${own} waited for, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
   });
-  const waited = landed.filter((l) => !l.handed);
+  const waited = landed.filter((l) => !l.handed && !l.sent);
   const pieces = [...new Set(waited.flatMap((l) => l.pieces))];
   const build =
     waited.length === 0

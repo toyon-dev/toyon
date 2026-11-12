@@ -472,6 +472,11 @@ export interface WorktreeInfo {
         plan?: string;
         after?: { id: string };
       };
+  /** the worktrees that sent a piece of their work into this one since it last landed, by id. A
+   * send makes no worktree to carry a `from`, so this is how the landing finds who to tell: each
+   * is told on its own chat when this one lands and its agent started, and the list goes with
+   * that landing, since a piece sent after it rides the next one. */
+  senders?: string[];
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

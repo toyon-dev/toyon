@@ -7,7 +7,8 @@
 // proposal is open from its `handoff-proposed` until a `handoff-go`, `handoff` or `handoff-declined`
 // with the same id, and the fates the person pressed are `handoff-fate` events, the last one per
 // piece standing. A piece that waits for a sibling to land is held on the origin's record, so it
-// survives a restart and leaves with the origin.
+// survives a restart and leaves with the origin. A piece sent to an open worktree leaves its
+// sender on that worktree's record, for the landing there to tell.
 
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -96,7 +97,7 @@ function pieceLanded(
   repo: RepoInfo,
   to: WorktreeInfo,
   mark: LandMark | undefined,
-  why: Pick<PieceLanded, "again" | "awaited"> = {},
+  why: Pick<PieceLanded, "again" | "awaited" | "sent"> = {},
 ): PieceLanded {
   return {
     type: "piece-landed",
@@ -409,11 +410,20 @@ type Awaits = { id: string; pieces: string[] };
 
 /** a landing a wake tells of: the branch and, when it is not this project's, its project.
  * `pieces` are the worktree's own that waited for it; `handed` is a piece it handed off and set
- * nothing to wait for, whose landing its agent is started on all the same. */
-type Woke = { title: string; branch: string; url?: string; project?: string; pieces: string[]; handed?: true };
+ * nothing to wait for, whose landing its agent is started on all the same; `sent` is the same
+ * for a piece it sent into the landed worktree. */
+type Woke = {
+  title: string;
+  branch: string;
+  url?: string;
+  project?: string;
+  pieces: string[];
+  handed?: true;
+  sent?: true;
+};
 
 /** the landed worktree as a wake in `to` names it */
-function wokeBy(landed: WorktreeInfo, repo: RepoInfo, to: WorktreeInfo): Omit<Woke, "pieces" | "handed"> {
+function wokeBy(landed: WorktreeInfo, repo: RepoInfo, to: WorktreeInfo): Omit<Woke, "pieces" | "handed" | "sent"> {
   return {
     title: landed.title,
     branch: landed.branch,
@@ -1079,6 +1089,7 @@ export class HandoffService implements ToolProvider {
       });
       // the press put work into the target, so its row moves up the rail like a composer send's
       this.d.prompted(target.id);
+      this.recordSender(target, wt.id);
       became.set(piece.id, { fate, worktree: { id: target.id, branch: target.branch, title: target.title } });
       return { pieceId: piece.id, fate, worktreeId: target.id, title: target.title, ...crossed };
     }
@@ -1162,6 +1173,16 @@ export class HandoffService implements ToolProvider {
         resolve();
       });
     });
+  }
+
+  /** The sender of a piece sent to an open worktree, onto that worktree's record, once however
+   * many pieces it sent: the target's next landing is the one that can carry them, and reads the
+   * record to tell the sender (tellSenders). On the target's record, so it survives a restart
+   * and leaves with the target, which then has no landing to tell of. */
+  private recordSender(target: WorktreeInfo, senderId: string): void {
+    if (target.senders?.includes(senderId)) return;
+    target.senders = [...(target.senders ?? []), senderId];
+    this.d.state.save();
   }
 
   /** The worktrees the origin's own work waits for, by its here pieces, onto its record (hereWait).
@@ -1271,7 +1292,8 @@ export class HandoffService implements ToolProvider {
   }
 
   /** A worktree landed. The worktree it came from, when a piece made it, is told on its chat and
-   * in its agent's next prompt. Every piece queued behind it, on any origin, is made now and that
+   * in its agent's next prompt, and so is each worktree that sent a piece into it since it last
+   * landed (tellSenders). Every piece queued behind it, on any origin, is made now and that
    * origin's chat told, a piece waiting on one of those re-pointed at the worktree made; one that
    * could not be made is dropped with the reason, and what waited on it goes too. Then every
    * worktree that waited for this branch before it started hears that it landed again. Each of
@@ -1280,6 +1302,7 @@ export class HandoffService implements ToolProvider {
     const told = new Set<string>();
     const origin = this.tellOrigin(landedId, mark);
     if (origin) told.add(origin);
+    const senders = this.tellSenders(landedId, told, mark);
     // the worktrees this landing makes waited for it by design: this is their first word, not again
     const madeNow = new Set<string>();
     for (const origin of this.d.state.worktrees) {
@@ -1317,27 +1340,33 @@ export class HandoffService implements ToolProvider {
     }
     for (const id of this.tellWaiters(landedId, madeNow, mark)) told.add(id);
     const awaited = this.tellAwaiting(landedId, told, mark);
-    if (origin && !awaited.has(origin)) this.wakeOrigin(origin, landedId);
+    // an origin started as one is not started again as a sender, in the same message
+    const woken = origin && !awaited.has(origin) && this.wakeHanded(origin, landedId) ? origin : null;
+    for (const id of senders) if (id !== woken && !awaited.has(id)) this.wakeHanded(id, landedId, true);
   }
 
   /** The origin of a piece is started when the piece first lands, though nothing of its own was
    * set to wait: handing the work off was the ask, and the landing is the answer, which its agent
    * takes up or says it has no use for. Without this the answer sits until the person next writes
    * there. Only the first landing: what that worktree lands later is its own follow-up, which
-   * rides the next prompt as a note. Not an origin whose own piece still waits for another
-   * branch: that landing starts it, on a prompt that carries this one's note. Never an origin
-   * whose own work is done. */
-  private wakeOrigin(originId: string, landedId: string): void {
-    const origin = this.d.state.worktree(originId);
+   * rides the next prompt as a note. `sent`: the same for the sender of a piece sent into the
+   * landed worktree, at whichever landing follows the send, since the record names a sender for
+   * one landing alone. Not a worktree whose own piece still waits for another branch: that
+   * landing starts it, on a prompt that carries this one's note. Never one whose own work is
+   * done. Says whether it was started. */
+  private wakeHanded(toId: string, landedId: string, sent = false): boolean {
+    const to = this.d.state.worktree(toId);
     const landed = this.d.state.worktree(landedId);
     const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
-    if (origin?.kind !== "worktree" || !landed || !repo) return;
-    if ((landed.lands?.length ?? 0) > 1 || origin.awaits?.length || !this.takesSend(origin)) return;
-    this.wake(origin, this.d.runtime.ensureAgent(origin).agent, {
-      ...wokeBy(landed, repo, origin),
+    if (to?.kind !== "worktree" || !landed || !repo) return false;
+    if (to.awaits?.length || !this.takesSend(to)) return false;
+    if (!sent && (landed.lands?.length ?? 0) > 1) return false;
+    this.wake(to, this.d.runtime.ensureAgent(to).agent, {
+      ...wokeBy(landed, repo, to),
       pieces: [],
-      handed: true,
+      ...(sent ? { sent: true as const } : { handed: true as const }),
     });
+    return true;
   }
 
   /** every worktree whose own work waited for the landed branch (recordAwaits) hears of it, once:
@@ -1368,8 +1397,8 @@ export class HandoffService implements ToolProvider {
     return awaited;
   }
 
-  /** The agent whose own piece waited for the landed branch, or who handed the landed work off,
-   * is started on it, between turns: the landing's note rides the next prompt, but an agent with
+  /** The agent whose own piece waited for the landed branch, or who handed the landed work off
+   * or sent a piece into it, is started on it, between turns: the landing's note rides the next prompt, but an agent with
    * nothing else to do sends none, and what is queued behind this branch waits on that piece.
    * Landings during one turn make one wake naming them all, since the first wake's own message
    * would make a second read as told. Nothing is sent when a message went out meanwhile, the
@@ -1396,7 +1425,7 @@ export class HandoffService implements ToolProvider {
           return;
         const titles = landed.map((l) => `"${l.title}"`).join(", ");
         const pieces = new Set(landed.flatMap((l) => l.pieces));
-        const why = landed.every((l) => l.handed)
+        const why = landed.every((l) => l.handed || l.sent)
           ? `${titles} landed, so the agent takes up what it handed off`
           : `${titles} landed, so the agent starts the ${pieces.size === 1 ? "piece" : "pieces"} that waited`;
         agent.send(pieceWakePrompt(landed), { asked: { kind: "handoff", why }, keepCards: true });
@@ -1476,6 +1505,31 @@ export class HandoffService implements ToolProvider {
       this.d.runtime.ensureAgent(w).agent.note(pieceLanded(landed, repo, w, mark, { again: true }));
     }
     return told;
+  }
+
+  /** Every worktree that sent a piece into the landed one since it last landed hears of the
+   * landing, as a send, and joins `told`. Once: not one `told` already as its origin, and not one
+   * whose own work waited for it, which tellAwaiting tells in that word. The record lets them all
+   * go, told or gone, since a piece sent after this rides the next landing. The senders still
+   * open are named, told here or not, for the landing to start. */
+  private tellSenders(landedId: string, told: Set<string>, mark?: LandMark): string[] {
+    const wt = this.d.state.worktree(landedId);
+    if (!wt?.senders) return [];
+    const senders = wt.senders;
+    delete wt.senders;
+    this.d.state.save();
+    const repo = this.d.state.repo(wt.repoId);
+    if (!repo) return [];
+    const open: string[] = [];
+    for (const id of senders) {
+      const sender = this.d.state.worktree(id);
+      if (sender?.kind !== "worktree") continue;
+      open.push(id);
+      if (told.has(id) || sender.awaits?.some((a) => a.id === landedId)) continue;
+      told.add(id);
+      this.d.runtime.ensureAgent(sender).agent.note(pieceLanded(wt, repo, sender, mark, { sent: true }));
+    }
+    return open;
   }
 
   /** a queued piece whose awaited worktree is gone will never be made: dropped, and the origin's

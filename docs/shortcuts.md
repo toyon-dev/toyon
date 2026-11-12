@@ -1,6 +1,6 @@
 # Features and shortcuts
 
-Each feature with how to reach it. The short list, and what Toyon does on its own, is in [features.md](features.md).
+Each feature with how to reach it. The short list and the automatic features are in [features.md](features.md).
 
 ## Chat
 

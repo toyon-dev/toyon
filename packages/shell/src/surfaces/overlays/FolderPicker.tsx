@@ -56,11 +56,6 @@ export function FolderPicker({ project }: { project: NewProjectState }) {
       }}
       onBack={() => dispatch({ a: "close" })}
       placeholder="type a folder path"
-      keys={(active) => ({
-        complete: "completes the path",
-        pick: active?.kind === "here" ? "chooses it" : active?.kind === "up" ? "goes up" : "opens it",
-        back: "goes back",
-      })}
       empty="no such folder"
       row={(r) =>
         r.kind === "here" ? (

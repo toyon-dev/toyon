@@ -278,32 +278,6 @@ export function ProjectPicker({
             ? "switch project, or type a name or path"
             : "type a name or a path to start"
       }
-      keys={(active) => ({
-        complete: "completes the path",
-        pick:
-          active?.kind === "dir" && !active.entry.isRepo
-            ? "descends"
-            : active?.kind === "pending"
-              ? "watches it"
-              : active?.kind === "create"
-                ? active.parent
-                  ? "creates it"
-                  : "names it"
-                : active?.kind === "clone"
-                  ? "clones it"
-                  : active?.kind === "new"
-                    ? "starts one"
-                    : active?.kind === "disk"
-                      ? "browses"
-                      : active?.kind === "from-url"
-                        ? "asks for one"
-                        : active?.kind === "add-machine"
-                          ? "adds one"
-                          : active?.kind === "machine" || (active?.kind === "repo" && active.machine)
-                            ? "switches machine"
-                            : "opens",
-        back: "closes",
-      })}
       // an empty query always has the standing rows, so there is always something typed here; the
       // url form has nothing until a URL is, and says what it takes
       empty={

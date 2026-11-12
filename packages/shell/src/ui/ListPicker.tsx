@@ -3,7 +3,6 @@ import { useTouch } from "../state/selectors.ts";
 import { cx } from "./cx.ts";
 import { Field } from "./Field.tsx";
 import { useFocusOnMount, useOnChange } from "./hooks.ts";
-import { KeyHints } from "./KeyHints.tsx";
 import { type Completion, type Ghost, useListNav } from "./listNav.ts";
 import { type MenuEntry, menuStore, useContextMenu } from "./menu.ts";
 import { type Anchored, Overlay } from "./Overlay.tsx";
@@ -13,8 +12,6 @@ import { rowState } from "./rowState.ts";
 export { step } from "./listNav.ts";
 
 /** the verb for each key the picker binds, as the person at the shell would say it */
-type KeyVerbs = { nav?: string; side?: string; complete?: string; tab?: string; pick?: string; back?: string };
-
 /** A picker whose strip is a field of the page, with the list floating under it: an address bar,
  * which is a field first and a list second. The strip stays mounted where the picker is rendered
  * and is the one input there is; only the list opens and closes. */
@@ -88,7 +85,6 @@ export function ListPicker<T>({
   trailing,
   empty = "no matches",
   footer,
-  keys,
   rowMenu,
   groupOf,
   groupHead,
@@ -136,13 +132,6 @@ export function ListPicker<T>({
   empty?: ReactNode | ((q: string) => ReactNode);
   /** below the rows (result counts, hints) */
   footer?: (q: string, results: T[]) => ReactNode;
-  /** what this picker's keys do, as the verb for each one. The picker owns the keyboard, so it
-   * draws the row and each palette says only what its keys mean. Arrow and modifier characters
-   * belong here rather than in `placeholder`, which can only hold a string. `side` is ignored
-   * unless `onSide` is wired up, `complete` unless tab would actually complete something, and `tab`
-   * unless `onTab` is wired up. A
-   * function sees the highlighted row, for a picker whose enter means different things per row. */
-  keys?: KeyVerbs | ((active: T | null, q: string) => KeyVerbs);
   /** draw as a dropdown on the control that opened it (the caller renders it inside that control's
    * wrapper, which is what it is placed against) instead of a centred overlay over the preview */
   anchored?: boolean | Anchored;
@@ -230,16 +219,6 @@ export function ListPicker<T>({
   // whether the press that is running landed in a field at rest: a click there selects the whole
   // address, as a browser's does; one in a field already holding the caret only moves it
   const pressedAtRest = useRef(false);
-  const verbs = typeof keys === "function" ? keys(nav.active, q) : keys;
-  const hints: Array<[string, string]> = [];
-  if (verbs?.nav) hints.push(["↑↓", verbs.nav]);
-  if (verbs?.side && onSide) hints.push(["←→", verbs.side]);
-  // tab is only offered while there is a completion under it: a standing hint for a key that does
-  // nothing is worse than no hint
-  if (verbs?.complete && ghost?.accept) hints.push(["tab", verbs.complete]);
-  if (verbs?.tab && onTab) hints.push(["tab", verbs.tab]);
-  if (verbs?.pick) hints.push(["enter", verbs.pick]);
-  if (verbs?.back) hints.push(["esc", verbs.back]);
   // the strip, holding the float under a field of the page: placed against the strip and following
   // it, and reached by the strip's own rules
   const strip = (float?: ReactNode) => (
@@ -399,13 +378,11 @@ export function ListPicker<T>({
       {footer?.(q, results)}
     </div>
   );
-  const keysEl = hints.length > 0 && <KeyHints hints={hints} />;
   if (field) {
     return strip(
       field.open && (
         <Overlay onClose={onBack} onEscape={onEscape} boxClass="picker" anchored={anchored} id={field.id}>
           {listEl}
-          {keysEl}
         </Overlay>
       ),
     );
@@ -422,7 +399,6 @@ export function ListPicker<T>({
     >
       {strip()}
       {listEl}
-      {keysEl}
     </Overlay>
   );
 }

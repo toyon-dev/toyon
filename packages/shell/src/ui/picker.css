@@ -1,4 +1,4 @@
-/* ListPicker and InlinePicker: the input, the ghost completion, the list, the rows, the key strip. */
+/* ListPicker and InlinePicker: the input, the ghost completion, the list, the rows. */
 @layer tokens, base, surfaces;
 @layer base {
   /* The @ / slash menu: a Float on the composer, which places it above the box being typed in and
@@ -19,10 +19,14 @@
       max-height: min(280px, 40vh);
       margin-top: 0;
     }
-    & .key-hints {
+    /* Outside the list so it stays put while the rows scroll, and out to the box's edges as the
+     rows are, so its rule closes the list off. */
+    & .picker-note {
+      margin: 4px var(--picker-bleed) 0;
+      padding: 6px var(--picker-inset) 7px;
+      color: var(--text2);
+      font: var(--type-ui-sm);
       border-top: 1px solid var(--border0);
-      margin-top: 4px;
-      padding-top: 6px;
     }
   }
   /* A command row: the name holds its width, the description gives way. The name is the part that
@@ -49,7 +53,7 @@
   /* A picker's rows are bands across the panel, not chips inside it: everywhere else in the app a
    list you run down with the keyboard (the worktree panel, the transcript's tool rows) is full
    bleed, and a rounded pill inset in a padded box reads as a control you press. --picker-bleed undoes
-   the box's padding for the list and the key row; --picker-inset puts it back inside the row, so the
+   the box's padding for the list; --picker-inset puts it back inside the row, so the
    row's text still sits under the caret while its fill reaches both edges. */
   .overlay-box {
     &.picker {

@@ -1,7 +1,6 @@
 import { Fragment, type ReactNode, type RefObject } from "react";
 import { cx } from "./cx.ts";
 import { Float } from "./Float.tsx";
-import { KeyHints } from "./KeyHints.tsx";
 import type { ListNav } from "./listNav.ts";
 import type { Placement } from "./place.ts";
 import "./picker.css";
@@ -49,7 +48,7 @@ export function InlinePicker<T>({
   nav: ListNav<T>;
   listRef: RefObject<HTMLDivElement>;
   empty: ReactNode;
-  /** a quiet word at the end of the key strip: what the list is leaving out, and how to reach it */
+  /** a quiet word under the rows: what the list is leaving out, and how to reach it */
   note?: ReactNode;
   /** the group a row belongs to, for a list of more than one kind of thing, as the palette's. A
    * head is drawn where the group changes, so the host keeps each group's rows together; with
@@ -87,14 +86,7 @@ export function InlinePicker<T>({
         })}
         {results.length === 0 && <div className="empty">{empty}</div>}
       </div>
-      <KeyHints
-        hints={[
-          ["↑↓", "moves"],
-          ["tab", "inserts"],
-          ["esc", "dismisses"],
-        ]}
-        note={note}
-      />
+      {note && <div className="picker-note">{note}</div>}
     </Float>
   );
 }

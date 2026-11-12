@@ -129,12 +129,6 @@ export function ChatsPicker({ repoId, scope: opened }: { repoId: string; scope: 
         r.kind === "chat" && r.archived ? archivedItems(r.archived, { clientId, frame }, { sock, dispatch }) : []
       }
       placeholder={scope === "names" ? "find a chat by name…" : "search in chats…"}
-      keys={(active) => ({
-        nav: "moves",
-        tab: scope === "names" ? "searches messages too" : "searches names only",
-        pick: active ? (active.kind === "hit" ? "opens the chat there" : "opens its chat") : undefined,
-        back: "closes",
-      })}
       empty={(q) =>
         !q.trim() ? (
           archived ? (

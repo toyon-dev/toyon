@@ -9,7 +9,7 @@ import { markHits } from "../../ui/highlight.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { ListPicker } from "../../ui/ListPicker.tsx";
 import { LineCounts } from "../changes/GitFileRow.tsx";
-import { goVerb, narrowPage, pageMenu, pageRowTitle, RouteRow, usePageModel } from "../topbar/RoutePicker.tsx";
+import { narrowPage, pageMenu, pageRowTitle, RouteRow, usePageModel } from "../topbar/RoutePicker.tsx";
 import { type Row as PageRow, completionOf as pageCompletion, rowsFor } from "../topbar/routePicker.ts";
 import { xyClass, xyLetter } from "../util.ts";
 import { commandRow } from "./CommandPalette.tsx";
@@ -99,11 +99,6 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
             : []
       }
       placeholder="jump to file · type > for commands, / for pages"
-      keys={(active, q) =>
-        q.startsWith("/")
-          ? { complete: "completes the path", pick: active?.kind === "page" ? goVerb(active.page) : undefined }
-          : {}
-      }
       initialQuery={initialQuery}
       empty={(q) =>
         q.startsWith(">")

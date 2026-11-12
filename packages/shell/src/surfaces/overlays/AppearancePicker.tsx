@@ -52,7 +52,6 @@ export function AppearancePicker() {
       }}
       onBack={() => dispatch({ a: "close", back: true })}
       placeholder="light/dark mode"
-      keys={{ nav: "preview", pick: "keeps", back: "reverts" }}
       row={(m) => <PaletteRow label={appearanceLabel[m]} current={m === prefs.mode} hint={hint(m)} />}
     />
   );

@@ -64,11 +64,6 @@ export function RefPicker({ repoId }: { repoId: string }) {
       groupOf={(h) => h.kind}
       groupHead={(kind, n) => `${GROUP[kind as RefHit["kind"]]} · ${n}`}
       placeholder="open a branch or PR…"
-      keys={(active) => ({
-        nav: "moves",
-        pick: active?.openIn ? "switches to it" : "opens it as a worktree",
-        back: "closes",
-      })}
       empty={(q) =>
         isStale(q) ? (
           <span className="live-text">looking</span>

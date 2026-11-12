@@ -50,7 +50,6 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
         }}
         onBack={back}
         placeholder={`${slot} slot override`}
-        keys={{ nav: "preview", pick: "keeps", back: "reverts" }}
         empty="no matching theme"
         row={(t) => <PaletteRow label={t.name} current={t.id === selectedId} hint={sourceOf(t)} />}
       />
@@ -74,7 +73,6 @@ export function ThemePicker({ slot }: { slot: "theme" | "light" | "dark" }) {
       }}
       onBack={back}
       placeholder="theme"
-      keys={{ nav: "preview", side: "dark/light", pick: "keeps", back: "reverts" }}
       empty="no matching theme"
       row={(f, isActive) => {
         const shown = previewOf(f, isActive ? peek : null);

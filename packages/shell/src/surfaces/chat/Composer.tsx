@@ -647,7 +647,7 @@ export function Composer({
     trigger.from !== dismissed &&
     !walk &&
     !(trigger.kind === "file" && settled(text, trigger.from, mentions));
-  // the agent's rows a bare `/` leaves out, said on the menu's key strip so they are not lost
+  // the agent's rows a bare `/` leaves out, said under the menu's rows so they are not lost
   const more =
     triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
       ? browseCommands(ownRows, commands).more

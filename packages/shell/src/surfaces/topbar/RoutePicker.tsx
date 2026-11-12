@@ -80,10 +80,6 @@ export const pageRowTitle = (row: Row) => (row.kind === "page" && row.file ? row
 export const narrowPage = (row: Row, q: string) =>
   row.kind === "page" && row.template ? fillTemplate(row.path, q) : null;
 
-/** what enter does on a page row, where that is worth saying: on a template it does not go
- * anywhere yet. Going to a page is what enter in an address does, and a hint for it is noise. */
-export const goVerb = (row: Row) => (row.kind === "page" && row.template ? "fills in the parameter" : undefined);
-
 /** a page names its file, which offers the file's own list, and a visited one can come off the history */
 export function pageMenu(
   row: Row,
@@ -170,7 +166,6 @@ export function RoutePicker({
       onBack={close}
       rowMenu={(r) => pageMenu(r, { worktreeId, repoId, dir }, { sock, dispatch })}
       placeholder="type a path"
-      keys={(active) => ({ complete: "completes the path", pick: active ? goVerb(active) : undefined })}
       empty="no pages yet; type a path"
       row={(r) => <RouteRow row={r} />}
     />

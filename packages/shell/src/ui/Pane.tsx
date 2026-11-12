@@ -62,7 +62,9 @@ export function Pane({
    * pane's shape rather than what it shows */
   full?: boolean;
   onToggleFull?: () => void;
-  onClose: () => void;
+  /** omitted: the head draws no close. A pane the window was given to is left by leaving that,
+   * and the control for it stands where the cross would; Escape closes the pane as it always does */
+  onClose?: () => void;
   closeHint?: string;
   /** an element outside the pane that holds its head: the window's title strip, for a pane the
    * window was given to, so the pane's first row is its content. The head is in flow there and
@@ -85,10 +87,10 @@ export function Pane({
   );
   // the pane's own controls sit together at the end: both are about the pane's shape, and a gap
   // keeps them apart from what the pane's content put in the head
-  const shape = (
+  const shape = (fullToggle || onClose) && (
     <span className="pane-shape">
       {fullToggle}
-      <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />
+      {onClose && <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />}
     </span>
   );
   const head = (

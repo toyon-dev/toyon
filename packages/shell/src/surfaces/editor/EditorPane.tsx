@@ -30,6 +30,7 @@ import { tip } from "../../ui/Tooltip.tsx";
 import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { defaultTab, handoffOn, listPage } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
+import { ZenToggle } from "../topbar/ZenToggle.tsx";
 import { splitPath } from "../util.ts";
 import { type DiffSeat, DiffSeats, SPLIT_MIN, useSplit } from "./DiffSeats.tsx";
 import { FileViewer } from "./FileViewer.tsx";
@@ -324,6 +325,7 @@ export function EditorPane({
   // scripts off, so what a script draws is seen in the preview, while this worktree's is up. A
   // phone's screen has no preview beside the file to send it to.
   const live = useStore((s) => routeTarget(s)?.worktreeId === worktreeId);
+  const zenFile = useStore(zenShowsFile);
   const runnable = live && !onScreen && !history && !kept && !loose && rendering === "html";
   const runPage = () => {
     previewBus.post(worktreeId, { type: "navigate", path: servedPath(path) });
@@ -361,7 +363,9 @@ export function EditorPane({
             )
           : []
       }
-      onClose={() => dispatch({ a: "close-editor" })}
+      // the file zen gave the window to is left by leaving zen: a cross beside that toggle was two
+      // controls for one way out, so the head draws the toggle alone
+      onClose={zenFile ? undefined : () => dispatch({ a: "close-editor" })}
       headIn={headIn}
       full={full}
       // a screen is already the column, so it has no split to go back to
@@ -434,6 +438,9 @@ export function EditorPane({
               <Icon name="run" className="icon-inline" /> run
             </Button>
           )}
+          {/* in the close's seat, where zen left no bar: the title strip holds the head and keeps
+              its own toggle after it, and a browser tab has neither */}
+          {zenFile && !headIn && <ZenToggle />}
         </>
       }
     >

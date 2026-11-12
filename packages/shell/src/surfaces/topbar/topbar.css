@@ -179,10 +179,11 @@
   }
   /* The seat for the open file's head, in the strip of a window zen gave to the file (TopBar.tsx):
    the editor's own head row, drawn here by the pane, so the name stands where a window's title
-   does and its switches and close at the end. It takes the room between the bar's inset and the
-   zen toggle, and the bar's inset is the head's: the pane's would indent it twice. The margin
-   makes the step to the toggle the tools' own 20px, so the close reads as the file's and the
-   toggle as the window's. The seat's width is the bar's to give, never the head's to ask for: a
+   does and its switches at the end. It takes the room between the bar's inset and the zen
+   toggle, and the bar's inset is the head's: the pane's would indent it twice. The head comes
+   with no close here, so the toggle is its last control and the one way out drawn: the margin
+   makes the step to it the head's own 12px, the gap between any two of the head's controls.
+   The seat's width is the bar's to give, never the head's to ask for: a
    long path on one line was the bar's min-content, which the app grid honoured by growing past
    the window. Contained, the head asks for nothing and its title gives as it does in a pane. */
   .bar-file {
@@ -190,7 +191,7 @@
     flex: 1;
     min-width: 0;
     contain: inline-size;
-    margin-right: 12px;
+    margin-right: 4px;
     & .pane-head {
       flex: 1;
       min-width: 0;

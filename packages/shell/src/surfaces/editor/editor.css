@@ -82,10 +82,15 @@
   }
   /* a strip of seats among the head's switches, the page or its text and how its diff is drawn:
    the open seat is raised in the tone a lit switch is seated in, so what is on reads the same
-   across the head. A lifted seat, so it moves the ladder for its label. */
+   across the head. A lifted seat, so it moves the ladder for its label. The track is the icon
+   box's 20px and not a chip's 18: its neighbours here are the head's switches, and a lit one
+   beside a shorter track in the same tone read as the larger control. */
   .editor-pair {
     display: flex;
     --tabs-ground: var(--element1);
+    & .tab {
+      min-height: 16px;
+    }
     & .tab[data-state~="current"] {
       --text1: var(--ink0);
       --text2: var(--ink1);

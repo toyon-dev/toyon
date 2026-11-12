@@ -22,7 +22,6 @@ import { cx } from "../../ui/cx.ts";
 import { useEdges, useEdgesOf, useMedia, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
-import { paneInHand } from "../../ui/Pane.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
 import { ProjectPicker } from "../overlays/ProjectPicker.tsx";
 import { chord } from "../util.ts";
@@ -31,6 +30,7 @@ import { Field } from "../../ui/Field.tsx";
 import { useFloatUp } from "../../ui/Float.tsx";
 import { navCluster } from "./navCluster.ts";
 import { RoutePicker } from "./RoutePicker.tsx";
+import { ZenToggle } from "./ZenToggle.tsx";
 
 /** the bar is the window's title bar: the installed app with its window controls laid over the
  * page. The query topbar.css keys the same strip on. */
@@ -70,11 +70,12 @@ export function TopBar({
   // nothing to run: no page for the route cluster, the design outlines or zen to work on, and the
   // chat is the centre rather than a panel to toggle
   const chatCentred = useChatCentred();
-  const zen = useStore((s) => s.zen) && !chatCentred;
   // Zen on a file, where the strip stands: the window is the file's, so the strip is the file's
   // head, in the address's place. The address is about a page that is off screen, and the head
-  // in a row of its own under the strip would be a second bar over the file. In a browser tab zen
-  // has no strip, and the head stays the editor's first row.
+  // in a row of its own under the strip would be a second bar over the file. The head comes
+  // without its close: the zen toggle after it is the one way out drawn, and a cross beside it
+  // was two controls for leaving one thing. In a browser tab zen has no strip, and the head stays
+  // the editor's first row, with the toggle at its end.
   const zenFile = useStore(zenShowsFile);
   const titleStrip = useMedia(TITLE_STRIP);
   const fileHead = zenFile && titleStrip;
@@ -204,18 +205,7 @@ export function TopBar({
         {/* the one tool the installed app's zen strip keeps: the strip is the window's title bar
             and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
             standing sign that this is a mode with a way out */}
-        {!chatCentred && (
-          <IconButton
-            icon="zen"
-            className="bar-zen"
-            label="Full-bleed preview"
-            hint={chord("zen")}
-            tone="chrome"
-            on={zen}
-            {...fromEnd}
-            onClick={() => dispatch({ a: "toggle-zen", file: paneInHand("editor") })}
-          />
-        )}
+        {!chatCentred && <ZenToggle className="bar-zen" />}
       </span>
     </div>
   );

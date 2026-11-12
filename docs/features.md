@@ -9,11 +9,11 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 | [Point at the page](using.md#ask-for-a-change) | Click an element in the preview to add it to your message or open its code. |
 | [Split off work](agents.md#handoff) | A piece of the work goes to a chat of its own, and its agent starts at once. |
 | [Combine chats](shortcuts.md#chats) | Several chats' branches are merged into one chat, with their transcripts. |
+| [Themes](shortcuts.md#app) | Light and dark, Toyon's themes, and the themes of your VS Code, Cursor or Windsurf extensions. |
 | [Phone and other devices](phone.md) | Open Toyon from your phone or another computer. |
 | [Pull requests](shortcuts.md#git) | A chat creates, updates and lands its pull request, and shows its checks and review comments. |
-| [Themes](shortcuts.md#app) | Light and dark, Toyon's themes, and the themes of your VS Code, Cursor or Windsurf extensions. |
 | [Agents and models](agents.md) | Each chat runs Claude Code, Codex or OpenCode, on the model you pick. |
-| [Rendered files](shortcuts.md#code) | Markdown, HTML, SVG, pictures and video open rendered. A changed Markdown file marks what came and went. |
+| [Rendered files](shortcuts.md#code) | Markdown, HTML, SVG, pictures and video open rendered. A changed Markdown file marks what was added and removed. |
 | [Editor, files and terminal](shortcuts.md#code) | An editor, a diff, the file list and a terminal open beside the chat. |
 | [Command palette](shortcuts.md#app) | Lists the panels, the settings, the open chat's menu and every other chat and project by name. |
 | [Search every chat](shortcuts.md#chat) | Finds messages across the project's chats, archived chats included. |

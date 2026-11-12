@@ -37,7 +37,7 @@ Each feature with how to reach it. The short list and the automatic features are
 | Panel tabs | <kbd>⌥→</kbd> and <kbd>⌥←</kbd> step through files, changes and history. In a field with text they stay the word jump. |
 | Editor | Saves when you stop typing; <kbd>⌘S</kbd> saves now. Shows who last changed the current line. Click that note to open the pull request or the commit. |
 | Diff | "file", "inline" or "split" in the pane's header. The wrap button folds long lines. |
-| Markdown | Opens rendered, with an outline of its headings. A changed file marks what came and went. "file" in the pane's header hides the marks. "code" shows the text. |
+| Markdown | Opens rendered, with an outline of its headings. A changed file marks what was added and removed. "file" in the pane's header hides the marks. "code" shows the text. |
 | HTML | Opens rendered in the editor pane, with scripts running in a sandboxed frame. "run" sends it to the preview. |
 | SVG, pictures and video | Open as a preview. A picture can go full size. |
 | Terminal | <kbd>⌘J</kbd>. <kbd>⌘F</kbd> finds in it. <kbd>⌃⇧&#96;</kbd> goes to the next tab. |

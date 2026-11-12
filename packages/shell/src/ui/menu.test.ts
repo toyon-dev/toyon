@@ -11,8 +11,10 @@ import {
   SEP,
   stepEnabled,
   tidy,
+  withSelection,
 } from "./menu.ts";
 import { place } from "./place.ts";
+import { onRects } from "./selectAll.ts";
 
 /** where a 180x96 menu lands in a 1000x800 window */
 function box(spec: Pick<MenuSpec, "at" | "anchor" | "align" | "toggles">) {
@@ -55,6 +57,31 @@ describe("groups and the rules between them", () => {
     menuStore.close();
   });
 });
+
+describe("a menu asked for on selected text", () => {
+  test("leads with the copy of it, a rule between that and the row's own items", () => {
+    expect(shape(withSelection([item("copy"), SEP, item("draft")], "two words"))).toBe("copy-selection | copy | draft");
+  });
+
+  test("is the row's own menu when nothing under the press is selected", () => {
+    const own = [item("copy")];
+    expect(withSelection(own, null)).toBe(own);
+  });
+
+  test("a press is on the selection inside any of its rects, edges included, and beside it otherwise", () => {
+    const lines = [
+      { left: 40, top: 10, right: 200, bottom: 30 },
+      { left: 10, top: 30, right: 120, bottom: 50 },
+    ];
+    expect(onRects(lines, { x: 60, y: 20 })).toBe(true);
+    expect(onRects(lines, { x: 120, y: 50 })).toBe(true);
+    // the first line starts at 40 and the second ends at 120: the corners the highlight leaves bare
+    expect(onRects(lines, { x: 20, y: 20 })).toBe(false);
+    expect(onRects(lines, { x: 160, y: 40 })).toBe(false);
+    expect(onRects([], { x: 60, y: 20 })).toBe(false);
+  });
+});
+
 // the store only compares targets by identity, so any object stands in for an element here
 const el = () => ({}) as unknown as Element;
 const spec = (owner: string, target = el(), items = [item("a")]): MenuSpec => ({ items, owner, target });

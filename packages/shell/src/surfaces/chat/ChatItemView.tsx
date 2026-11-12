@@ -23,7 +23,7 @@ import { FullAttachment } from "../../ui/FullAttachment.tsx";
 import { useLiveHtml, useOnChange, useReveal, useSecondsSince, useTail } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
 import { openOut } from "../../ui/links.ts";
-import { grouped, type MenuEntry, type MenuFrom, useContextMenu } from "../../ui/menu.ts";
+import { grouped, type MenuEntry, type MenuFrom, useContextMenu, useMenuOn } from "../../ui/menu.ts";
 import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
@@ -162,12 +162,14 @@ function Markdown({
   // the markup goes into a child of the row so the row keeps a child of its own beside it
   const root = useRef<HTMLDivElement>(null);
   const codeCopy = useCodeCopy(root);
+  // the message its menu is about wears the mark while the menu is up: "copy message" names none
+  const menuOn = useMenuOn(root);
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
     <div
       ref={root}
       className="msg-assistant md row-edge"
-      data-state={rowState({ cursor: marked })}
+      data-state={rowState({ cursor: marked || menuOn })}
       {...cm.contextMenu((from, target) => {
         const still = stillAt(target);
         return still
@@ -1126,6 +1128,10 @@ export const ChatItemView = memo(function ChatItemView({
   const urls = useUrls();
   const cm = useContextMenu("chat");
   const deps = { sock, dispatch: store.dispatch };
+  // the one bubble or line an item draws outside its prose, marked while the open menu is about
+  // it, as the prose marks itself: "copy message" on the menu names none
+  const rowRef = useRef<HTMLDivElement>(null);
+  const menuOn = useMenuOn(rowRef);
   // the agent runs at the worktree's real path even when the UI gives it a title-shaped symlink
   const fileRoot = () => worktreeById(store.getState(), worktreeId)?.worktree.path;
   /** what a message attached, as the chips a sent message draws under its line: the person's
@@ -1188,8 +1194,9 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
         <div
+          ref={rowRef}
           className="msg-user row-edge"
-          data-state={rowState({ cursor: marked })}
+          data-state={rowState({ cursor: marked || menuOn })}
           {...cm.contextMenu((from, target) =>
             messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root) }, from),
           )}
@@ -1215,7 +1222,9 @@ export const ChatItemView = memo(function ChatItemView({
     case "error":
       return (
         <div
-          className="msg-assistant msg-error"
+          ref={rowRef}
+          className="msg-assistant msg-error row-edge"
+          data-state={rowState({ cursor: menuOn })}
           {...cm.contextMenu((from) => messageItems(item, worktreeId ?? null, deps, {}, from))}
         >
           {item.text}
@@ -1247,8 +1256,9 @@ export const ChatItemView = memo(function ChatItemView({
               fileRoot={fileRoot()}
             />
             <div
+              ref={rowRef}
               className="msg-user row-edge"
-              data-state={rowState({ cursor: marked })}
+              data-state={rowState({ cursor: marked || menuOn })}
               {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
             >
               {/* each pick on its line, under it what the option said beneath its label on the
@@ -1299,7 +1309,9 @@ export const ChatItemView = memo(function ChatItemView({
             )
           )}
           <div
-            className="msg-user"
+            ref={rowRef}
+            className="msg-user row-edge"
+            data-state={rowState({ cursor: menuOn })}
             {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
           >
             {plan.choice}
@@ -1394,7 +1406,9 @@ export const ChatItemView = memo(function ChatItemView({
       return (
         <>
           <div
-            className="msg-user"
+            ref={rowRef}
+            className="msg-user row-edge"
+            data-state={rowState({ cursor: menuOn })}
             {...cm.contextMenu((from) => messageItems(bubble, worktreeId ?? null, deps, {}, from))}
           >
             {said}

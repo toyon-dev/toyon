@@ -1,5 +1,12 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useMemo, useSyncExternalStore } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type RefObject,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import { type Placement, type Point, pointRect, type Rect } from "./place.ts";
+import { selectedText, selectedTextAt } from "./selectAll.ts";
 
 /**
  * One menu for the whole app. This module is the slot it lives in: opening a menu replaces
@@ -135,6 +142,13 @@ export function useMenuOwner(): string | null {
   return useSyncExternalStore(menuStore.subscribe, ownerOf);
 }
 
+/** Whether the open menu is about the element in `ref`, for a row that marks itself while its
+ * menu is up and has no key to be named by: one message among many, where "copy message" on the
+ * menu says nothing about which. Only the row whose answer changes is drawn again. */
+export function useMenuOn(ref: RefObject<Element | null>): boolean {
+  return useSyncExternalStore(menuStore.subscribe, () => current !== null && current.target === ref.current);
+}
+
 /** A contextmenu event with no pointer behind it: shift+F10 or the menu key. Chromium fires it as
  * a PointerEvent whose pointerType is empty, Firefox as a MouseEvent at 0,0; a real right-click
  * is neither. Such a menu opens under the element, since there is no pointer to open at. */
@@ -194,11 +208,29 @@ export function menuFrom(e: { clientX: number; clientY: number; nativeEvent?: Ev
   return n && "pointerType" in n && (n as PointerEvent).pointerType === "touch" ? "touch" : "pointer";
 }
 
+/** The text selected where a menu was asked for: under the pointer, or inside the element the
+ * keyboard asked on. A finger gets none: its long-press is what makes the selection, and the
+ * system's own callout over it holds the copy. */
+function selectionAsked(e: { clientX: number; clientY: number }, el: Element, from: MenuFrom): string | null {
+  if (from === "touch") return null;
+  return from === "keyboard" ? selectedText(el) : selectedTextAt({ x: e.clientX, y: e.clientY });
+}
+
+/** A menu asked for on selected text leads with the copy of it, whatever the row under it offers:
+ * this menu stands where the browser's would have, and the copy is the one thing that one had
+ * for a selection. The text is read as the menu opens, like every other item. Best effort, as any
+ * copy here: a denied clipboard is not worth a word over text you can read. */
+export function withSelection(items: MenuEntry[], text: string | null): MenuEntry[] {
+  if (text === null) return items;
+  const copy = () => void navigator.clipboard?.writeText(text).catch(() => {});
+  return grouped([[{ id: "copy-selection", label: "copy selection", onClick: copy }], items]);
+}
+
 /** What a surface spreads on a row or a trigger. `build` runs when the menu opens, so it reads
  * whatever is current then; the items are a snapshot, and a menu lives about a second. It is
  * handed the element under the pointer, for a row whose markup holds things of its own (a link in
  * a message). A list with nothing in it leaves the event alone, so the app menu behind the row
- * answers instead. */
+ * answers instead. Text selected under the press is every menu's to copy (withSelection). */
 export function useContextMenu(owner: string) {
   return useMemo(
     () => ({
@@ -208,18 +240,20 @@ export function useContextMenu(owner: string) {
       contextMenu(build: (from: MenuFrom, target: Element) => MenuEntry[] | null, key?: string) {
         return {
           onContextMenu: (e: ReactMouseEvent) => {
-            const built = build(menuFrom(e), e.target as Element);
+            const from = menuFrom(e);
+            const built = build(from, e.target as Element);
             if (built === null) {
               e.stopPropagation();
               return;
             }
-            const items = tidy(built);
-            if (items.length === 0) return;
+            const own = tidy(built);
+            if (own.length === 0) return;
             e.preventDefault();
             // the dock behind the row must not answer as well, and the app's fallback checks
             // defaultPrevented on top of this
             e.stopPropagation();
             const el = e.currentTarget;
+            const items = withSelection(own, selectionAsked(e, el, from));
             menuStore.open({ items, owner, key, target: el, ...placement(e, el) });
           },
         };

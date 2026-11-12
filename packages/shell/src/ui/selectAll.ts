@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect } from "react";
+import type { Point } from "./place.ts";
 
 /** The browser's select-all, on a surface that is read and not edited, takes the whole shell with
  * it: the rail, the bar, every dock. A surface that is a document of its own answers the chord
@@ -70,14 +71,42 @@ export function useSelectAllWithin(ref: RefObject<HTMLElement | null>, scope?: S
   useKeyWithin(ref, isSelectAll, act, undefined, scope?.except);
 }
 
-/** what is selected inside `el`, or null when the selection is empty, blank, or lies elsewhere.
- * Blank lines around it are the block boundaries a drag crossed, not part of what was meant. */
-export function selectedText(el: Element): string | null {
+/** the selection when it holds something, null when it is empty */
+function held(): Selection | null {
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
-  if (!el.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+  return sel && !sel.isCollapsed && sel.rangeCount > 0 ? sel : null;
+}
+
+/** a selection's text, or null when it is blank. Blank lines around it are the block boundaries a
+ * drag crossed, not part of what was meant. */
+function textOf(sel: Selection): string | null {
   const text = sel.toString().replace(/^\n+|\n+$/g, "");
   return text.trim() ? text : null;
+}
+
+/** what is selected inside `el`, or null when the selection is empty, blank, or lies elsewhere */
+export function selectedText(el: Element): string | null {
+  const sel = held();
+  if (!sel || !el.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+  return textOf(sel);
+}
+
+/** whether a point lies on one of `rects`, edges included */
+export function onRects(rects: Iterable<Pick<DOMRect, "left" | "top" | "right" | "bottom">>, at: Point): boolean {
+  for (const r of rects) if (at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom) return true;
+  return false;
+}
+
+/** what is selected, when `at` is on it; null for a point beside the selection, which is about
+ * whatever it landed on and not about text held somewhere else. A range's rects are the lines its
+ * highlight paints and the whole box of every element it takes entire, so a point in the gap
+ * between two selected lines is on it too. Every range is asked: Firefox holds a run of table
+ * cells as one range each. */
+export function selectedTextAt(at: Point): string | null {
+  const sel = held();
+  if (!sel) return null;
+  for (let i = 0; i < sel.rangeCount; i++) if (onRects(sel.getRangeAt(i).getClientRects(), at)) return textOf(sel);
+  return null;
 }
 
 /** the contents of `el` as the selection, stopping before `upTo` when there is one */

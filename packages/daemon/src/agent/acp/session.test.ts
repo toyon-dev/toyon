@@ -562,6 +562,76 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a command in the background the agent stops itself: Claude Code's log says nothing, and the stop ends its row", async () => {
+    let ctx: acp.AgentContext | undefined;
+    let sid = "";
+    const fake = fakeAgent(async (p, client) => {
+      ctx = client;
+      sid = p.sessionId;
+      return { stopReason: "end_turn" };
+    });
+    const configDir = join(home, "claude-config-stop");
+    const tasks = join(home, "claude-501", "-wt", "stopsid", "tasks");
+    mkdirSync(tasks, { recursive: true });
+    mkdirSync(join(configDir, "projects", "-wt"), { recursive: true });
+    writeFileSync(join(configDir, "projects", "-wt", "stopsid.jsonl"), '{"type":"user"}\n');
+    const out = join(tasks, "b1.output");
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      ownSettleMs: 30,
+      claudeConfigDir: configDir,
+      taskPollMs: 5,
+    });
+    w.session.send("go");
+    await w.idle();
+    const update = (u: acp.SessionUpdate) =>
+      ctx!.notify(acp.methods.client.session.update, { sessionId: sid, update: u });
+    const text = (t: string): acp.ToolCallContent[] => [{ type: "content", content: { type: "text", text: t } }];
+    await update({
+      sessionUpdate: "tool_call",
+      toolCallId: "bg1",
+      title: "Terminal",
+      kind: "execute",
+      status: "pending",
+      rawInput: { command: "./run.sh", run_in_background: true },
+    });
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "bg1",
+      status: "completed",
+      content: text(
+        `Command running in background with ID: b1. Output is being written to: ${out}. You will be notified when it completes.`,
+      ),
+    });
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "turn-end"; i++) await Bun.sleep(5);
+    expect(w.session.holding).toBe(1);
+    writeFileSync(out, "7 answers\n");
+    for (let i = 0; i < 100 && w.events.at(-1)?.type !== "tool-delta"; i++) await Bun.sleep(5);
+    await update({
+      sessionUpdate: "tool_call",
+      toolCallId: "stop1",
+      title: "TaskStop",
+      kind: "other",
+      status: "pending",
+      rawInput: { task_id: "b1" },
+    });
+    await update({
+      sessionUpdate: "tool_call_update",
+      toolCallId: "stop1",
+      status: "completed",
+      content: text('{"message":"Successfully stopped task: b1 (./run.sh)","task_id":"b1"}'),
+    });
+    const ended = () => w.events.find((e) => e.type === "tool-end" && e.toolId === "bg1");
+    for (let i = 0; i < 100 && !ended(); i++) await Bun.sleep(5);
+    expect(ended()).toEqual({
+      type: "tool-end",
+      toolId: "bg1",
+      output: "```\n7 answers\n```\nthe agent stopped it",
+      isError: true,
+    });
+    expect(w.session.holding).toBe(0);
+    await w.session.close();
+  });
+
   test("a wakeup the agent booked: its row stays open past the turn, the rail counts it, and the agent coming back on its own ends it", async () => {
     let ctx: acp.AgentContext | undefined;
     let sid = "";

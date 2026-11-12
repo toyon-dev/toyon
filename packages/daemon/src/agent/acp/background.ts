@@ -4,7 +4,8 @@
 // it while a ten-minute check ran with nothing in the transcript to say so. This keeps the row open
 // instead: the output file is tailed into it, and its end is read off Claude Code's own session
 // log, where a task's finish lands as a notification naming the call, whether the agent was idle
-// (Claude Code wakes it) or busy (the notice is absorbed into the turn). Both files are Claude
+// (Claude Code wakes it) or busy (the notice is absorbed into the turn). A task the agent stops
+// itself gets no notice, and its row ends on the call that stopped it. Both files are Claude
 // Code's private layout; a path that does not fit it means the row closes the way it always did.
 
 import { existsSync, statSync } from "node:fs";
@@ -30,6 +31,16 @@ export function backgroundStart(input: unknown, output: string): BackgroundStart
   if (flag !== true) return null;
   const m = STARTED.exec(output);
   return m ? { taskId: m[1]!, file: m[2]! } : null;
+}
+
+export const STOP_TOOL = "TaskStop";
+
+/** The task a call stopped, or null for any other call. Claude Code writes no notice for a task
+ * the agent stops itself, so the call that stopped it is the only word of its end. */
+export function stoppedTask(name: string, input: unknown): string | null {
+  if (name !== STOP_TOOL) return null;
+  const id = input && typeof input === "object" ? (input as Record<string, unknown>).task_id : undefined;
+  return typeof id === "string" ? id : null;
 }
 
 /** A spawn's call returned with the subagent launched rather than finished: Claude Code runs a
@@ -77,11 +88,14 @@ export function taskEnd(text: string, toolId: string): TaskEnd | null {
 
 /** how often the two files are looked at; a stat each when nothing moved */
 const POLL_MS = 500;
-/** Claude Code's Bash tool ends a command at its own ceiling, two minutes unless the call asks
- * for more, and writes the notice then. A row still open a minute past that is one whose notice
- * never came (a log format this side no longer reads), and the row stops watching rather than
- * shine for good. */
-const DEFAULT_BASH_TIMEOUT_MS = 120_000;
+/** The longest Claude Code holds a command in the background to: thirty minutes unless the call
+ * asks for more, two hours at most, and it writes the notice when it ends one there. The row
+ * waits out the longest limit and not the call's own, because a build that does not enforce it
+ * lets a command run past what it asked for and still sends the notice, and a row closed early
+ * lets the idle reap take the agent's process with the command still running under it. A row
+ * still open a minute past the limit is one whose notice never came (a log format this side no
+ * longer reads), and the row stops watching rather than shine for good. */
+const BACKGROUND_LIMIT_MS = 2 * 60 * 60_000;
 const GRACE_MS = 60_000;
 /** how much of a file one poll takes; the rest comes next poll */
 const READ_CHUNK = 1 << 20;
@@ -90,6 +104,7 @@ const CARRY = 4000;
 
 interface Watched {
   toolId: string;
+  taskId: string;
   file: string;
   log: string;
   /** bytes of each file already read */
@@ -109,8 +124,8 @@ export interface BackgroundDeps {
   onEnd?: () => void;
   pollMs?: number;
   configDir?: string;
-  /** how long past the command's own ceiling the row waits for its notice */
-  graceMs?: number;
+  /** how long the row waits for its notice */
+  waitMs?: number;
 }
 
 export class BackgroundTasks {
@@ -124,13 +139,12 @@ export class BackgroundTasks {
 
   /** true once the task is being watched, which is when its log is where Claude Code keeps it.
    * The caller keeps the row open on true; on false it closes the row as for any other call. */
-  start(toolId: string, start: BackgroundStart, input: unknown): boolean {
+  start(toolId: string, start: BackgroundStart): boolean {
     const logPath = sessionLogFor(start.file, this.deps.configDir);
     if (!logPath) return false;
-    const timeout = (input as { timeout?: unknown } | null)?.timeout;
-    const ceiling = (typeof timeout === "number" ? timeout : DEFAULT_BASH_TIMEOUT_MS) + (this.deps.graceMs ?? GRACE_MS);
     const w: Watched = {
       toolId,
+      taskId: start.taskId,
       file: start.file,
       log: logPath,
       read: 0,
@@ -140,12 +154,20 @@ export class BackgroundTasks {
       decoder: new TextDecoder(),
       text: "",
       truncated: false,
-      ceiling: Date.now() + ceiling,
+      ceiling: Date.now() + (this.deps.waitMs ?? BACKGROUND_LIMIT_MS + GRACE_MS),
       timer: null,
     };
     this.watched.set(toolId, w);
     this.schedule(w);
     return true;
+  }
+
+  /** the agent stopped the task itself: no notice follows, so its row ends here */
+  stop(taskId: string): void {
+    for (const w of [...this.watched.values()]) {
+      if (w.taskId !== taskId) continue;
+      fireAndForget("background", this.finish(w, null, "the agent stopped it", true), `ending ${w.toolId}`);
+    }
   }
 
   /** the agent's process is going, and the command it started with it: every open row says so */

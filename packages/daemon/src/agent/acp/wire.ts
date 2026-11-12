@@ -109,7 +109,8 @@ const CLAUDE: AdapterWire = {
         "never mentions it again.",
       here:
         "background.ts tails the output file into the row and reads the finish off Claude Code's own session " +
-        "log, on four strings toyon does not own. Flag: the sink mapUpdate keeps a background row open through.",
+        "log, on four strings toyon does not own. A task the agent stops gets no notice there, and its row " +
+        "ends on the TaskStop call naming it. Flag: the sink mapUpdate keeps a background row open through.",
       upstream:
         "Shipped: `async_task_spawned`, `async_task_progress`, `async_task_state_update` and " +
         "`_session/async_task/stop`, but only to a client declaring `_meta.jetbrains.air.capabilities` with " +

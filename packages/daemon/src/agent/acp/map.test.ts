@@ -546,20 +546,14 @@ describe("mapUpdate", () => {
     const taken: unknown[] = [];
     const memos: ToolMemos = new Map();
     const events = updates.flatMap((u) =>
-      mapUpdate(u, memos, "t", undefined, (toolId, start, input) => {
-        taken.push([toolId, start, input]);
+      mapUpdate(u, memos, "t", undefined, (toolId, start) => {
+        taken.push([toolId, start]);
         return true;
       }),
     );
     expect(events.map((e) => e.type)).toEqual(["tool-start", "tool-update"]);
     expect(events[1]).toEqual({ type: "tool-update", toolId: "c1", background: true });
-    expect(taken).toEqual([
-      [
-        "c1",
-        { taskId: "b1", file: "/t/claude-501/-wt/s1/tasks/b1.output" },
-        { command: "bun run check", run_in_background: true, timeout: 600000 },
-      ],
-    ]);
+    expect(taken).toEqual([["c1", { taskId: "b1", file: "/t/claude-501/-wt/s1/tasks/b1.output" }]]);
     // nothing more comes for it on the wire, and the memo says so
     expect(memos.get("c1")?.ended).toBe(true);
     // the session declines (the log is not where it looks for it): the row ends the way any call does
@@ -574,6 +568,39 @@ describe("mapUpdate", () => {
       updates[1]!,
     ].flatMap((u) => mapUpdate(u, plain, "t", undefined, () => true));
     expect(foreground.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+  });
+
+  test("a task the agent stopped is named to the session once the stop has worked, and the call closes as usual", () => {
+    const stop = (status: "completed" | "failed"): SessionUpdate[] => [
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "s1",
+        title: "TaskStop",
+        kind: "other",
+        status: "pending",
+        rawInput: { task_id: "b1" },
+      },
+      {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "s1",
+        status,
+        content: [{ type: "content", content: { type: "text", text: "Successfully stopped task: b1" } }],
+      },
+    ];
+    const told: string[] = [];
+    const memos: ToolMemos = new Map();
+    const events = stop("completed").flatMap((u) =>
+      mapUpdate(u, memos, "t", undefined, undefined, undefined, (taskId) => told.push(taskId)),
+    );
+    expect(events.map((e) => e.type)).toEqual(["tool-start", "tool-end"]);
+    expect(told).toEqual(["b1"]);
+    // a stop that failed stopped nothing: the task's row waits on
+    const failed: string[] = [];
+    const failing: ToolMemos = new Map();
+    for (const u of stop("failed")) {
+      mapUpdate(u, failing, "t", undefined, undefined, undefined, (taskId) => failed.push(taskId));
+    }
+    expect(failed).toEqual([]);
   });
 
   test("a wakeup the agent booked keeps its row open with the time, and one ending the loop closes as usual", () => {

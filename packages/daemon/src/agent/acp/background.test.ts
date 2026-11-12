@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@toyon/shared";
-import { BackgroundTasks, backgroundStart, sessionLogFor, taskEnd } from "./background.ts";
+import { BackgroundTasks, backgroundStart, sessionLogFor, stoppedTask, taskEnd } from "./background.ts";
 
 const home = mkdtempSync(join(tmpdir(), "toyon-background-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
@@ -49,6 +49,15 @@ describe("backgroundStart", () => {
   });
 });
 
+describe("stoppedTask", () => {
+  test("a TaskStop names the task it stopped; any other call, or one naming none, stopped nothing", () => {
+    expect(stoppedTask("TaskStop", { task_id: "b1" })).toBe("b1");
+    expect(stoppedTask("TaskOutput", { task_id: "b1" })).toBeNull();
+    expect(stoppedTask("TaskStop", {})).toBeNull();
+    expect(stoppedTask("TaskStop", null)).toBeNull();
+  });
+});
+
 describe("sessionLogFor", () => {
   test("the log is named by the two segments over the tasks directory, and must be there", () => {
     const { configDir, log, output } = layout("log");
@@ -71,7 +80,7 @@ describe("taskEnd", () => {
 });
 
 describe("BackgroundTasks", () => {
-  function watcher(name: string, graceMs?: number) {
+  function watcher(name: string, waitMs?: number) {
     const { configDir, log, output } = layout(name);
     const events: AgentEvent[] = [];
     let ended = 0;
@@ -80,14 +89,14 @@ describe("BackgroundTasks", () => {
       onEnd: () => ended++,
       pollMs: 5,
       configDir,
-      ...(graceMs !== undefined ? { graceMs } : {}),
+      ...(waitMs !== undefined ? { waitMs } : {}),
     });
     return { tasks, events, log, output, ended: () => ended };
   }
 
   test("what the command prints reaches the row as it runs, and the notice ends the row with it", async () => {
     const { tasks, events, log, output, ended } = watcher("runs");
-    expect(tasks.start("t1", { taskId: "b1", file: output }, { run_in_background: true })).toBe(true);
+    expect(tasks.start("t1", { taskId: "b1", file: output })).toBe(true);
     expect(tasks.size).toBe(1);
     // the output file appears with the command's first bytes, not before
     await Bun.sleep(20);
@@ -111,7 +120,7 @@ describe("BackgroundTasks", () => {
 
   test("a non-zero exit is an error and says the code; a notice for another call is not the end", async () => {
     const { tasks, events, log, output } = watcher("fails");
-    tasks.start("t1", { taskId: "b1", file: output }, { run_in_background: true });
+    tasks.start("t1", { taskId: "b1", file: output });
     writeFileSync(output, "boom\n");
     appendFileSync(log, notice("other", 'Background command "x" completed (exit code 0)'));
     await Bun.sleep(30);
@@ -123,13 +132,13 @@ describe("BackgroundTasks", () => {
 
   test("the log is not where Claude Code keeps it: not watched, and the caller closes the row itself", () => {
     const { tasks } = watcher("nolog");
-    expect(tasks.start("t1", { taskId: "b1", file: join(home, "nolog", "x", "b1.output") }, {})).toBe(false);
+    expect(tasks.start("t1", { taskId: "b1", file: join(home, "nolog", "x", "b1.output") })).toBe(false);
     expect(tasks.size).toBe(0);
   });
 
   test("the agent stopping ends every open row as killed, with what was printed so far", async () => {
     const { tasks, events, output } = watcher("stops");
-    tasks.start("t1", { taskId: "b1", file: output }, { run_in_background: true });
+    tasks.start("t1", { taskId: "b1", file: output });
     writeFileSync(output, "half\n");
     await until(() => events.length === 1);
     tasks.endAll("the agent stopped, and the command with it");
@@ -143,9 +152,30 @@ describe("BackgroundTasks", () => {
     expect(tasks.size).toBe(0);
   });
 
-  test("no notice a grace past the command's own ceiling: the row stops watching, not as an error", async () => {
+  test("the agent stopping one task ends that row alone, as stopped, with what was printed so far", async () => {
+    const { tasks, events, output, ended } = watcher("stopped");
+    tasks.start("t1", { taskId: "b1", file: output });
+    tasks.start("t2", { taskId: "b2", file: join(output, "..", "b2.output") });
+    writeFileSync(output, "half\n");
+    await until(() => events.length === 1);
+    // a task this side never watched is nothing to end
+    tasks.stop("b9");
+    tasks.stop("b1");
+    await until(() => events.at(-1)?.type === "tool-end");
+    expect(events.at(-1)).toEqual({
+      type: "tool-end",
+      toolId: "t1",
+      output: "```\nhalf\n```\nthe agent stopped it",
+      isError: true,
+    });
+    expect(tasks.size).toBe(1);
+    expect(ended()).toBe(1);
+    tasks.endAll("done");
+  });
+
+  test("no notice by the end of the wait: the row stops watching, not as an error", async () => {
     const { tasks, events, output } = watcher("ceiling", 10);
-    tasks.start("t1", { taskId: "b1", file: output }, { run_in_background: true, timeout: 10 });
+    tasks.start("t1", { taskId: "b1", file: output });
     await until(() => events.at(-1)?.type === "tool-end");
     expect(events.at(-1)).toEqual({
       type: "tool-end",

@@ -23,7 +23,7 @@ import {
 } from "@toyon/shared";
 import { log } from "../../core/log.ts";
 import { toolImage } from "../attachments.ts";
-import { type BackgroundStart, backgroundStart, spawnDetached } from "./background.ts";
+import { type BackgroundStart, backgroundStart, spawnDetached, stoppedTask } from "./background.ts";
 import { unifiedDiff } from "./diff.ts";
 import { currentValues, readOptions } from "./options.ts";
 import { loopEnds, wakeupAt } from "./wakeup.ts";
@@ -66,7 +66,9 @@ export type ImageSink = (file: string, bytes: Buffer) => void;
 
 /** a command Claude Code sent to the background has returned (background.ts): whether the session
  * has taken it on, in which case the row stays open and the session ends it when the command ends */
-export type BackgroundSink = (toolId: string, start: BackgroundStart, input: unknown) => boolean;
+export type BackgroundSink = (toolId: string, start: BackgroundStart) => boolean;
+/** the agent stopped a task it had sent to the background: the session ends the row held for it */
+export type StopSink = (taskId: string) => void;
 /** the session takes a wakeup's row on, to end it when the agent is back; `until` is the booked
  * time, or null when the call ended the loop instead, which ends the row booked before it */
 export type WakeupSink = (toolId: string, until: number | null) => void;
@@ -284,6 +286,7 @@ export function mapUpdate(
   sink?: ImageSink,
   background?: BackgroundSink,
   wakeup?: WakeupSink,
+  stopped?: StopSink,
 ): AgentEvent[] {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
@@ -338,7 +341,7 @@ export function mapUpdate(
       });
       // some agents report a one-shot tool already finished
       if (update.status === "completed" || update.status === "failed")
-        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup, stopped));
       return out;
     }
     case "tool_call_update": {
@@ -403,7 +406,7 @@ export function mapUpdate(
       if (update.content) memo.content = update.content;
       if (update.rawOutput !== undefined) memo.rawOutput = update.rawOutput;
       if ((update.status === "completed" || update.status === "failed") && !memo.ended) {
-        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup));
+        out.push(endOf(update.toolCallId, memo, update.status, sink, background, wakeup, stopped));
       }
       return out;
     }
@@ -446,6 +449,7 @@ function endOf(
   sink?: ImageSink,
   background?: BackgroundSink,
   wakeup?: WakeupSink,
+  stopped?: StopSink,
 ): AgentEvent {
   memo.ended = true;
   const output = summarizeToolOutput(memo.content, memo.rawOutput);
@@ -453,7 +457,13 @@ function endOf(
   // session ends it once the command has (background.ts). The wire says nothing more about it.
   if (status === "completed" && memo.kind === "execute" && background) {
     const start = backgroundStart(memo.input, output);
-    if (start && background(toolId, start, memo.input)) return { type: "tool-update", toolId, background: true };
+    if (start && background(toolId, start)) return { type: "tool-update", toolId, background: true };
+  }
+  // the agent stopped a task itself: this call closes like any other, and the row held for the
+  // task ends with it. A stop that failed stopped nothing, and that row waits on.
+  if (status === "completed" && stopped) {
+    const taskId = stoppedTask(memo.name || memo.title, memo.input);
+    if (taskId !== null) stopped(taskId);
   }
   // a wakeup the agent booked has only been booked: the row stays open, saying when, and the
   // session ends it when the agent is back (wakeup.ts). The adapter names the call by its title

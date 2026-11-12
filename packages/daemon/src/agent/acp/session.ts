@@ -1630,13 +1630,14 @@ export class AcpSession implements AgentAdapter {
         fireAndForget(this.d.worktreeId, this.d.attachments.putToolImage(this.d.worktreeId, file, bytes), "tool image"),
       // an adapter that reports a backgrounded command's finish itself needs no tail (wire.ts)
       wireFlags(live.conn.spec.id).backgroundFinish
-        ? (toolId, start, input) => {
-            const taken = this.tasks.start(toolId, start, input);
+        ? (toolId, start) => {
+            const taken = this.tasks.start(toolId, start);
             if (taken) this.holdingChanged();
             return taken;
           }
         : undefined,
       (toolId, until) => (until === null ? this.wakeups.stop() : this.wakeups.start(toolId, until)),
+      (taskId) => this.tasks.stop(taskId),
     );
     this.forward(live, events);
     this.holdInput(live, params.update);

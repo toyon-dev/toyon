@@ -32,9 +32,9 @@
   }
   /* the pane's own controls, the full toggle and the close, are one cluster: both are about the
      pane's shape, so they sit closer to each other than to what the content put in the head.
-     The 6 is measured for both states of the toggle. A glyph is inset 4 to 6 in its 20px box, so
-     at rest the last control's edge, the square and the cross stand 16 apart, and lit, the seat
-     stands the head's 12 from that control and 12 from the cross. */
+     The 6 is measured for both states of the toggle. A glyph is inset in its 20px box, so at
+     rest the toggle's glyph stands as far from the control before it as from the cross, and
+     lit, its seat stands the head's 12 from that control and 12 from the cross. */
   .pane-shape {
     display: flex;
     align-items: center;

@@ -90,11 +90,14 @@ const ICON_PATHS: Record<IconName, string> = {
   // its stroke on every side at 13px, where the full-size one would cross it
   tickbox: "M4.5 2.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z",
   "tickbox-on": "M4.5 2.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M5.3 8.2 7.2 10.1 10.7 6",
-  // a pane with a divider (split) and the same pane without one (full height)
+  // a pane with a divider
   split: "M2.5 2.5h11v11h-11z M2.5 8h11",
   // the same pane divided the other way: two columns, for a diff drawn side by side
   columns: "M2.5 2.5h11v11h-11z M8 2.5v11",
-  full: "M2.5 2.5h11v11h-11z",
+  // the caret twice, parting up and down: a pane taking the column's whole height. The one axis
+  // it grows on, so it is not the corner arrows of a window going full screen, nor zen's
+  // brackets; and not a bare square, which is an empty tick box beside the set's own
+  full: "M4.5 6.2 8 2.7l3.5 3.5 M4.5 9.8 8 13.3l3.5-3.5",
   // three tiny rings, each closed by the stroke into a 2.2px dot. As zero-length segments the round
   // caps drew them at the stroke's own 1.3px, the thinnest mark in any row, and they went faint on
   // every tier; at 2.5px they outweighed the plus beside them

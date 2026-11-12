@@ -1,6 +1,5 @@
 import type { WorktreeStatus } from "@toyon/shared";
 import { useSock, useStore } from "../../state/context.tsx";
-import { Button } from "../../ui/Button.tsx";
 import { DaemonRow } from "./DaemonRow.tsx";
 
 /** The one thing in a found worktree's chat: git knows the directory, Toyon did not make it and
@@ -24,23 +23,22 @@ export function FoundNote({ row }: { row: WorktreeStatus }) {
       word={row.locked ? "held" : "discovered"}
       tone="quiet"
       below={note}
+      press={
+        row.locked
+          ? undefined
+          : {
+              label: "take over",
+              act: true,
+              onPress: () => sock?.send({ t: "adopt-worktree", worktreeId: row.id, clientId }),
+            }
+      }
     >
-      {/* the path in the mono the grafted row names a branch in: a code chip in the head outweighs
-          the word beside it. Inside the sentence, which is what grows and keeps the offer at the
-          row's far end. */}
+      {/* the path in the row's small mono, inside the sentence: a code chip in the head outweighs
+          the word beside it */}
       <span className="daemon-text">
         {row.locked && `by ${row.lockReason ?? "another tool"}, at `}
         <span className="tool-hint">{dir}</span>
       </span>
-      {!row.locked && (
-        <Button
-          variant="inline"
-          tone="strong"
-          onClick={() => sock?.send({ t: "adopt-worktree", worktreeId: row.id, clientId })}
-        >
-          take over
-        </Button>
-      )}
     </DaemonRow>
   );
 }

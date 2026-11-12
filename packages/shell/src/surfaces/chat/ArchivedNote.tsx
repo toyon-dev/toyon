@@ -1,7 +1,6 @@
 import type { ArchivedWorktree } from "@toyon/shared";
 import { restoreArchived } from "../../state/actions/archive.ts";
 import { useSock, useStore } from "../../state/context.tsx";
-import { Button } from "../../ui/Button.tsx";
 import { landedLines } from "../recap.ts";
 import { DaemonRow, useAgo } from "./DaemonRow.tsx";
 import { dollars } from "./usage.ts";
@@ -30,16 +29,22 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   // chat, and this is the last word on it
   const landed = landedLines(item.lands);
   return (
-    <DaemonRow icon="archive" word="archived" tone="quiet" at={item.archivedAt} below={[...landed, note]}>
+    <DaemonRow
+      icon="archive"
+      word="archived"
+      tone="quiet"
+      at={item.archivedAt}
+      below={[...landed, note]}
+      press={
+        item.restorable
+          ? { label: "restore", act: true, onPress: () => restoreArchived({ sock }, item.id, clientId) }
+          : undefined
+      }
+    >
       <span className="daemon-text">
         {ago}
         {item.landed ? ", after it was merged into main" : ""}
       </span>
-      {item.restorable && (
-        <Button variant="inline" tone="strong" onClick={() => restoreArchived({ sock }, item.id, clientId)}>
-          restore
-        </Button>
-      )}
     </DaemonRow>
   );
 }

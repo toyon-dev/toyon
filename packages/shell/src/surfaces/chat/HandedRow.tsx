@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 import { nextSeq, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
 import { rowState } from "../../ui/rowState.ts";
 import { DaemonRow } from "./DaemonRow.tsx";
 import { WorktreeChip } from "./WorktreeChip.tsx";
@@ -65,20 +64,16 @@ export function HandedRow({
       at={item.ts}
       data-state={rowState({ cursor: marked })}
       below={[item.note ? `you added: ${item.note}` : undefined, children]}
+      // one verb for both: the row's word already says which was given
+      press={{
+        label: "read",
+        tip: plan ? "Read the plan this worktree was given, beside the chat" : "Read the message beside the chat",
+        onPress: open,
+      }}
     >
       <span className="daemon-text">
         from <WorktreeChip id={item.origin.id} title={item.origin.title} />
         {item.origin.project ? ` in ${item.origin.project}` : ""}
-        {" · "}
-        <Button
-          variant="inline"
-          data-tip={
-            plan ? "Read the plan this worktree was given, beside the chat" : "Read the message beside the chat"
-          }
-          onClick={open}
-        >
-          {plan ? "the plan" : "the message"}
-        </Button>
       </span>
     </DaemonRow>
   );

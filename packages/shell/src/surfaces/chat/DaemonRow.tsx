@@ -1,4 +1,5 @@
 import { type HTMLAttributes, type ReactNode, useEffect, useState } from "react";
+import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { spanWords } from "../util.ts";
 
@@ -45,8 +46,15 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
   /** what stands under the sentence and its lines in the sentence's own column and tier: the rows
    * a card in the transcript offers. A line is read; this is pressed. */
   under?: ReactNode;
+  /** the row's one press, a word or two at its far end: what it opens (the pull request a landing
+   * went through, the plan a worktree was given) or the verb that changes the row (restore, take
+   * over). One place for every row, so the sentence is only ever read. */
+  press?: DaemonPress;
   children?: ReactNode;
 };
+
+/** `act`: the press changes the row rather than opening something, and stands a tier up for it */
+export type DaemonPress = { label: string; tip?: string; act?: boolean; onPress: () => void };
 
 /** A row the daemon writes into the transcript itself, as opposed to one the agent or the person
  * wrote. One box for all of them: it spans the log the way a tool row does, so its edge stands on
@@ -54,7 +62,7 @@ type Props = Omit<HTMLAttributes<HTMLDivElement>, "className"> & {
  * is not the odd row out in a scrolled-back turn. The word is a column of its own: the sentence
  * and every line under it start where the sentence starts, so a byline reads as the sentence's
  * and not as a second thing said beside the word. */
-export function DaemonRow({ icon, word, tone, at, below, under, children, ...rest }: Props) {
+export function DaemonRow({ icon, word, tone, at, below, under, press, children, ...rest }: Props) {
   const tip = at !== undefined ? { "data-tip": `${word} ${AT.format(at)}`, "data-tip-placement": "top" } : null;
   const lines = (Array.isArray(below) ? below : [below]).filter((l) => l !== undefined && l !== null && l !== false);
   return (
@@ -65,7 +73,20 @@ export function DaemonRow({ icon, word, tone, at, below, under, children, ...res
           {word}
         </span>
         <div className="daemon-body">
-          <div className="daemon-line">{children}</div>
+          <div className="daemon-line">
+            {children}
+            {press && (
+              <Button
+                variant="inline"
+                tone={press.act ? "strong" : undefined}
+                className="daemon-press"
+                data-tip={press.tip}
+                onClick={press.onPress}
+              >
+                {press.label}
+              </Button>
+            )}
+          </div>
           {lines.map((line, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record
             <div key={i} className="daemon-below row-dim">

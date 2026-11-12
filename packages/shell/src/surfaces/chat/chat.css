@@ -758,8 +758,7 @@
       border-top: 1px solid var(--border0);
     }
   }
-  .tool-row .tool-hint,
-  .daemon-row .tool-hint {
+  .tool-row .tool-hint {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1111,10 +1110,10 @@
    the log the way a tool row does, -12px being the log's padding put back inside as the row inset,
    so the edge stands where the open band's edge stands and the glyph on the tool rows' glyph
    column. The edge is the selected-row bar rather than a border, since a border would push the
-   glyph 2px off that column. The row is prose in the UI face; the tool name and path it quotes are
-   the only mono. The tone names the edge's colour, which is the tag's, and the row carries no
-   other: the landed row takes the aqua that says "landed" everywhere else, not the accent, since on
-   the blocked row's red a land read as a failure. */
+   glyph 2px off that column. The row is prose in the UI face; a path it quotes is the only mono.
+   The tone names the edge's colour, which is the tag's, and the row carries no other: the landed
+   row takes the aqua that says "landed" everywhere else, not the accent, since on the blocked
+   row's red a land read as a failure. */
   .daemon-row {
     margin: 0 -12px;
     padding: 4px var(--row-inset);
@@ -1143,13 +1142,23 @@
     & .daemon-tag {
       color: var(--row-edge-color);
     }
+    /* A quiet row's word has no colour of its own, and it stands close to its sentence, so it
+       sits a rung under it: the tier is what tells the two apart there, as the colour does on a
+       toned row. The glyph keeps the edge's colour on every row. */
+    &[data-tone="quiet"] .daemon-tag {
+      color: var(--text2);
+    }
+    & .daemon-tag > .icon-inline {
+      color: var(--row-edge-color);
+    }
     /* the word stands on the sentence's first line, not the middle of the block: a sentence that
        wraps on a phone is two lines, and a word centred between them floated off both. Each part
-       keeps the row's own line box, so on one line nothing moves. */
+       keeps the row's own line box, so on one line nothing moves. The gap is a little over a
+       word space: the word leads into the sentence rather than standing off from it. */
     & .daemon-head {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
+      gap: 5px;
     }
     /* the sentence and the lines under it, as one column beside the word */
     & .daemon-body {
@@ -1159,34 +1168,36 @@
     & .daemon-line {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
+      gap: 12px;
     }
-    /* the tool and path a refused call is quoted by are set like the tool row they stand for: at
-       the body mono they outgrew the row's own word. The row's line box, said after the shorthand
-       that resets it, so the name sits level with the word. */
-    & .tool-name,
+    /* A path the sentence quotes, in the mono a path wears everywhere, at the small mono's size:
+       the mono is wider and taller than the prose at one size, and a step up it outgrew the
+       row's own word. The row's line box, said after the shorthand that resets it, so the path
+       sits level with the words around it. It wraps with the sentence it is in, and breaks at any
+       character: a path has no spaces, so one too long for the line would otherwise leave the
+       line it starts on and drop whole to the next. */
     & .tool-hint {
-      font: var(--type-log);
+      font: var(--type-mono-sm);
       line-height: 1lh;
+      color: var(--text2);
+      word-break: break-all;
     }
-    & .tool-name {
-      color: var(--text1);
-    }
-    /* the hint gives way but never grows, as on a tool row: a long path or branch is what truncates */
-    & .tool-hint {
-      flex: 0 1 auto;
-      min-width: 0;
-    }
-    /* the daemon's sentence wraps rather than pushing the offer beside it off the row */
+    /* the daemon's sentence wraps rather than pushing the press beside it off the row */
     & .daemon-text {
       flex: 1;
       min-width: 0;
       overflow-wrap: anywhere;
     }
+    /* The row's one press, at its far end, on the sentence's first line: a word or two that keeps
+       its width and its one line while the sentence wraps beside it. */
+    & .daemon-press {
+      flex: none;
+      white-space: nowrap;
+    }
     /* the rows a card in the transcript offers (the flip's), under the sentence: at the row's own
        face, since a card's rows at the card's size stood a tier above the sentence they answer,
-       and bled by the head's gap so their bands start where the word's column ends while their
-       labels stay in the sentence's column */
+       and bled by their own inset, into the clear room under the word, so their labels stay in
+       the sentence's column */
     & .choices {
       --picker-inset: 8px;
       --picker-bleed: -8px;
@@ -1456,6 +1467,14 @@
   .chat-mention[data-worktree] {
     font: inherit;
     text-decoration-thickness: 1px;
+  }
+  /* A word to press on a line of the chat stands beside a mention or a link, so its underline is
+     cut to theirs: two pixels under the baseline and one thick. The button's own offset and the
+     face's weight both scale with the type, and the dotted line then lands a fraction of a pixel
+     off the solid one next to it. */
+  .chat-log .btn-inline {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
   }
   /* The row's dot, the rail's own, so a message says what the row is doing as the rail does, and
      the hollow one for a row in the archive, whose press opens the archive's page and not a live

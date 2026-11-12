@@ -1319,8 +1319,17 @@ export const ChatItemView = memo(function ChatItemView({
           below={item.reason}
           {...cm.contextMenu(() => pathItems(item.path, undefined, daemonHost(deps.sock)))}
         >
-          <span className="tool-name">{item.tool}</span>
-          {item.path && <span className="tool-hint">{item.path}</span>}
+          {/* the tool by name in the row's own face, as every other row names a thing; the path is
+              the one literal, so it alone is mono */}
+          <span className="daemon-text">
+            {item.tool}
+            {item.path && (
+              <>
+                {" "}
+                <span className="tool-hint">{item.path}</span>
+              </>
+            )}
+          </span>
         </DaemonRow>
       );
     case "grafted":
@@ -1454,7 +1463,6 @@ function PlanRow({ file, worktreeId }: { file: string; worktreeId?: string | nul
       <span className="daemon-text">
         <Button
           variant="inline"
-          tone="strong"
           data-tip={file}
           onClick={() => worktreeId && openFile({ sock, dispatch }, { worktreeId, path: file, view: "preview" })}
         >
@@ -1489,22 +1497,21 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
   // sentence.
   const what = item.mark && landedWhat(item.mark);
   const how = `${item.text}, ${ago}`;
-  // the pull request it went through, offered the way the handoff row offers its list: in the
-  // sentence, after the thing it belongs to
-  const pr = item.url && (
-    <Button variant="inline" onClick={() => openOut(item.url)}>
-      the PR
-    </Button>
-  );
+  // the pull request it went through is the row's press
+  const url = item.url;
   // the work is on the base and yet the row was not marked landed: the rail cannot say why, so
   // this row does, as of the landing. The mark comes back on its own once the fact clears.
   const held = item.held && `Not marked landed: ${ended(item.held)}`;
   return (
-    <DaemonRow icon="check" word="landed" tone="aqua" at={item.ts} below={[what ? how : undefined, held]}>
-      <span className="daemon-text">
-        {what ?? how}
-        {pr && <> · {pr}</>}
-      </span>
+    <DaemonRow
+      icon="check"
+      word="landed"
+      tone="aqua"
+      at={item.ts}
+      below={[what ? how : undefined, held]}
+      press={url ? { label: "the PR", onPress: () => openOut(url) } : undefined}
+    >
+      <span className="daemon-text">{what ?? how}</span>
     </DaemonRow>
   );
 }

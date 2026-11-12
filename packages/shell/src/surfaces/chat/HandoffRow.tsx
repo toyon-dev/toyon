@@ -9,9 +9,8 @@ import { Fragment } from "react";
 import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
 import { openOut } from "../../ui/links.ts";
-import { DaemonRow } from "./DaemonRow.tsx";
+import { type DaemonPress, DaemonRow } from "./DaemonRow.tsx";
 import { type HandoffItem, startingPieces } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
 
@@ -22,15 +21,13 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   // the file the list sat on: the agent's plan when the list rode beside a plan card, else the
   // page Toyon wrote for it, each with the section drawn at its head
   const plan = item.plan;
-  const file =
-    plan && worktreeId ? (
-      <Button
-        variant="inline"
-        onClick={() => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" })}
-      >
-        {item.companion ? "the plan" : "the list"}
-      </Button>
-    ) : null;
+  const file: DaemonPress | undefined =
+    plan && worktreeId
+      ? {
+          label: item.companion ? "the plan" : "the list",
+          onPress: () => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" }),
+        }
+      : undefined;
   if (item.state === "going") {
     // the worktrees being made, by name, the same sentence the done row reads: a title with the
     // idle dot until the daemon says its worktree is up, then the row's own chip, whose dot is
@@ -66,11 +63,8 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   }
   if (item.state === "declined") {
     return (
-      <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} below={item.reason}>
-        <span className="daemon-text">
-          nothing started
-          {file && <> · {file}</>}
-        </span>
+      <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} below={item.reason} press={file}>
+        <span className="daemon-text">nothing started</span>
       </DaemonRow>
     );
   }
@@ -125,6 +119,7 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
       tone="accent"
       at={item.ts}
       below={errors.length ? errors.map((o) => `${titled(o.pieceId)}: ${o.error}`).join("; ") : undefined}
+      press={file}
     >
       <span className="daemon-text">
         {parts.length === 0
@@ -136,7 +131,6 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
                 {p}
               </span>
             ))}
-        {file && <> · {file}</>}
       </span>
     </DaemonRow>
   );
@@ -165,23 +159,20 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
  * for that branch before it started, the same row says it landed again; on the origin whose own
  * work waited for it, that the wait is over. */
 export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
+  const url = item.url;
   return (
-    <DaemonRow icon="check" word={item.again ? "landed again" : "landed"} tone="aqua" at={item.ts}>
-      {/* the worktree is its chip; work in another project is named with where. Its pull request
-          follows in the sentence, as the list follows the handoff row's */}
+    <DaemonRow
+      icon="check"
+      word={item.again ? "landed again" : "landed"}
+      tone="aqua"
+      at={item.ts}
+      press={url ? { label: "the PR", onPress: () => openOut(url) } : undefined}
+    >
+      {/* the worktree is its chip; work in another project is named with where */}
       <span className="daemon-text">
         <WorktreeChip id={item.worktreeId} title={item.title} />
         {item.same ? "" : ` in ${item.repoName}`}
         {item.awaited && ", which the work here waited for"}
-        {item.url && (
-          <>
-            {" "}
-            ·{" "}
-            <Button variant="inline" onClick={() => openOut(item.url)}>
-              the PR
-            </Button>
-          </>
-        )}
       </span>
     </DaemonRow>
   );

@@ -160,7 +160,8 @@
      lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls and the
      window undraggable. It holds what a browser's own bar would: back, forward, reload and the
      address, over the page they steer, since the strip stands anyway and the page is all there
-     is to act on. The zen toggle is alone at its usual edge, lit: with no browser chrome around
+     is to act on. On a file it holds the file's head instead (.bar-file, below), since there the
+     file is. The zen toggle is alone at its usual edge, lit: with no browser chrome around
      the window it is the one standing sign of a way out. The other toggles are what zen
      removes, and each is a chord away once out. The lead empties rather than goes, so its box
      still stands at the bar's inset and the cluster is measured clear of the window's controls. */
@@ -174,6 +175,26 @@
     .app.zen .bar-center > .bar-inspect,
     .app.zen .bar-tools > :not(.bar-zen) {
       display: none;
+    }
+  }
+  /* The seat for the open file's head, in the strip of a window zen gave to the file (TopBar.tsx):
+   the editor's own head row, drawn here by the pane, so the name stands where a window's title
+   does and its switches and close at the end. It takes the room between the bar's inset and the
+   zen toggle, and the bar's inset is the head's: the pane's would indent it twice. The margin
+   makes the step to the toggle the tools' own 20px, so the close reads as the file's and the
+   toggle as the window's. The seat's width is the bar's to give, never the head's to ask for: a
+   long path on one line was the bar's min-content, which the app grid honoured by growing past
+   the window. Contained, the head asks for nothing and its title gives as it does in a pane. */
+  .bar-file {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    contain: inline-size;
+    margin-right: 12px;
+    & .pane-head {
+      flex: 1;
+      min-width: 0;
+      padding: 0;
     }
   }
   /* Safari-style: nav+path anchored over the centre, out of the bar's flow. The bar sets `left`

@@ -27,8 +27,8 @@ const NATIVE_MENU = "input, textarea, [contenteditable], .monaco-editor, .xterm,
  *
  * A frame of its own rather than a branch inside App because hooks cannot be conditional, and
  * everything here is the desk's alone: two persisted dock widths, two drag measures that walk the
- * DOM, and the centre element the top bar places its cluster over. Held in one component, none of
- * it runs on a phone.
+ * DOM, the centre element the top bar places its cluster over, and the seat in the bar the centre
+ * puts a file's head in. Held in one component, none of it runs on a phone.
  */
 export function DeskFrame() {
   const store = useStoreInstance();
@@ -79,6 +79,8 @@ export function DeskFrame() {
   const dragRail = useDragResize((ev, handle) => measure(ev, handle, 280), setRailW);
   // the centre column's element, for the top bar: its cluster sits over the preview
   const [centerEl, setCenterEl] = useState<HTMLDivElement | null>(null);
+  // and the other way: the seat the bar keeps for the open file's head, for the centre's editor
+  const [fileHeadEl, setFileHeadEl] = useState<HTMLElement | null>(null);
 
   // a right-click nothing else answered: bare chrome opens the app's own menu, so the gesture
   // works everywhere and nobody learns to stop trying it. A row that answered has stopped the
@@ -123,13 +125,13 @@ export function DeskFrame() {
     >
       <Tooltips />
       <Menus />
-      <TopBar center={centerEl} />
+      <TopBar center={centerEl} onFileHead={setFileHeadEl} />
       <div className="docks">
         {chatLeft && rail}
         {chatLeft && railHandle("left")}
         {first.dock}
         {first.open && <div className="dock-resize left" onPointerDown={first.drag} />}
-        <Center onRoot={setCenterEl} />
+        <Center onRoot={setCenterEl} fileHead={fileHeadEl} />
         {last.open && <div className="dock-resize right" onPointerDown={last.drag} />}
         {last.dock}
         {!chatLeft && railHandle("right")}

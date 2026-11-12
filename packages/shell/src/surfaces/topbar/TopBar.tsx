@@ -16,10 +16,10 @@ import {
   useLocalField,
   usePreviewId,
 } from "../../state/selectors.ts";
-import { canOfferPhone, previewUp, whatsNew } from "../../state/store.ts";
+import { canOfferPhone, previewUp, whatsNew, zenShowsFile } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
-import { useEdges, useEdgesOf, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
+import { useEdges, useEdgesOf, useMedia, useOnChange, usePinToView, useWindowWidth } from "../../ui/hooks.ts";
 import { Icon, type IconName } from "../../ui/Icon.tsx";
 import { grouped, useContextMenu } from "../../ui/menu.ts";
 import { paneInHand } from "../../ui/Pane.tsx";
@@ -32,10 +32,21 @@ import { useFloatUp } from "../../ui/Float.tsx";
 import { navCluster } from "./navCluster.ts";
 import { RoutePicker } from "./RoutePicker.tsx";
 
+/** the bar is the window's title bar: the installed app with its window controls laid over the
+ * page. The query topbar.css keys the same strip on. */
+const TITLE_STRIP = "(display-mode: window-controls-overlay)";
+
 /** the top bar: dock toggles, the route centered over the preview, tools (proc health badges the
  * composer's terminal button; a dead socket colours the worktree rail) */
-/** `center`: the centre column's element, so the nav cluster can sit over it */
-export function TopBar({ center }: { center: HTMLDivElement | null }) {
+/** `center`: the centre column's element, so the nav cluster can sit over it. `onFileHead`: the
+ * seat the bar keeps for the open file's head, handed out while it keeps one and null otherwise */
+export function TopBar({
+  center,
+  onFileHead,
+}: {
+  center: HTMLDivElement | null;
+  onFileHead: (el: HTMLElement | null) => void;
+}) {
   // the nav cluster stays centred over the centre as drawn, clear of the bar's own lead and tools;
   // only this surface re-renders when any of the three moves
   const winW = useWindowWidth();
@@ -60,6 +71,13 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   // chat is the centre rather than a panel to toggle
   const chatCentred = useChatCentred();
   const zen = useStore((s) => s.zen) && !chatCentred;
+  // Zen on a file, where the strip stands: the window is the file's, so the strip is the file's
+  // head, in the address's place. The address is about a page that is off screen, and the head
+  // in a row of its own under the strip would be a second bar over the file. In a browser tab zen
+  // has no strip, and the head stays the editor's first row.
+  const zenFile = useStore(zenShowsFile);
+  const titleStrip = useMedia(TITLE_STRIP);
+  const fileHead = zenFile && titleStrip;
   const changesOpen = useStore((s) => s.layout.changes);
   const chatOpen = useStore((s) => s.layout.chat);
   const bare = useBare();
@@ -141,10 +159,16 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         <UpdateOffer />
         <NotesOffer />
       </span>
-      {!chatCentred && (
-        <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
+      {fileHead ? (
+        <span className="bar-file" ref={onFileHead} />
+      ) : (
+        <>
+          {!chatCentred && (
+            <RouteBar worktreeId={id} repoId={active?.repoId ?? null} ready={ready} left={nav.left} width={nav.width} />
+          )}
+          <span className="bar-grow" />
+        </>
       )}
-      <span className="bar-grow" />
       {/* right cluster: phone · settings · design · the panel toggles this edge holds · zen (zen last:
           it hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
           shell per worktree, not app chrome. */}

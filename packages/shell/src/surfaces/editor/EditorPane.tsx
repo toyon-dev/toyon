@@ -123,6 +123,7 @@ export function EditorPane({
   onToggleFull,
   onDragStart,
   placement = "stack",
+  headIn,
 }: {
   editor: EditorFile;
   height?: number | string;
@@ -130,6 +131,8 @@ export function EditorPane({
   onToggleFull?: () => void;
   onDragStart?: (e: React.PointerEvent) => void;
   placement?: "stack" | "screen";
+  /** where the head is drawn when it is not the pane's first row (Pane, `headIn`) */
+  headIn?: HTMLElement | null;
 }) {
   const onScreen = placement === "screen";
   const dispatch = useDispatch();
@@ -359,6 +362,7 @@ export function EditorPane({
           : []
       }
       onClose={() => dispatch({ a: "close-editor" })}
+      headIn={headIn}
       full={full}
       // a screen is already the column, so it has no split to go back to
       onToggleFull={onScreen ? undefined : onToggleFull}

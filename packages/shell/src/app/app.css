@@ -22,9 +22,14 @@
     &.zen-file .pane:not([data-pane="editor"]) {
       display: none;
     }
+    /* a pane's top line parts it from the preview above, and the file zen gave the window to has
+       nothing above it: the line would run along the window's top edge, or double the strip's */
+    &.zen-file .pane[data-pane="editor"] {
+      border-top: 0;
+    }
   }
   /* The top bar in zen is topbar.css's: hidden there, except in the installed app, where it is the
-     window's own title bar and keeps the page's address and the way out. */
+     window's own title bar and keeps the page's address, or the file's head, and the way out. */
 
   /* The row fits the window it is in, not the one its widths were dragged in: the installed app
      opens at the size its own window last had. Each dock's width is its basis and it gives from

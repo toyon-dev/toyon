@@ -17,43 +17,54 @@
        shrinks to fit, each pane holding its own min-height, rather than pushing the lowest one
        off the bottom of the page with its close button */
     flex-shrink: 1;
-    /* one dense row tall whether it holds a title or a tab strip, so the crash card and the strip
-       take the height from the token rather than measuring it; a 20px icon box sits in it with
-       2px of seat, the way it does in the bar's clusters */
-    & .pane-head {
-      display: flex;
-      gap: 12px;
-      padding: 0 16px;
-      min-height: var(--row-height-sm);
-      align-items: center;
-    }
-    /* the pane's own controls, the full toggle and the close, are one cluster: both are about the
-       pane's shape, so they sit closer to each other than to what the content put in the head,
-       and a wider gap in front marks where the content's controls end */
-    & .pane-shape {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-left: 8px;
-    }
-    /* a strip is the whole head: it brings its own inset and its own gap */
-    & .pane-head-tabs {
-      padding: 0;
-      gap: 0;
-      & .tabs {
-        flex: 1;
-      }
-    }
-    /* the title gives before the actions do: on one line and cut, so a long path in a narrow
-       centre never wraps the head to two rows and pushes the actions past the pane's edge */
-    & .pane-title {
+  }
+  /* The head is not said under .pane: a pane the window was given to has its head in the title
+     strip (Pane.tsx, `headIn`), outside the pane's box, and it is the same row there.
+     One dense row tall whether it holds a title or a tab strip, so the crash card and the strip
+     take the height from the token rather than measuring it; a 20px icon box sits in it with
+     2px of seat, the way it does in the bar's clusters */
+  .pane-head {
+    display: flex;
+    gap: 12px;
+    padding: 0 16px;
+    min-height: var(--row-height-sm);
+    align-items: center;
+  }
+  /* the pane's own controls, the full toggle and the close, are one cluster: both are about the
+     pane's shape, so they sit closer to each other than to what the content put in the head,
+     and a wider gap in front marks where the content's controls end */
+  .pane-shape {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+  }
+  /* a strip is the whole head: it brings its own inset and its own gap */
+  .pane-head-tabs {
+    padding: 0;
+    gap: 0;
+    & .tabs {
       flex: 1;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font: var(--type-mono);
-      color: var(--text1);
+    }
+  }
+  /* the title gives before the actions do: on one line and cut, so a long path in a narrow
+     centre never wraps the head to two rows and pushes the actions past the pane's edge */
+  .pane-title {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: var(--type-mono);
+    color: var(--text1);
+  }
+  /* In the installed app's title strip the bar is a drag region, where a press goes to the OS
+     and never reaches the page. The words of the title are held out of it, so the file's menu
+     and its tip still answer there; the room beside them drags the window. */
+  @media (display-mode: window-controls-overlay) {
+    .pane-title > * {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
     }
   }
   .pane-resize {

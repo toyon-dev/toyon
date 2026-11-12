@@ -88,7 +88,10 @@ describe("layers", () => {
       if (file !== "ui/Float.tsx" && /\b(show|hide|toggle)Popover\b|\.popover\s*=|\bpopover=/.test(code)) {
         offenders.push(`${file}: only ui/Float.tsx opens the top layer`);
       }
-      if (/createPortal/.test(code)) offenders.push(`${file}: a float is in the top layer, not a portal`);
+      // a pane's head in the title strip is in flow there and covers nothing: the one portal
+      if (file !== "ui/Pane.tsx" && /createPortal/.test(code)) {
+        offenders.push(`${file}: a float is in the top layer, not a portal`);
+      }
     }
     for (const file of cssFiles()) {
       if (file === "ui/float.css") continue;

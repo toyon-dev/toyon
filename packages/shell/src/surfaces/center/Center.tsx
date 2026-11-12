@@ -98,8 +98,16 @@ import { useOnChange } from "../../ui/hooks.ts";
 
 /** the centre: one persistent iframe per visited worktree (switching is a display toggle,
  * so each preview keeps its app state + HMR socket while hidden), the editor pane, and the overlays */
-/** `onRoot`: the column's own element, for the App to hand the top bar, which places its cluster over it */
-export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void }) {
+/** `onRoot`: the column's own element, for the App to hand the top bar, which places its cluster over it.
+ * `fileHead`: the seat the top bar keeps for the open file's head while zen has given the window
+ * to the file and the bar is the window's title strip; null whenever it keeps none */
+export function Center({
+  onRoot,
+  fileHead,
+}: {
+  onRoot: (el: HTMLDivElement | null) => void;
+  fileHead: HTMLElement | null;
+}) {
   const centerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useCallback(
     (el: HTMLDivElement | null) => {
@@ -707,6 +715,8 @@ export function Center({ onRoot }: { onRoot: (el: HTMLDivElement | null) => void
           // the window is the file's in zen, with no preview above to split with
           onToggleFull={zenFile ? undefined : () => setEditorFull(!editorFull)}
           onDragStart={startEditorDrag}
+          // the seat outlives zen by a render, and a head left in it would go with it
+          headIn={zenFile ? fileHead : null}
         />
       )}
       {/* the panes remount per worktree, and they are siblings in one children array: a key both

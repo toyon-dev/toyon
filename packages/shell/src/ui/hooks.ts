@@ -199,6 +199,20 @@ export function useWindowWidth(): number {
   return w;
 }
 
+/** Whether a media query holds, live: for a layout script has to follow, since a stylesheet's
+ * own @media can restyle an element and cannot move one */
+export function useMedia(query: string): boolean {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setOn(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return on;
+}
+
 /** Scroll a row's output into view once it opens. A row grows wherever the layout has room: up
  * while the transcript is short enough to sit on the composer, down once it scrolls. Either way the
  * output can land below the pane, so after the open commits the scroller moves down far enough to

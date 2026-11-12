@@ -41,7 +41,7 @@ describe("the docks row fits the window", () => {
     expect(decls.get("overflow")).toBe("clip");
   });
   test("a pane's title gives before its actions, on one line", async () => {
-    const decls = declsOf(cssRules(await shellCss()), ".pane .pane-title");
+    const decls = declsOf(cssRules(await shellCss()), ".pane-title");
     expect(decls.get("min-width")).toBe("0");
     expect(decls.get("white-space")).toBe("nowrap");
     expect(decls.get("text-overflow")).toBe("ellipsis");

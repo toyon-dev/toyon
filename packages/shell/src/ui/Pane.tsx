@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { IconButton } from "./Button.tsx";
 import "./pane.css";
 import { cx } from "./cx.ts";
@@ -40,6 +41,7 @@ export function Pane({
   onToggleFull,
   onClose,
   closeHint = "esc",
+  headIn,
   children,
 }: {
   /** which pane this is, so Escape closes the one holding the keyboard rather than the first open */
@@ -62,6 +64,10 @@ export function Pane({
   onToggleFull?: () => void;
   onClose: () => void;
   closeHint?: string;
+  /** an element outside the pane that holds its head: the window's title strip, for a pane the
+   * window was given to, so the pane's first row is its content. The head is in flow there and
+   * covers nothing, which is why this is a portal and not a float. */
+  headIn?: HTMLElement | null;
   children: ReactNode;
 }) {
   const cm = useContextMenu("pane");
@@ -85,6 +91,27 @@ export function Pane({
       <IconButton icon="close" label="Close" hint={closeHint} onClick={onClose} />
     </span>
   );
+  const head = (
+    <div className={cx("pane-head", tabs && "pane-head-tabs")} {...cm.contextMenu(() => menu?.() ?? [])}>
+      {tabs ? (
+        <Tabs
+          {...tabs}
+          end={
+            <>
+              {actions}
+              {shape}
+            </>
+          }
+        />
+      ) : (
+        <>
+          <span className="pane-title">{title}</span>
+          {actions}
+          {shape}
+        </>
+      )}
+    </div>
+  );
   return (
     // Focusable but out of the tab order: a click on the pane's own ground (the design pane is
     // mostly that) otherwise drops focus on the body, and Escape could not tell which pane was meant
@@ -95,25 +122,7 @@ export function Pane({
       style={height === undefined ? undefined : { height }}
     >
       {resizable && <div className="pane-resize" onPointerDown={onDragStart} />}
-      <div className={cx("pane-head", tabs && "pane-head-tabs")} {...cm.contextMenu(() => menu?.() ?? [])}>
-        {tabs ? (
-          <Tabs
-            {...tabs}
-            end={
-              <>
-                {actions}
-                {shape}
-              </>
-            }
-          />
-        ) : (
-          <>
-            <span className="pane-title">{title}</span>
-            {actions}
-            {shape}
-          </>
-        )}
-      </div>
+      {headIn ? createPortal(head, headIn) : head}
       {children}
     </div>
   );

@@ -65,8 +65,9 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   }
   if (item.state === "declined") {
     return (
-      <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} below={item.reason} press={file}>
-        <span className="daemon-text">nothing started</span>
+      // the word already says nothing started, so the reason is the sentence where there is one
+      <DaemonRow icon="close" word="not handed off" tone="quiet" at={item.ts} press={file}>
+        <span className="daemon-text">{item.reason ?? "nothing started"}</span>
       </DaemonRow>
     );
   }

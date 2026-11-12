@@ -64,9 +64,10 @@ export function HandedRow({
       at={item.ts}
       data-state={rowState({ cursor: marked })}
       below={[item.note ? `you added: ${item.note}` : undefined, children]}
-      // one verb for both: the row's word already says which was given
+      // one word for both, the one every row that opens a document says: the row's own word
+      // already says which was given
       press={{
-        label: "read",
+        label: "details",
         tip: plan ? "Read the plan this worktree was given, beside the chat" : "Read the message beside the chat",
         onPress: open,
       }}

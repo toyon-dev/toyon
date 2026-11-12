@@ -35,6 +35,14 @@ export function landedLine(mark: LandMark): string | undefined {
   return mark.pr === undefined ? what : clipLine(`PR #${mark.pr}: ${what}`);
 }
 
+/** A pull request as a row's press names it: by its number. A piece's landing knows only where
+ * the pull request is, so the number is read off the address when the record carries none, and
+ * an address with no number in it is "the PR". */
+export function prWord(url: string, pr?: number): string {
+  const n = pr ?? url.match(/\/pull\/(\d+)/)?.[1];
+  return n === undefined ? "the PR" : `#${n}`;
+}
+
 /** The lines that say what a row landed, under a card's state or an archived chat's last word:
  * one per landing, oldest to newest and the newest `max` of them, led by how many landings came
  * before those. One landing is its line alone; several carry their age, which is what tells them

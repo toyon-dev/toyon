@@ -10,7 +10,7 @@ import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { openOut } from "../../ui/links.ts";
-import { landedWhat } from "../recap.ts";
+import { landedWhat, prWord } from "../recap.ts";
 import { type DaemonPress, DaemonRow } from "./DaemonRow.tsx";
 import { type HandoffItem, startingPieces } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
@@ -25,7 +25,8 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   const file: DaemonPress | undefined =
     plan && worktreeId
       ? {
-          label: item.companion ? "the plan" : "the list",
+          label: "details",
+          tip: item.companion ? "Read the plan beside the chat" : "Read the list beside the chat",
           onPress: () => openFile({ sock, dispatch }, { worktreeId, path: plan, view: "preview" }),
         }
       : undefined;
@@ -170,7 +171,7 @@ export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piec
       tone="aqua"
       at={item.ts}
       below={what}
-      press={url ? { label: "the PR", onPress: () => openOut(url) } : undefined}
+      press={url ? { label: prWord(url), tip: "Open the pull request", onPress: () => openOut(url) } : undefined}
     >
       {/* the worktree is its chip; work in another project is named with where */}
       <span className="daemon-text">

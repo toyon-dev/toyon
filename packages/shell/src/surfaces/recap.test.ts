@@ -17,6 +17,7 @@ import {
   prCanMerge,
   prLine,
   prLinks,
+  prWord,
   recapLine,
   verbLine,
   verdictLine,
@@ -80,6 +81,13 @@ describe("what a landing carried", () => {
     const line = landedLine(mark({ subjects: long }));
     expect(line?.length).toBeLessThanOrEqual(161);
     expect(line).toMatch(/…$/);
+  });
+
+  test("a row's press names the PR by number, the record's or the address's", () => {
+    expect(prWord("https://github.com/x/y/pull/134", 134)).toBe("#134");
+    expect(prWord("https://github.com/x/y/pull/134")).toBe("#134");
+    expect(prWord("https://github.com/x/y/pull/134/files")).toBe("#134");
+    expect(prWord("https://example.com/review/abc")).toBe("the PR");
   });
 
   test("one landing is its line; several carry their age, newest three, with the rest counted", () => {

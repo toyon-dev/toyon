@@ -1154,11 +1154,15 @@
     /* the word stands on the sentence's first line, not the middle of the block: a sentence that
        wraps on a phone is two lines, and a word centred between them floated off both. Each part
        keeps the row's own line box, so on one line nothing moves. The gap is a little over a
-       word space: the word leads into the sentence rather than standing off from it. */
+       word space: the word leads into the sentence rather than standing off from it. The band
+       spans the log but what it says keeps to a measure: the press stands at the far end of the
+       line, and in a wide chat that end was a chat's width from a short sentence. A dock is
+       narrower than the measure, so there the far end is the row's own. */
     & .daemon-head {
       display: flex;
       align-items: flex-start;
       gap: 5px;
+      max-width: 440px;
     }
     /* the sentence and the lines under it, as one column beside the word */
     & .daemon-body {

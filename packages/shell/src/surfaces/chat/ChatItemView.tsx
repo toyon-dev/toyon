@@ -28,7 +28,7 @@ import { rowState } from "../../ui/rowState.ts";
 import { Spinner } from "../../ui/Spinner.tsx";
 import { treeKey } from "../../ui/treeNav.ts";
 import { hhmm } from "../chips/baseNote.ts";
-import { ended, landedWhat } from "../recap.ts";
+import { ended, landedWhat, prWord } from "../recap.ts";
 import { elapsed, spanWords } from "../util.ts";
 import { AskRow } from "./AskRow.tsx";
 import { AttachmentSet } from "./AttachmentSet.tsx";
@@ -1523,7 +1523,11 @@ function LandedRow({ item }: { item: Extract<ChatItem, { kind: "landed" }> }) {
       tone="aqua"
       at={item.ts}
       below={[what ? how : undefined, held]}
-      press={url ? { label: "the PR", onPress: () => openOut(url) } : undefined}
+      press={
+        url
+          ? { label: prWord(url, item.mark?.pr), tip: "Open the pull request", onPress: () => openOut(url) }
+          : undefined
+      }
     >
       <span className="daemon-text">{what ?? how}</span>
     </DaemonRow>

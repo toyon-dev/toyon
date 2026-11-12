@@ -1139,16 +1139,9 @@
     &[data-tone="quiet"] {
       --row-edge-color: var(--ink1);
     }
+    /* a quiet row's word is in the sentence's own tier: a rung under it, on this band, it fell
+       to about two to one against the ground and was the hardest thing in the row to read */
     & .daemon-tag {
-      color: var(--row-edge-color);
-    }
-    /* A quiet row's word has no colour of its own, and it stands close to its sentence, so it
-       sits a rung under it: the tier is what tells the two apart there, as the colour does on a
-       toned row. The glyph keeps the edge's colour on every row. */
-    &[data-tone="quiet"] .daemon-tag {
-      color: var(--text2);
-    }
-    & .daemon-tag > .icon-inline {
       color: var(--row-edge-color);
     }
     /* the word stands on the sentence's first line, not the middle of the block: a sentence that

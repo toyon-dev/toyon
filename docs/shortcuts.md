@@ -22,7 +22,7 @@ Each feature with how to reach it. The short list and the automatic features are
 | Usage | The ring in the chat box shows how full the context is and your Claude plan usage. |
 | Agent, model and effort | Chips in the chat box. In a new chat the model chip lists every agent's models, and picking one picks its agent. "default agent" in the command palette sets the agent new chats start with. |
 | Background commands | A command the agent runs in the background shows its live output at the bottom of the chat. |
-| Split off work | `/handoff`. A piece can wait for another branch, and its agent is told when that branch lands. See [agents.md](agents.md#handoff). |
+| Split off work | `/handoff`. The work can wait for another branch, and its agent is told when that branch lands. See [agents.md](agents.md#handoff). |
 | Copy code | Code blocks have a copy button. |
 
 ## Code

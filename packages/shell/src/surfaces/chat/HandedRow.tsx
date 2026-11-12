@@ -60,7 +60,7 @@ export function HandedRow({
   return (
     <DaemonRow
       icon="handoff"
-      word={plan ? "plan" : "piece"}
+      word={plan ? "plan" : "message"}
       tone="accent"
       at={item.ts}
       data-state={rowState({ cursor: marked })}

@@ -58,7 +58,7 @@ After you approve:
 - Its agent starts at once. Its dev servers start the first time you open it.
 - A piece sent to an open worktree arrives as a message that says which worktree sent it.
 
-`/handoff` does the same from your own message, without the tool. `/handoff fix the footer` makes a piece for this project. Start with another open project's name to send the piece there.
+`/handoff` does the same from your own message, without the tool. `/handoff fix the footer` hands that work to a new worktree in this project. Start with another open project's name to hand it to a worktree there.
 
 ### `own`
 

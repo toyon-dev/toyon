@@ -2,6 +2,38 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.24.0 (2026-11-12)
+
+Changed markdown files open as a rendered diff, landing no longer drops work, and the daemon and the shell close several holes around tokens and links.
+
+### New
+- A changed markdown file opens as a rendered diff that marks which words, table cells and list items came and went. It follows the code diff's inline or split choice, and the editor head has one file, inline and split control in place of the separate markdown knobs.
+- Once you open a changes row rendered, the next file you arrow or click to opens rendered too; a file that cannot render opens on its diff, and picking diff or file by hand ends the hold. Rows whose file can render show an eye on hover, and a second click on a previewed row takes it back to the diff.
+- Back and forward step onto archived pages, switching project first when the archive belongs to another.
+- Code blocks in chat keep their copy button visible on a touch screen, where there is no hover to reveal it.
+
+### Changed
+- Landing writes the commit message at press time. When the box is empty the quick model writes it under a "writing the message" step, and the land goes on without running the check again; with no answer the land is refused and nothing is committed.
+- A land, commit, sync or PR press moves the row to the top of the rail as the work starts, whatever the outcome, instead of when it finishes. Automatic runs still move nothing.
+- The handoff card opens its list page on arrival on the active worktree, except on a phone. Typing a letter or pressing n opens the note under "not now", a slide opens it on touch, and words sent with "not now" reach the worktree's agent once its turn ends.
+- Panel chords such as cmd+L, cmd+J and cmd+B leave zen when a file fills the page and land in the panel asked for. Quick open keeps zen, and Esc on a file closes the file and leaves zen on the page.
+- Toyon Mono was rebuilt three times: a slashed zero inside the ring, a wider asterisk, a thinner underscore, a new question mark hook, resized colon dots and new braces and j. Wrap and full-size are icon switches in the editor head, so a file name fits in a narrow pane.
+- Links that are not routed go through one guard in the card band, PR comments and paste chips. Rendered documents drop styles, form controls and foreign classes, and every link that opens outside Toyon opens with noopener and noreferrer.
+- The daemon refuses a let-me-in knock that arrives from its own preview, process or forwarder ports, another .localhost name or a preview under the public name; file routes carry a sandbox content security policy, and a short token file is regenerated.
+- A read row that repeats keeps its shine through the gap between reads, as an edit row does. A kbd tag in a markdown preview draws as a boxed key, and a heading made only of a code span reads as a heading.
+- The docs gained features, shortcuts, commands, using, backends and phone pages, and the remote, settings, agents, trust and policy pages were rewritten in shorter sentences.
+
+### Fixed
+- Landing or archiving a worktree could silently discard committed or unpushed work, or leave main half-merged. The leftover check now compares commits by content, so a rebased copy after a sync does not count as new work, and the push asks origin where the branch stands first: a plain push, a leased forced push over your own earlier tip, or a refusal that says why.
+- A file with an accented or quoted name, such as café.txt, made the changes panel throw. Paths are read from git without quoting now, and git messages stay in English whatever the system language.
+- Once Toyon Mono loaded, every mono line reflowed, because the stand-in faces had a different letter height. The fallbacks are now faces with the same cell, so nothing moves when the font arrives.
+- A restart no longer kills an agent that is still starting, and a crashed adapter keeps its own exit text.
+- Slow sideways trackpad scrolls in the editor were dropped once the gesture had settled as vertical; the turn is judged on travel summed over the gesture.
+- Monaco's right-click menu, sticky scroll and inlay hint menus overlapped the files dock without a background. They are drawn as the shell's own menu in the top layer.
+- @ offers the project's other worktrees on an archived or found chat, where before the mention went to the agent as plain text.
+- A pull request merged while the row was open was recorded once, not again when the poll heard of it, and the comments row no longer runs "1 comment" into "on PR".
+- Committing on a large repository no longer rebuilds the file tree, the folder list and the mention index when no paths changed, which blocked the page for about a fifth of a second on a 150k file repository.
+
 ## 0.23.0 (2026-11-10)
 
 The shell reads in Toyon Mono, a face of its own, and a worktree reaches main's servers by default instead of starting every command again.

@@ -14,6 +14,15 @@ export function shellCommandOf(text: string): string | null {
   return text.slice(1).trim();
 }
 
+/** the mode's hint as the ghost draws it after the draft, or null for a draft that is past one. The
+ * hint stands a space off the sigil, and the space most people type next takes that gap rather than
+ * pushing the hint along, so the line holds still beside the caret the way a placeholder does. A
+ * second space or a line break is the command being written, and the hint goes, as a command's
+ * argument hint does. */
+export function shellHintOf(text: string, hint: string): string | null {
+  return text === "!" ? ` ${hint}` : text === "! " ? hint : null;
+}
+
 /** the command a row of the transcript ran from the composer, or the repo's check toyon ran after
  * a turn; null for anything else, the agent's own shell calls included */
 export function commandOf(item: ChatItem): string | null {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatItem } from "../../state/store.ts";
-import { ranClean, shellCommandOf, shellContext } from "./shellMode.ts";
+import { ranClean, shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
 
 const run = (command: string, output?: string, done = true): ChatItem => ({
   kind: "tool",
@@ -33,6 +33,20 @@ describe("shellCommandOf", () => {
     expect(shellCommandOf("ls")).toBeNull();
     expect(shellCommandOf("wow !ls")).toBeNull();
     expect(shellCommandOf("")).toBeNull();
+  });
+});
+
+describe("shellHintOf", () => {
+  test("the hint stands a space off a bare !, and a typed space takes the gap", () => {
+    expect(shellHintOf("!", "a command")).toBe(" a command");
+    expect(shellHintOf("! ", "a command")).toBe("a command");
+  });
+
+  test("anything more is the command being written, padding included", () => {
+    expect(shellHintOf("!  ", "a command")).toBeNull();
+    expect(shellHintOf("!\n", "a command")).toBeNull();
+    expect(shellHintOf("!ls", "a command")).toBeNull();
+    expect(shellHintOf("", "a command")).toBeNull();
   });
 });
 

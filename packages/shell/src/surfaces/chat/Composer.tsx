@@ -134,7 +134,7 @@ import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
-import { shellCommandOf, shellContext } from "./shellMode.ts";
+import { shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
 import { insertedWorktree, matchesSibling, pastedWorktree, type Sibling, siblingWorktrees } from "./siblings.ts";
 import { UsageMeters, UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
@@ -788,9 +788,12 @@ export function Composer({
   // A draft has no transcript to put the output on, so its command goes to the terminal instead
   const shellGhost =
     shellCmd === "" && active
-      ? drafting
-        ? " a command to run in the new worktree's terminal"
-        : ` a command to run in ${active.worktree.title}; the agent sees its output with your next message`
+      ? shellHintOf(
+          text,
+          drafting
+            ? "a command to run in the new worktree's terminal"
+            : `a command to run in ${active.worktree.title}; the agent sees its output with your next message`,
+        )
       : null;
   const ghost = argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty.

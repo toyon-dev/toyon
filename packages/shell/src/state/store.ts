@@ -900,6 +900,9 @@ export interface State {
   blackGround: boolean;
   /** bumped to put the keyboard on the rail's current row */
   focusRail: number;
+  /** bumped when a hand lands on a row or an archived page, so the rail brings the marked row
+   * into view: ⌘K from the lead with the list scrolled away moves no mark, and still wants it */
+  showRow: number;
   /** the collapsed rail is peeked open by the worktree walk (⌥↑/↓, ⌃Tab), the way an alt-tab
    * switcher shows while the modifier is held past a tap; app/keys.ts drops it on the release */
   railPeek: boolean;
@@ -1153,6 +1156,7 @@ export function initialState(opts: InitialOpts): State {
     chatSide: opts.storedChatSide ?? "left",
     blackGround: opts.storedBlackGround ?? false,
     focusRail: 0,
+    showRow: 0,
     railPeek: false,
     unreadHold: null,
     layouts: opts.storedLayouts ?? {},
@@ -2117,8 +2121,18 @@ const PANEL_MOVES: ReadonlySet<Action["a"]> = new Set<Action["a"]>([
   "toggle-design",
 ]);
 
+/** how a hand lands on a row or an archived page: a chord, a palette's pick, a press */
+const LANDINGS: ReadonlySet<Action["a"]> = new Set<Action["a"]>([
+  "activate",
+  "viewed-land",
+  "open-draft",
+  "open-archived",
+]);
+
 export function reducer(s: State, action: Action): State {
   let next = withLauncher(strayed(reduce(s, action)));
+  // one that landed nowhere (a step onto a row since gone) is the state as it was
+  if (LANDINGS.has(action.a) && next !== s) next = { ...next, showRow: s.showRow + 1 };
   // a hold is only for the row it was made on: selecting anything else, however it happened, ends it
   if (next.unreadHold !== null && next.activeId !== next.unreadHold) next = { ...next, unreadHold: null };
   // zen on a file is the file at the window's size, and the rest of the shell still answers:

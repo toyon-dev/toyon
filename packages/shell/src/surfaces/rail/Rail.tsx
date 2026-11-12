@@ -188,6 +188,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     );
     return () => cancelAnimationFrame(f);
   });
+  // A chord lands on a row wherever the list is scrolled to (⌘1 with the list at its foot, a walk
+  // past the last row in view, ⌘K for the lead), so the row marked current is brought into view
+  // when the mark moves, and when a hand lands on the row that already has it. Keyed on the row
+  // and the landing, not on the list: a row re-sorted under a resting scroll stays put.
+  const showRow = useStore((s) => s.showRow);
+  useOnChange([showRow, activeId, archivedPage?.id, notesPage], () => {
+    listRef.current?.querySelector<HTMLElement>('[data-state~="current"]')?.scrollIntoView({ block: "nearest" });
+  });
   // ↑↓ walk a section's rows while one has focus, the way the changes panel's files do: the next
   // row is picked and takes the focus, so the next press keeps walking. The ends stop the way a
   // list's do, and each section is its own list (rowStep). ⌥↑/↓ and ⌃Tab are the walk from

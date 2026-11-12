@@ -4186,7 +4186,12 @@ describe("a sibling's landing, and a guest from another project", () => {
       url: "https://x/1",
       ts: 3,
     };
-    const s = run([hello(wt("a")), agent("a", landed), agent("a", { ...landed, same: true, again: true, ts: 4 })]);
+    const subjects = ["deps: bump the pin"];
+    const s = run([
+      hello(wt("a")),
+      agent("a", landed),
+      agent("a", { ...landed, subjects, same: true, again: true, ts: 4 }),
+    ]);
     expect(s.local.a?.chat).toEqual([
       { kind: "piece-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
       {
@@ -4195,6 +4200,7 @@ describe("a sibling's landing, and a guest from another project", () => {
         repoName: "r2",
         title: "Bump the pin",
         url: "https://x/1",
+        subjects,
         same: true,
         again: true,
         ts: 4,

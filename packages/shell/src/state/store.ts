@@ -239,6 +239,8 @@ export type ChatItem =
       repoName: string;
       title: string;
       url?: string;
+      /** what the landing put on that main, one subject each; absent with nothing to say */
+      subjects?: string[];
       same?: true;
       again?: true;
       /** a branch the work here waited for, named by a here piece of its list */
@@ -3900,6 +3902,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           repoName: event.repoName,
           title: event.title,
           ...(event.url ? { url: event.url } : {}),
+          ...(event.subjects?.length ? { subjects: event.subjects } : {}),
           ...(event.same ? { same: true } : {}),
           ...(event.again ? { again: true } : {}),
           ...(event.awaited ? { awaited: true } : {}),

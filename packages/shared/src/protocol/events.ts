@@ -456,13 +456,16 @@ export type AgentEvent =
    * another one. `again`: the branch this worktree waited for before it started landed once more,
    * with follow-up commits; written on the waiting worktree's own transcript. `awaited`: a branch
    * this worktree's own work waited for, named by a here piece of its list, landed; written on
-   * the origin's transcript, where its wait stood under the box. */
+   * the origin's transcript, where its wait stood under the box. `subjects` is what the landing
+   * put on that main, as its mark says it (`LandMark.subjects`); absent when there is nothing to
+   * say. */
   | {
       type: "piece-landed";
       worktreeId: string;
       repoName: string;
       title: string;
       url?: string;
+      subjects?: string[];
       same?: true;
       again?: true;
       awaited?: true;

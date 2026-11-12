@@ -556,7 +556,8 @@ describe("go", () => {
     // the origin's own work waited for b too: told once, as the wait it named, and the record lets go
     const landedNotes = recorded(a.id, "piece-landed");
     expect(landedNotes).toHaveLength(1);
-    expect(landedNotes[0]).toMatchObject({ worktreeId: b.id, awaited: true });
+    // with what it put on main: the landing's own mark, handed on by the op
+    expect(landedNotes[0]).toMatchObject({ worktreeId: b.id, awaited: true, subjects: ["add feature"] });
     expect(w.state.worktree(a.id)!.awaits).toBeUndefined();
     // the agent sat idle, with no prompt coming to carry the note: the landing starts it on the piece
     await until(() => agentOf(a.id).sent.length === before + 1);
@@ -1188,7 +1189,11 @@ describe("another project", () => {
     await until(() => b.branch === "toyon/fix-form");
     await land(b.id, "form.txt");
     await until(() => recorded(a.id, "piece-landed").length === 1);
-    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({ worktreeId: b.id, repoName: "claude-agent-acp" });
+    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({
+      worktreeId: b.id,
+      repoName: "claude-agent-acp",
+      subjects: ["add form.txt"],
+    });
     expect(recorded(a.id, "piece-landed")[0]).not.toHaveProperty("same");
   });
 

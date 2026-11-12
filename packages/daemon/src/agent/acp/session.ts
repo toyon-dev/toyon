@@ -190,6 +190,10 @@ export interface AcpSessionDeps {
   /** the project's other worktrees the message names by branch, a paragraph each saying where
    * its chat is; read as the message goes out, so a row made since the session opened counts */
   mentioned?: (text: string) => string[];
+  /** where a worktree's chat is on disk, in any project and in the archive once the row went
+   * there, for the sentence that says a worktree this one handed work to has landed; read as the
+   * message goes out, since the archive moves the file. Nothing for a chat that is gone. */
+  chatOf?: (worktreeId: string) => string | undefined;
   /** the adapter's process group came up (`true`, right after the spawn and before initialize,
    * so a daemon dying mid-start still has it on record) or went (`false`), for the ledger */
   onProcess?: (pgid: number, up: boolean) => void;
@@ -1284,7 +1288,7 @@ export class AcpSession implements AgentAdapter {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
       if (e.type === "piece-landed") {
-        out.unshift(pieceLandedContext(e.title, e.repoName, e.url, e.same, e.again, e.awaited));
+        out.unshift(pieceLandedContext(e, this.d.chatOf?.(e.worktreeId)));
       }
     }
     return out;

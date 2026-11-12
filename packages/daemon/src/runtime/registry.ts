@@ -108,6 +108,10 @@ export interface RuntimeDeps {
   /** a project's archived worktrees, newest first, for a message that names one by its branch;
    * read as the message goes out. Absent in tests, where only open rows can be named */
   archived?: (repoId: string) => ArchivedWorktree[];
+  /** where a worktree's chat is on disk, in any project, live or archived, for the sentence that
+   * says a worktree this one handed work to has landed; read as the message goes out. Absent in
+   * tests, where the sentence names no chat */
+  chatFile?: (worktreeId: string) => string | undefined;
   /** where a worktree's work stands (its tree read now, its landed and PR marks), for the
    * paragraph behind every message; absent in tests */
   standing?: (worktreeId: string) => Promise<WorkStanding | null>;
@@ -300,6 +304,7 @@ function defaultAgent(
               archived: { at: a.archivedAt, landed: a.landed, restorable: a.restorable },
             })),
           ]),
+    chatOf: (id) => d.chatFile?.(id),
     onProcess,
     spec,
     connect: (app, spec, prepared) => spawnAcp(app, d.agents.launch(spec, prepared), wt.path, wt.id),

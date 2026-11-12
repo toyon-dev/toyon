@@ -4154,7 +4154,8 @@ describe("AcpSession cards", () => {
 
   test("a landing elsewhere since the last message rides on the next prompt's ambient block once", async () => {
     const fake = fakeAgent(say("ok"));
-    const w = world(fake);
+    // the chat of the worktree that landed is looked up as the message goes out
+    const w = world(fake, claudeSpec, 60_000, undefined, { chatOf: (id) => `/chats/${id}.jsonl` });
     w.session.send("one");
     await w.idle();
     w.session.note({
@@ -4163,6 +4164,7 @@ describe("AcpSession cards", () => {
       repoName: "other",
       title: "Fix the adapter",
       url: "https://x/pull/7",
+      subjects: ["fix: the adapter"],
       ts: 2,
     });
     w.session.send("two");
@@ -4173,7 +4175,7 @@ describe("AcpSession cards", () => {
     expect(texts[0]).toEqual(["one"]);
     expect(texts[1]).toEqual([
       "two",
-      `[Attached by Toyon:\nThe work this worktree handed off to other, "Fix the adapter", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.]`,
+      `[Attached by Toyon:\nThe work this worktree handed off to other, "Fix the adapter", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now. What landed: "fix: the adapter". Its chat is at /chats/b.jsonl, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity. Read its agent's last replies there when what it checked or left undone matters here.]`,
     ]);
     expect(texts[2]).toEqual(["three"]);
     await w.session.close();

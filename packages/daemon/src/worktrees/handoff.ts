@@ -17,6 +17,7 @@ import type {
   AttachmentInput,
   AttachmentRef,
   HandedOrigin,
+  LandMark,
   Piece,
   PieceFate,
   PieceOutcome,
@@ -84,6 +85,31 @@ export interface HandoffDeps {
 }
 
 type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
+type PieceLanded = Extract<AgentEvent, { type: "piece-landed" }>;
+
+/** A landing as another worktree's chat is told of it. `to` is the worktree told: a landing in
+ * its own project is a sibling's, one elsewhere is named with its project. `mark` is the landing
+ * the op wrote, so the word says what main received; `why` is what the landing is to `to` when it
+ * is more than a piece of its work closing. */
+function pieceLanded(
+  landed: WorktreeInfo,
+  repo: RepoInfo,
+  to: WorktreeInfo,
+  mark: LandMark | undefined,
+  why: Pick<PieceLanded, "again" | "awaited"> = {},
+): PieceLanded {
+  return {
+    type: "piece-landed",
+    worktreeId: landed.id,
+    repoName: repo.name,
+    title: landed.title,
+    ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+    ...(mark?.subjects.length ? { subjects: mark.subjects } : {}),
+    ...(to.repoId === landed.repoId ? { same: true as const } : {}),
+    ...why,
+    ts: Date.now(),
+  };
+}
 
 /** one piece as the tool or the verb hands it in, before anything is checked */
 export interface RawPiece {
@@ -403,7 +429,9 @@ export class HandoffService implements ToolProvider {
       fireAndForget(worktreeId, this.read(worktreeId, markdown, planPath), "pieces read off the plan"),
     );
     d.hub.on("treeChanged", (worktreeId) => fireAndForget(worktreeId, this.stale(worktreeId), "pieces stale"));
-    d.hub.on("landed", (worktreeId) => fireAndForget(worktreeId, this.landed(worktreeId), "pieces after landing"));
+    d.hub.on("landed", (worktreeId, mark) =>
+      fireAndForget(worktreeId, this.landed(worktreeId, mark), "pieces after landing"),
+    );
     d.hub.on("worktreesChanged", () => this.sweep());
     this.sweep();
   }
@@ -1233,10 +1261,11 @@ export class HandoffService implements ToolProvider {
    * in its agent's next prompt. Every piece queued behind it, on any origin, is made now and that
    * origin's chat told, a piece waiting on one of those re-pointed at the worktree made; one that
    * could not be made is dropped with the reason, and what waited on it goes too. Then every
-   * worktree that waited for this branch before it started hears that it landed again. */
-  async landed(landedId: string): Promise<void> {
+   * worktree that waited for this branch before it started hears that it landed again. Each of
+   * them is told what landed, from the landing's `mark`. */
+  async landed(landedId: string, mark?: LandMark): Promise<void> {
     const told = new Set<string>();
-    const origin = this.tellOrigin(landedId);
+    const origin = this.tellOrigin(landedId, mark);
     if (origin) told.add(origin);
     // the worktrees this landing makes waited for it by design: this is their first word, not again
     const madeNow = new Set<string>();
@@ -1273,15 +1302,15 @@ export class HandoffService implements ToolProvider {
         }
       }
     }
-    for (const id of this.tellWaiters(landedId, madeNow)) told.add(id);
-    this.tellAwaiting(landedId, told);
+    for (const id of this.tellWaiters(landedId, madeNow, mark)) told.add(id);
+    this.tellAwaiting(landedId, told, mark);
   }
 
   /** every worktree whose own work waited for the landed branch (recordAwaits) hears of it, once:
    * not again when the landing already told it as its origin or as a waiter. The record lets the
    * wait go either way, so the line under its box does too. Then its agent is started on the
    * piece, unless the worktree itself has landed. */
-  private tellAwaiting(landedId: string, told: ReadonlySet<string>): void {
+  private tellAwaiting(landedId: string, told: ReadonlySet<string>, mark?: LandMark): void {
     const landed = this.d.state.worktree(landedId);
     const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
     let changed = false;
@@ -1293,18 +1322,7 @@ export class HandoffService implements ToolProvider {
       changed = true;
       if (!landed || !repo || w.kind !== "worktree") continue;
       const agent = this.d.runtime.ensureAgent(w).agent;
-      if (!told.has(w.id)) {
-        agent.note({
-          type: "piece-landed",
-          worktreeId: landed.id,
-          repoName: repo.name,
-          title: landed.title,
-          ...(landed.pr?.url ? { url: landed.pr.url } : {}),
-          ...(w.repoId === landed.repoId ? { same: true as const } : {}),
-          awaited: true,
-          ts: Date.now(),
-        });
-      }
+      if (!told.has(w.id)) agent.note(pieceLanded(landed, repo, w, mark, { awaited: true }));
       if (!w.landed) {
         this.wake(w, agent, {
           title: landed.title,
@@ -1404,30 +1422,21 @@ export class HandoffService implements ToolProvider {
 
   /** the worktree a landed one came from hears of the landing, on its chat and in its agent's
    * next prompt, and is named; nothing when the origin is gone or was never a worktree. */
-  private tellOrigin(landedId: string): string | null {
+  private tellOrigin(landedId: string, mark?: LandMark): string | null {
     const wt = this.d.state.worktree(landedId);
     if (wt?.from?.kind !== "worktree") return null;
     const origin = this.d.state.worktree(wt.from.origin.id);
     if (origin?.kind !== "worktree") return null;
     const repo = this.d.state.repo(wt.repoId);
     if (!repo) return null;
-    this.d.runtime.ensureAgent(origin).agent.note({
-      type: "piece-landed",
-      worktreeId: wt.id,
-      repoName: repo.name,
-      title: wt.title,
-      ...(wt.pr?.url ? { url: wt.pr.url } : {}),
-      // a piece of this worktree's own plan: the row and the agent's sentence say sibling, not project
-      ...(wt.repoId === origin.repoId ? { same: true as const } : {}),
-      ts: Date.now(),
-    });
+    this.d.runtime.ensureAgent(origin).agent.note(pieceLanded(wt, repo, origin, mark));
     return origin.id;
   }
 
   /** every live worktree that waited for the landed branch before it started hears that the
    * branch landed again: follow-ups on it may touch the piece, and the agent reads them off main.
    * Not the ones this landing just made, whose first word it is. The ones told are named. */
-  private tellWaiters(landedId: string, madeNow: ReadonlySet<string>): string[] {
+  private tellWaiters(landedId: string, madeNow: ReadonlySet<string>, mark?: LandMark): string[] {
     const landed = this.d.state.worktree(landedId);
     if (!landed) return [];
     const repo = this.d.state.repo(landed.repoId);
@@ -1437,16 +1446,7 @@ export class HandoffService implements ToolProvider {
       if (w.kind !== "worktree" || w.landed || w.id === landedId || madeNow.has(w.id)) continue;
       if (w.from?.kind !== "worktree" || w.from.after?.id !== landedId) continue;
       told.push(w.id);
-      this.d.runtime.ensureAgent(w).agent.note({
-        type: "piece-landed",
-        worktreeId: landed.id,
-        repoName: repo.name,
-        title: landed.title,
-        ...(landed.pr?.url ? { url: landed.pr.url } : {}),
-        ...(w.repoId === landed.repoId ? { same: true as const } : {}),
-        again: true,
-        ts: Date.now(),
-      });
+      this.d.runtime.ensureAgent(w).agent.note(pieceLanded(landed, repo, w, mark, { again: true }));
     }
     return told;
   }

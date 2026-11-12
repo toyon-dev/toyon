@@ -149,8 +149,13 @@ describe("archive", () => {
   test("the archived chat is readable in place, and a message on restore goes to the agent", async () => {
     const repoId = await registered();
     const { wt } = await workedOn(repoId);
+    // the chat's file is named where it lies: with the live chats, then in the archive
+    const live = transcriptPathFor(w.paths.transcriptsDir, wt.id);
+    expect(w.worktrees.chatFile(wt.id)).toBe(live);
     await w.worktrees.archiveWorktree(wt.id);
     expect(w.worktrees.archived(repoId)[0]).toMatchObject({ path: wt.path });
+    expect(w.worktrees.chatFile(wt.id)).toBe(join(w.paths.archiveDir, wt.id, "transcript.jsonl"));
+    expect(w.worktrees.chatFile("nope")).toBeUndefined();
     expect(w.worktrees.archivedTranscript(wt.id)).toEqual([
       { seq: 0, event: { type: "user-message", text: "tidy the footer", ts: 1 } },
     ]);
@@ -163,6 +168,7 @@ describe("archive", () => {
     await settle();
     expect(w.agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "and the header" });
     expect(w.worktrees.archivedTranscript(wt.id)).toBeNull();
+    expect(w.worktrees.chatFile(wt.id)).toBe(live);
   });
 
   test("a restore asked for twice brings back one row, and a message sent meanwhile reaches it", async () => {

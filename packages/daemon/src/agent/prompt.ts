@@ -4,6 +4,7 @@
 
 import type { ContentBlock } from "@agentclientprotocol/sdk/unstable";
 import type {
+  AgentEvent,
   FileRef,
   ImageRef,
   LogLine,
@@ -368,26 +369,36 @@ export function pieceAskPrompt(text?: string, project?: { name: string; path: st
   );
 }
 
-/** the ambient sentence on the next prompt after a worktree this one handed work to has landed */
+/** where a worktree's chat is on disk and how the file reads: the agent is pointed at the chat,
+ * never handed it, and reads what it wants of it */
+const chatAt = (transcript: string) =>
+  `Its chat is at ${transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`;
+
+/** The ambient sentence on the next prompt after a worktree this one handed work to has landed,
+ * then what the landing put on main and where that worktree's chat is. The chat is how its agent
+ * reports back: what it checked and what it left undone is in its replies, and the landing is
+ * the only word this worktree gets of it. `chat` is absent for a chat no longer on disk. */
 export function pieceLandedContext(
-  title: string,
-  project: string,
-  url?: string,
-  same?: boolean,
-  again?: boolean,
-  awaited?: boolean,
+  landed: Pick<
+    Extract<AgentEvent, { type: "piece-landed" }>,
+    "title" | "repoName" | "url" | "subjects" | "same" | "again" | "awaited"
+  >,
+  chat?: string,
 ): string {
-  const where = url ? ` (${url})` : "";
-  if (awaited) {
-    return `The branch your own piece waited for, "${title}", has landed on this project's main${where}; that piece can go ahead now, and Toyon rebases onto main when this lands.`;
-  }
-  if (again) {
-    return `The branch this worktree waited for before it started, "${title}", landed again on this project's main${where} with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.`;
-  }
-  if (same) {
-    return `The sibling worktree "${title}", a piece of the work planned here, has landed on this project's main${where}; anything here that waited on it can take the real change now, and a later piece that waited for it has started.`;
-  }
-  return `The work this worktree handed off to ${project}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
+  const { title } = landed;
+  const where = landed.url ? ` (${landed.url})` : "";
+  const what = landed.subjects?.length ? ` What landed: ${landed.subjects.map((s) => `"${s}"`).join("; ")}.` : "";
+  const read = chat
+    ? ` ${chatAt(chat)} Read its agent's last replies there when what it checked or left undone matters here.`
+    : "";
+  const said = landed.awaited
+    ? `The branch your own piece waited for, "${title}", has landed on this project's main${where}; that piece can go ahead now, and Toyon rebases onto main when this lands.`
+    : landed.again
+      ? `The branch this worktree waited for before it started, "${title}", landed again on this project's main${where} with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.`
+      : landed.same
+        ? `The sibling worktree "${title}", a piece of the work planned here, has landed on this project's main${where}; anything here that waited on it can take the real change now, and a later piece that waited for it has started.`
+        : `The work this worktree handed off to ${landed.repoName}, "${title}", has landed there${where}; anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.`;
+  return said + what + read;
 }
 
 /** What starts the agent once the branches its own pieces waited for have landed and it is
@@ -483,7 +494,7 @@ function archivedFate(a: NonNullable<SiblingWorktree["archived"]>): string {
  * of its work, so the agent reads the chat instead of hunting git for a checkout that is gone. The
  * agent reads the file by its structure, so the paragraph says it. */
 export function siblingParagraph(s: SiblingWorktree): string {
-  const chat = `Its chat is at ${s.transcript}, one JSON object per line: a "user-message" event is what the person wrote, the "text-delta" events after it are the agent's reply, and the rest is tool activity.`;
+  const chat = chatAt(s.transcript);
   return s.archived
     ? `@${s.branch} was the worktree "${s.title}" in this project, archived on ${dayOf(s.archived.at)} ${archivedFate(s.archived)}. Its checkout at ${s.path} is gone. ${chat}`
     : `@${s.branch} is the worktree "${s.title}" in this project, checked out at ${s.path}. ${chat}`;

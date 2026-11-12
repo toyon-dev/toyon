@@ -57,6 +57,7 @@ After you approve:
 - A new worktree starts with the piece as its approved plan. Its first message says who wrote it.
 - Its agent starts at once. Its dev servers start the first time you open it.
 - A piece sent to an open worktree arrives as a message that says which worktree sent it.
+- When a worktree made from a piece lands, the chat that proposed the piece shows what landed. Its agent is told the same, and where the other chat is on disk.
 
 `/handoff` does the same from your own message, without the tool. `/handoff fix the footer` hands that work to a new worktree in this project. Start with another open project's name to hand it to a worktree there.
 

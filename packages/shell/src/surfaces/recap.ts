@@ -24,7 +24,7 @@ export function clipLine(text: string, max = LINE_MAX): string {
 /** What one landing carried, as a clause with no stop: its subjects on one line, cut at the
  * measure. Nothing for a landing with no subjects: the state above already says it landed. The
  * PR it went through is not named here; `landedLine` puts it in front. */
-export function landedWhat(mark: LandMark): string | undefined {
+export function landedWhat(mark: Pick<LandMark, "subjects">): string | undefined {
   return mark.subjects.length ? clipLine(mark.subjects.join("; ")) : undefined;
 }
 

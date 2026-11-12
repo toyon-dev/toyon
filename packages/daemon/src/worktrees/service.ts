@@ -2456,13 +2456,20 @@ export class WorktreeService {
     return existsSync(path) ? path : undefined;
   }
 
-  /** the chat's file on disk, for a Finder reveal: a live worktree's, or the archive's once the
-   * chat moved there, since an archive keeps its worktree's id. The shell offers the row only
-   * when the status carried a file, so a refusal here is the safety net for a race with the
-   * first message or an archive that moved under it. */
-  transcriptPath(id: string): string {
+  /** The chat's file on disk: a live worktree's, or the archive's once the chat moved there,
+   * since an archive keeps its worktree's id. Nothing before the first message wrote it, or once
+   * the chat is gone. Read when it is wanted and never kept: an archive or a restore moves it. */
+  chatFile(id: string): string | undefined {
     const path = this.d.state.worktree(id) ? this.writtenTranscript(id) : this.archive.chatFiles(id)?.transcript;
-    if (!path || !existsSync(path)) throw new UserError("nothing has been written to this chat yet");
+    return path && existsSync(path) ? path : undefined;
+  }
+
+  /** the chat's file, for a Finder reveal. The shell offers the row only when the status carried
+   * a file, so a refusal here is the safety net for a race with the first message or an archive
+   * that moved under it. */
+  transcriptPath(id: string): string {
+    const path = this.chatFile(id);
+    if (!path) throw new UserError("nothing has been written to this chat yet");
     return path;
   }
 

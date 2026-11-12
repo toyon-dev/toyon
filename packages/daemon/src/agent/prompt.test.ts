@@ -109,22 +109,46 @@ describe("prompts for work in another project", () => {
   });
 
   test("the landed sentence names the project and the title, with the PR when the landing was one", () => {
-    expect(pieceLandedContext("Fix the form", "acp", "https://x/pull/7")).toBe(
+    const form = { title: "Fix the form", repoName: "acp" };
+    expect(pieceLandedContext({ ...form, url: "https://x/pull/7" })).toBe(
       'The work this worktree handed off to acp, "Fix the form", has landed there (https://x/pull/7); anything here that waited on it, such as a pinned version or a hand-patched copy, can take the real change now.',
     );
-    expect(pieceLandedContext("Fix the form", "acp")).toContain('"Fix the form", has landed there; anything');
+    expect(pieceLandedContext(form)).toContain('"Fix the form", has landed there; anything');
     // a sibling of this project, a piece of the plan here: no project named, the queue mentioned
-    expect(pieceLandedContext("Landed rule", "toyon", undefined, true)).toBe(
+    expect(pieceLandedContext({ title: "Landed rule", repoName: "toyon", same: true })).toBe(
       'The sibling worktree "Landed rule", a piece of the work planned here, has landed on this project\'s main; anything here that waited on it can take the real change now, and a later piece that waited for it has started.',
     );
     // the branch this worktree waited for before it started landed once more
-    expect(pieceLandedContext("First", "toyon", undefined, true, true)).toBe(
+    const first = { title: "First", repoName: "toyon", same: true as const };
+    expect(pieceLandedContext({ ...first, again: true })).toBe(
       'The branch this worktree waited for before it started, "First", landed again on this project\'s main with follow-up commits; Toyon rebases onto main when this lands, and its latest commits are readable now if they touch your piece.',
     );
     // the branch the origin's own piece waited for
-    expect(pieceLandedContext("First", "toyon", undefined, true, undefined, true)).toBe(
+    expect(pieceLandedContext({ ...first, awaited: true })).toBe(
       'The branch your own piece waited for, "First", has landed on this project\'s main; that piece can go ahead now, and Toyon rebases onto main when this lands.',
     );
+  });
+
+  test("the landed sentence says what landed and where the chat that did it is", () => {
+    const form = { title: "Fix the form", repoName: "acp" };
+    const chat = "/home/.toyon/transcripts/b.jsonl";
+    // what main received, one subject each, in the landing's own words
+    expect(pieceLandedContext({ ...form, subjects: ["fix: the form field", "test: cover it"] })).toEndWith(
+      'can take the real change now. What landed: "fix: the form field"; "test: cover it".',
+    );
+    // a landing with nothing to say adds nothing
+    expect(pieceLandedContext({ ...form, subjects: [] })).toEndWith("can take the real change now.");
+    // the chat is the report: where it is, how the file reads, and when to read it
+    const told = pieceLandedContext({ ...form, subjects: ["fix: the form field"] }, chat);
+    expect(told).toContain(`What landed: "fix: the form field". Its chat is at ${chat}, one JSON object per line:`);
+    expect(told).toEndWith("Read its agent's last replies there when what it checked or left undone matters here.");
+    // every landing a worktree hears of carries both, the wait it named included
+    const awaited = pieceLandedContext(
+      { title: "First", repoName: "toyon", same: true, awaited: true, subjects: ["add x"] },
+      chat,
+    );
+    expect(awaited).toStartWith('The branch your own piece waited for, "First", has landed');
+    expect(awaited).toContain(`when this lands. What landed: "add x". Its chat is at ${chat},`);
   });
 
   test("the wake names the pieces that waited and the branch, and says to build them now", () => {

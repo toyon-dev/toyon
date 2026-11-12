@@ -7,6 +7,7 @@ import type {
   AgentEvent,
   AgentStatus,
   AttachmentInput,
+  LandMark,
   LastTurn,
   ModelChoice,
   ProcState,
@@ -112,8 +113,9 @@ export interface HubEvents {
   failed: (worktreeId: string, message: string) => void;
   /** the worktree's work is on its project's main: a land here, or its pull request merged. A
    * worktree another one handed work to tells that one here, so the two services need not know
-   * each other. */
-  landed: (worktreeId: string) => void;
+   * each other. `mark` is the landing as the op wrote it, for the word on what landed; absent
+   * when the op kept none. */
+  landed: (worktreeId: string, mark?: LandMark) => void;
   /** a read found the worktree's work on the base while its PR is on no landing yet, and could
    * not tell from git that the PR merged: GitHub is asked now, not when the poll comes round */
   prDue: (worktreeId: string) => void;

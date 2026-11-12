@@ -10,6 +10,7 @@ import { openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
 import { openOut } from "../../ui/links.ts";
+import { landedWhat } from "../recap.ts";
 import { type DaemonPress, DaemonRow } from "./DaemonRow.tsx";
 import { type HandoffItem, startingPieces } from "./handoff.ts";
 import { WorktreeChip } from "./WorktreeChip.tsx";
@@ -157,15 +158,18 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
 /** a worktree made from a piece of this one's work landed, with its pull request when the landing
  * was one: the record of the piece closing, read where it was opened. On the worktree that waited
  * for that branch before it started, the same row says it landed again; on the origin whose own
- * work waited for it, that the wait is over. */
+ * work waited for it, that the wait is over. What that main received is the line under it: the
+ * sentence names whose work it was, which is the news here, and the subjects are what came back. */
 export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
   const url = item.url;
+  const what = item.subjects && landedWhat({ subjects: item.subjects });
   return (
     <DaemonRow
       icon="check"
       word={item.again ? "landed again" : "landed"}
       tone="aqua"
       at={item.ts}
+      below={what}
       press={url ? { label: "the PR", onPress: () => openOut(url) } : undefined}
     >
       {/* the worktree is its chip; work in another project is named with where */}

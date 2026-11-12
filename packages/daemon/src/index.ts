@@ -239,6 +239,7 @@ const runtime: RuntimeRegistry = new RuntimeRegistry({
   // asked only when a turn is sent, after the service below exists
   turnStarting: (id): Promise<void> => worktrees.turnStarted(id),
   archived: (repoId): ArchivedWorktree[] => worktrees.archived(repoId),
+  chatFile: (id) => worktrees.chatFile(id),
   standing: (id): Promise<WorkStanding | null> => worktrees.standing(id),
   tier: (id) => worktrees.tierStanding(id),
   remote: () => setting.get(),

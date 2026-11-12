@@ -462,7 +462,7 @@ export class Ship {
       });
     }
     // after the row's own word: a worktree that handed this work off hears of it from here
-    this.d.hub.emit("landed", wt.id);
+    this.d.hub.emit("landed", wt.id, o.mark);
   }
 
   /** The record's branch is whatever the checkout is on. A hand switches branches in a worktree

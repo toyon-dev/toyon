@@ -55,13 +55,15 @@
       background: var(--text0);
     }
   }
-  /* the titles in the strip's place: the menu's box, laid over the strip so it hides the ticks and
-   the pointer that opened it is already inside. A contents page carries no ticks of its own; the
-   indent alone says the level, the way a paper's does */
+  /* the titles in the strip's place: the menu's box, laid over the strip so the pointer that opened
+   it is already inside. A contents page carries no ticks of its own; the indent alone says the
+   level, the way a paper's does. Half the window at most, as a picker's list is: a long document's
+   contents scroll inside the box and leave the page readable around it, and the ticks the box
+   does not reach stay drawn */
   .document-outline-list {
     width: max-content;
     max-width: 320px;
-    max-height: calc(100vh - 16px);
+    max-height: 50vh;
     overflow: hidden auto;
     padding: 4px 0;
     background: var(--surface1);

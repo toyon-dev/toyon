@@ -13,3 +13,15 @@ export function outlineDepths(levels: number[]): number[] {
     return depth;
   });
 }
+
+/** how far inside the list's edge the hand that opened it is kept: half a row, so it is on a title */
+const HAND_INSET = 12;
+
+/** Where the middle of the titles goes, down the window. On the strip's own middle, where a list
+ * taller than the strip covers all of it. A list the cap left shorter than the strip cannot, so it
+ * moves along the strip, and only as far as it takes to open under the hand that pointed: the hand
+ * is inside the box from the start, and leaving the box is what closes it. */
+export function outlineCentre(strip: { top: number; bottom: number }, hand: number, height: number): number {
+  const reach = Math.max(0, height / 2 - HAND_INSET);
+  return Math.max(hand - reach, Math.min((strip.top + strip.bottom) / 2, hand + reach));
+}

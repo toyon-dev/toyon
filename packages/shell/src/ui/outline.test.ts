@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { outlineDepths } from "./outline.ts";
+import { outlineCentre, outlineDepths } from "./outline.ts";
 
 describe("how far each heading sits under the ones above it", () => {
   test("the title opens no level: sections under it stand at the margin", () => {
@@ -16,5 +16,21 @@ describe("how far each heading sits under the ones above it", () => {
   });
   test("no headings", () => {
     expect(outlineDepths([])).toEqual([]);
+  });
+});
+
+describe("where the titles open against the strip", () => {
+  const strip = { top: 100, bottom: 900 };
+  test("a list taller than the strip sits on the strip's middle wherever the hand is", () => {
+    expect(outlineCentre(strip, 100, 1000)).toBe(500);
+    expect(outlineCentre(strip, 900, 1000)).toBe(500);
+  });
+  test("a shorter list stays on the middle while the hand is inside it there", () => {
+    expect(outlineCentre(strip, 420, 400)).toBe(500);
+  });
+  test("a shorter list moves only as far as it takes to hold the hand", () => {
+    // the hand at the head of the strip is half a row under the list's top edge
+    expect(outlineCentre(strip, 100, 400)).toBe(288);
+    expect(outlineCentre(strip, 900, 400)).toBe(712);
   });
 });

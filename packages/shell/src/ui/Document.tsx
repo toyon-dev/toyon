@@ -6,7 +6,7 @@ import { diffDocument } from "./documentDiff.ts";
 import { Float } from "./Float.tsx";
 import { isFind } from "./find.ts";
 import { useOnChange } from "./hooks.ts";
-import { outlineDepths } from "./outline.ts";
+import { outlineCentre, outlineDepths } from "./outline.ts";
 import { rowState } from "./rowState.ts";
 import { isSelectAll, selectContents, selectedText } from "./selectAll.ts";
 import "./document.css";
@@ -196,10 +196,21 @@ export function Document({
  * wide as its level is high, with the section being read set darker. Pointing at the strip opens
  * the titles in its place, stepped in by depth with no ticks beside them, the way a paper's
  * contents read; a title jumps to its heading. The strip stays outside the scroll box, so it
- * holds still while the document moves under it. */
+ * holds still while the document moves under it. The titles take half the window at most: more
+ * of them scroll inside the box, which opens on the section being read and under the hand. */
 function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: (i: number) => void }) {
-  const [open, setOpen] = useState(false);
+  // open, and how far down the window the hand that opened it was
+  const [hand, setHand] = useState<number | null>(null);
+  const open = hand !== null;
   const strip = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement | null>(null);
+  // contents longer than the box open on the section being read, in the middle of it. On opening
+  // only: a title pressed moves the document, and the list must not move under the pointer
+  useLayoutEffect(() => {
+    const box = open ? list.current : null;
+    const row = box?.querySelector<HTMLElement>('[data-state~="current"]');
+    if (box && row) box.scrollTop = row.offsetTop - (box.clientHeight - row.offsetHeight) / 2;
+  }, [open]);
   // an outline of one heading says nothing the title does not
   if (heads.length < 2) return null;
   return (
@@ -209,10 +220,10 @@ function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: 
         className="document-outline"
         aria-hidden
         onPointerEnter={(e) => {
-          if (e.pointerType === "mouse") setOpen(true);
+          if (e.pointerType === "mouse") setHand((y) => y ?? e.clientY);
         }}
         // a finger cannot hover, so a tap opens it and the list's outside press closes it
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => setHand((y) => (y === null ? e.clientY : null))}
       >
         {heads.map((h, i) => (
           <span
@@ -223,16 +234,22 @@ function Outline({ heads, at, onJump }: { heads: Heading[]; at: number; onJump: 
           />
         ))}
       </div>
-      {open && (
+      {hand !== null && (
         <Float
           className="document-outline-list"
-          anchor={() => strip.current?.getBoundingClientRect() ?? null}
-          // over the strip, so the box hides the ticks and the pointer never leaves it on the way
+          anchor={() => {
+            const rect = strip.current?.getBoundingClientRect();
+            if (!rect) return null;
+            const y = outlineCentre(rect, hand, list.current?.offsetHeight ?? 0);
+            return { left: rect.left, right: rect.right, top: y, bottom: y };
+          }}
+          // over the strip, so the pointer that opened it never leaves it on the way
           placement={{ side: "right", align: "center", cover: true }}
           trigger={strip.current}
-          onDismiss={() => setOpen(false)}
+          boxRef={list}
+          onDismiss={() => setHand(null)}
           onPointerLeave={(e) => {
-            if (e.pointerType === "mouse") setOpen(false);
+            if (e.pointerType === "mouse") setHand(null);
           }}
         >
           {heads.map((h, i) => (

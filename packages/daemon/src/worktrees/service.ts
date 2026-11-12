@@ -1218,6 +1218,17 @@ export class WorktreeService {
     return this.archiving.get(worktreeId);
   }
 
+  /** The chat of a worktree on its way into the archive, read where it lies meanwhile: with the
+   * agent being stopped, then in the file that agent flushed as it closed, which stays put until
+   * the record is written. Null unless an archive is under way. */
+  archivingTranscript(worktreeId: string): TranscriptEntry[] | null {
+    if (!this.archiving.has(worktreeId)) return null;
+    return (
+      this.d.runtime.transcriptOf(worktreeId) ??
+      new Transcript(this.chatFiles(worktreeId).transcript, worktreeId).entries
+    );
+  }
+
   /** Remove a worktree and keep nothing: a spare holds nobody's work, and a grafted source's
    * history already lives in its target. */
   async discardWorktree(worktreeId: string): Promise<void> {
@@ -1618,6 +1629,11 @@ export class WorktreeService {
    * restore per id at a time, and an id that is a row already is that row: a second press, or a
    * message sent meanwhile, is asked of the worktree the first press brings back. */
   async restore(archiveId: string, createdBy?: string, message?: RestoreMessage): Promise<WorktreeInfo> {
+    // asked for from the page of a row still on its way in: the archive is waited out, as a send
+    // waits, or the row the daemon still lists would pass for the one restored. An archive that
+    // was refused told whoever asked for it, and left that row, which is then the answer.
+    const going = this.archivingNow(archiveId);
+    if (going) await going.catch(() => {});
     const running = this.restoring.get(archiveId);
     const live = running ? await running : this.d.state.worktree(archiveId);
     if (live) {

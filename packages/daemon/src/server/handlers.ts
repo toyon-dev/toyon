@@ -192,6 +192,18 @@ function backfillOf(entries: readonly TranscriptEntry[], since: number | undefin
 
 export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
   async subscribe(msg, ctx, s) {
+    // on its way into the archive: its archived row is on the rail from the press, and the page
+    // that row opens reads the chat as it stands. The chat is all it gets. An agent made here
+    // would outlive the record, the queue went with the stop, and the directory git would be
+    // read in is leaving; the page asks again once the row is gone, for what git kept.
+    const going = s.worktrees.archivingTranscript(msg.worktreeId);
+    if (going) {
+      if (!ctx.subscribe(msg.worktreeId)) return;
+      ctx.reply({ t: "backfill", worktreeId: msg.worktreeId, ...backfillOf(going, msg.since), log: [] });
+      ctx.reply({ t: "queue", worktreeId: msg.worktreeId, items: [] });
+      ctx.reply({ t: "agent-commands", worktreeId: msg.worktreeId, commands: [] });
+      return;
+    }
     const r = s.worktrees.readable(msg.worktreeId);
     if (!r) {
       // an archived worktree: its chat as it was, read in place. Nothing runs and nothing is on
@@ -557,9 +569,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
 
   async redraft(msg, _ctx, s) {
     const r = s.worktrees.readable(msg.worktreeId);
-    const events = r?.wt
-      ? s.runtime.ensureAgent(r.wt).agent.transcript()
-      : (s.worktrees.archivedTranscript(msg.worktreeId) ?? []);
+    // one on its way into the archive is read as its page's subscribe reads it, with no agent made
+    const events =
+      s.worktrees.archivingTranscript(msg.worktreeId) ??
+      (r?.wt ? s.runtime.ensureAgent(r.wt).agent.transcript() : (s.worktrees.archivedTranscript(msg.worktreeId) ?? []));
     const event = events.find((e) => e.seq === msg.seq)?.event;
     if (event?.type !== "user-message") throw new UserError("that message is no longer in this chat");
     const items: AttachmentInput[] = [];

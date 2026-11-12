@@ -779,6 +779,51 @@ describe("handlers", () => {
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({ text: "one more thing" });
   });
 
+  test("a subscribe while the archive is under way gets the chat and makes no agent; a restore waits it out", async () => {
+    const { services, ctx, replies, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    writeFileSync(join(wt.path, "done.txt"), "x\n");
+    sh(wt.path, "git", "add", "done.txt");
+    sh(wt.path, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "done");
+    const agent = agents.get(wt.id)!;
+    const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
+    agent.note(said);
+    const archiving = dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
+    replies.length = 0;
+    // the page its archived row opens from the press: the chat the stopping agent holds, and no
+    // status read in a directory that is leaving
+    await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
+    expect(replies.map((m) => m.t)).toEqual(["backfill", "queue", "agent-commands"]);
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], last: 0 });
+    expect(agents.get(wt.id)).toBe(agent);
+    expect(services.runtime.agentFor(wt.id)).toBeUndefined();
+    // the page's restore, pressed meanwhile, is asked of the archive and not of the row going
+    const restoring = dispatch({ t: "restore-worktree", archiveId: wt.id }, ctx, services);
+    await archiving;
+    await restoring;
+    expect(services.state.worktree(wt.id)).toBeDefined();
+    expect(services.worktrees.hasArchived(wt.id)).toBe(false);
+    expect(existsSync(join(services.state.worktree(wt.id)!.path, "done.txt"))).toBe(true);
+  });
+
+  test("a worktree with no agent up is read from its chat file while it is archived", async () => {
+    const { services, ctx, replies, repo, paths } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "tidy the footer");
+    await services.runtime.stop(wt.id);
+    const said = { type: "user-message" as const, text: "tidy the footer", ts: 1 };
+    writeFileSync(transcriptPathFor(paths.transcriptsDir, wt.id), `${JSON.stringify({ seq: 0, event: said })}\n`);
+    const archiving = dispatch({ t: "archive-worktree", worktreeId: wt.id }, ctx, services);
+    replies.length = 0;
+    await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
+    expect(replies[0]).toMatchObject({ t: "backfill", events: [{ seq: 0, event: said }], last: 0 });
+    await archiving;
+    expect(services.worktrees.archivingTranscript(wt.id)).toBeNull();
+  });
+
   test("the sweep archives a finished task git has nothing on, and keeps one with a file written", async () => {
     const HOUR = 60 * 60_000;
     const { services, repo } = make();

@@ -2156,8 +2156,14 @@ export function reducer(s: State, action: Action): State {
   // the page is for an item in the project on screen: the item restored or deleted, or the project
   // switched under it, and it is gone. Checked here, so every list refresh and repo move counts.
   // A restore lists the row before the archive list catches up, and the page ends on the row: its
-  // chat carries on as the row's, under the same id.
-  if (next.archivedPage !== null && (archivedPageOf(next) === null || worktreeById(next, next.archivedPage) !== null)) {
+  // chat carries on as the row's, under the same id. A row this tab is archiving is the other way
+  // round: it is in the archive from the press and listed by the daemon until its directory is
+  // gone, and its page is up meanwhile.
+  const paged = next.archivedPage;
+  if (
+    paged !== null &&
+    (archivedPageOf(next) === null || (worktreeById(next, paged) !== null && !next.archiving.includes(paged)))
+  ) {
     next = closeArchivedPage(next);
   }
   // every open/close routes through here, so the layout is remembered in one place rather than in

@@ -3687,6 +3687,27 @@ describe("archiving a worktree", () => {
     expect(s.archiving).toEqual([]);
   });
 
+  test("the row's page opens from the press, over a row the daemon still lists, and stays as it goes", () => {
+    const said = server({
+      t: "backfill",
+      worktreeId: "a",
+      events: [{ seq: 0, event: { type: "user-message", text: "tidy the footer", ts: 1 } }],
+      last: 0,
+      log: [],
+    });
+    const open = run([three(), said, { a: "archive-worktrees", ids: ["a"] }, { a: "open-archived", id: "a" }]);
+    expect(open.archivedPage).toBe("a");
+    // another worktree's proc event pushes the whole list, the row still in it
+    const still = reducer(open, worktrees(wt("main", "main"), wt("a"), wt("b")));
+    expect(still.archivedPage).toBe("a");
+    // the row goes, and the page keeps the chat the row held
+    const gone = reducer(still, worktrees(wt("main", "main"), wt("b")));
+    expect(gone.archivedPage).toBe("a");
+    expect(localOf(gone, "a").chat).toHaveLength(1);
+    // an archive the daemon refused hands the row back, and the page goes with the archive's row
+    expect(run([server({ t: "error", message: "held by git", worktreeId: "a" })], open).archivedPage).toBeNull();
+  });
+
   test("an error frame brings the row it names back, with the reason on its chat", () => {
     const both = run([three(), { a: "archive-worktrees", ids: ["a", "b"] }]);
     const s = run([server({ t: "error", message: "held by git", worktreeId: "a" })], both);

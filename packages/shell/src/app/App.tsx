@@ -116,20 +116,11 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [activeId, connected, sock]);
-  // An archived worktree's page reads its chat over the same stream, under the id the worktree
-  // comes back with. The subscription goes with the page: the page closes as the restored row is
-  // listed, so the row's own subscribe above is a new one and gets the live backfill. Left in the
-  // set, a restore would find itself already subscribed and get nothing.
-  const archivedId = archivedPage?.id ?? null;
-  useEffect(() => {
-    if (!sock || !connected || !archivedId) return;
-    subscribeTo(archivedId);
-    return () => sock.send({ t: "unsubscribe", worktreeId: archivedId });
-  }, [archivedId, connected, sock, subscribeTo]);
   // Worktrees that disappeared drop out of the set, and the daemon hears it: its set is per socket
   // and outlives the worktree, so an archived one this tab had looked at would still count as
   // subscribed there, and the subscribe its archived page sends under the same id would be taken
   // for a repeat and get no backfill, leaving the page's chat empty until it was left and reopened.
+  // Ahead of the page's effect, so a page already up when its row goes subscribes after this lets go.
   useEffect(() => {
     const alive = new Set(rows.map((w) => w.id));
     const gone = subsRef.current.filter((id) => !alive.has(id));
@@ -138,6 +129,23 @@ export function App() {
     if (!sock || !connected) return;
     for (const id of gone) sock.send({ t: "unsubscribe", worktreeId: id });
   }, [rows, connected, sock]);
+  // An archived worktree's page reads its chat over the same stream, under the id the worktree
+  // comes back with. The subscription goes with the page: the page closes as the restored row is
+  // listed, so the row's own subscribe above is a new one and gets the live backfill. Left in the
+  // set, a restore would find itself already subscribed and get nothing.
+  const archivedId = archivedPage?.id ?? null;
+  // The page of a row this tab is still archiving is up over a worktree the daemon still lists.
+  // One the set holds is streaming already, the agent's last words included, and that subscription
+  // is the row's: taken here, a refused archive would hand back a row that hears nothing. The
+  // row leaving runs this again, and that subscribe is answered from the archive, with what git
+  // kept for the changes panel.
+  const archivedGoing = useStore((s) => archivedId !== null && s.archiving.includes(archivedId));
+  useEffect(() => {
+    if (!sock || !connected || !archivedId) return;
+    if (archivedGoing && subsRef.current.includes(archivedId)) return;
+    subscribeTo(archivedId);
+    return () => sock.send({ t: "unsubscribe", worktreeId: archivedId });
+  }, [archivedId, archivedGoing, connected, sock, subscribeTo]);
 
   const pageName = notesPage ? "Release notes" : (archivedPage?.title ?? activeRow?.name ?? null);
   useEffect(() => {

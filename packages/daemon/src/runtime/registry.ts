@@ -784,6 +784,12 @@ export class RuntimeRegistry {
     return this.runtimes.get(id)?.agent;
   }
 
+  /** the chat as the worktree's agent holds it, an agent being stopped included: what it says on
+   * its way out is on disk only once its close ends. Undefined with no agent either way. */
+  transcriptOf(id: string): ReturnType<AgentAdapter["transcript"]> | undefined {
+    return (this.runtimes.get(id) ?? this.stopping.get(id))?.agent.transcript();
+  }
+
   /** the agent exists from the moment the worktree does; procs come later */
   ensureAgent(wt: WorktreeInfo): Runtime {
     const existing = this.runtimes.get(wt.id);

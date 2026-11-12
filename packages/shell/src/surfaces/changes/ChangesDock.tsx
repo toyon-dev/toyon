@@ -83,7 +83,12 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // back, as it was, with the first message
   const bare = useBare();
   const focusReq = useStore((s) => s.focusChanges);
-  const gitInfo = useLocalField(shownId, "git");
+  // The page of a row this tab is still archiving stands over what the row held: a status and a
+  // history read in a directory that is leaving. Neither is shown and nothing is asked for; the
+  // archive's own come once the row has gone.
+  const going = useStore((s) => archived !== null && s.archiving.includes(archived.id));
+  const heldId = going ? null : shownId;
+  const gitInfo = useLocalField(heldId, "git");
   // the row whose file is open in the editor; plain strings so the selectors stay identity-stable
   const openPath = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? s.editor.path : null));
   const openRef = useStore((s) => (s.editor && s.editor.worktreeId === shownId ? (s.editor.ref ?? null) : null));
@@ -159,7 +164,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
     const repo = repoById(s, activeRow?.repoId);
     return repo ? baseOf(repo) : "main";
   });
-  const commits = useLocalField(shownId, "commits");
+  const commits = useLocalField(heldId, "commits");
   const filesBySha = useLocalField(shownId, "commitFiles");
   // only one commit is expanded at a time, which is also what lets a file row below it be opened
   // without carrying its sha: the sha is whichever commit is open
@@ -317,11 +322,16 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   const lastLog = useRef("");
   useEffect(() => {
     if (!(showHist || unchanged) || !shownId) return;
+    // the log the row last asked for was its directory's, and the one owed next is the archive's
+    if (going) {
+      lastLog.current = "";
+      return;
+    }
     const key = `${shownId}:${head ?? ""}`;
     if (lastLog.current === key) return;
     lastLog.current = key;
     sock?.send({ t: "git-log", worktreeId: shownId });
-  }, [showHist, unchanged, shownId, head, sock]);
+  }, [showHist, unchanged, shownId, head, going, sock]);
   // a commit's files are fetched once and kept: the same shas are still there after a re-read
   const toggleCommit = useCallback(
     (sha: string) => {

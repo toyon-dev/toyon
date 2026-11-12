@@ -107,6 +107,7 @@ import { type ClaimStamps, SparePool } from "./spare.ts";
 import { type TreeCore, TreeState } from "./treeState.ts";
 import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
+import type { WatchmanWatches } from "./watchman.ts";
 
 /** how often git's own list of a repo's worktrees is read when nothing has marked it stale */
 const LIST_FLOOR_MS = 10_000;
@@ -279,6 +280,9 @@ export interface WorktreeServiceDeps {
    * worktree's own agent at the press; none when nothing answers. Absent in tests that land with
    * a message in hand. */
   message?: (wt: WorktreeInfo) => Promise<string | undefined>;
+  /** watchman's watch on a worktree's directory, dropped once the directory is gone. Absent in
+   * tests, which then never ask the machine's own watchman anything. */
+  watches?: Pick<WatchmanWatches, "drop">;
 }
 
 /** the refusal for a found worktree another tool holds, with git's reason when it gave one */
@@ -1280,6 +1284,8 @@ export class WorktreeService {
         rmSync(this.plansScratch(wt.id), { recursive: true, force: true });
         throw e;
       }
+      // never waited on: the removal is done whatever watchman says, or whether there is one
+      if (this.d.watches) fireAndForget(worktreeId, this.d.watches.drop(wt.path), "watchman watch drop");
       // the confirm promised the branch goes with the directory. Only toyon's own: an adopted
       // worktree's branch is the person's. Forced, since the archive ref holds its commits; best
       // effort, since the checkout is already gone and a leftover branch is the lesser surprise

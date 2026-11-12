@@ -92,6 +92,7 @@ import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
 import { ArchiveSweep, archiveAfterFrom } from "./worktrees/sweep.ts";
 import { TurnService } from "./worktrees/turns.ts";
+import { WatchmanWatches } from "./worktrees/watchman.ts";
 
 // Bun exits the process on an unhandled rejection or exception. For a daemon that owns every
 // dev server and agent session, staying up and logging beats taking them all down.
@@ -268,6 +269,7 @@ const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefi
 // what a worktree built to pass the check, kept for the next one; it publishes on the hub's
 // checkPassed and restores from inside the service's setup
 const cache = new ArtifactCache({ paths, state, hub });
+const watches = new WatchmanWatches({ root: paths.worktreesDir });
 const fix = new FixService({ state, hub, runtime });
 // who is subscribed to which worktree, kept where the tree-state owner can ask; the socket layer
 // fills it in
@@ -289,6 +291,7 @@ const worktrees = new WorktreeService({
   // not matter
   shown: (id) => idle.isShown(id),
   message: (wt): Promise<string | undefined> => landing.message(wt.id),
+  watches,
 });
 // a subscriber arriving is when a worktree's panel tier and its watcher start; the last leaving
 // is when the watcher stops
@@ -648,6 +651,8 @@ runs.boot();
 landing.boot();
 // after the repos are known, so the cache of one that was removed goes with it
 fireAndForget("cache", cache.sweep(), "cache sweep");
+// the watches earlier daemons left on worktrees that are gone: watchman holds a file tree for each
+fireAndForget("watchman", watches.sweep(), "watchman sweep");
 // the adapters are fetched on first boot (and after a version bump), not shipped: the default
 // agent first, so the first prompt waits on one download at most. One already on disk installs
 // without a change event, so the check is asked here as well.

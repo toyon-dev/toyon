@@ -58,6 +58,8 @@ describe("archive", () => {
     expect(sh(w.repo, "git", "rev-parse", `${ref(wt.id)}^`)).toBe(head);
     expect(sh(w.repo, "git", "show", `${ref(wt.id)}:wip.txt`)).toBe("untracked");
     expect(w.worktrees.archived(repoId).map((a) => a.id)).toEqual([wt.id]);
+    // watchman holds a removed checkout's file tree until it is told the directory went
+    expect(w.unwatched).toEqual([wt.path]);
   });
 
   test("uncommitted work that cannot be snapshotted refuses the archive: the directory and the branch stay", async () => {
@@ -74,6 +76,7 @@ describe("archive", () => {
     expect(sh(w.repo, "git", "branch", "--list", wt.branch)).toContain(wt.branch);
     expect(w.state.worktree(wt.id)).toBeDefined();
     expect(w.worktrees.archived(repoId)).toEqual([]);
+    expect(w.unwatched).toEqual([]);
     // the nested repo out of the way, the archive goes through with the work kept
     rmSync(join(wt.path, "nested"), { recursive: true });
     expect(await w.worktrees.archiveWorktree(wt.id)).toMatchObject({ id: wt.id, uncommitted: true });
@@ -379,6 +382,7 @@ describe("archive", () => {
     expect(w.state.worktree(spare.id)).toBeUndefined();
     expect(existsSync(transcriptPathFor(w.paths.transcriptsDir, spare.id))).toBe(false);
     expect(w.worktrees.archived(repoId)).toEqual([]);
+    expect(w.unwatched).toEqual([spare.path]);
   });
 
   test("forgetting a project deletes the chat on main, which has nowhere to come back to", async () => {
@@ -397,6 +401,9 @@ describe("archive", () => {
     expect(w.state.worktree(wt.id)).toBeUndefined();
     expect(existsSync(wt.path)).toBe(false);
     expect(await refExists(wt.id)).toBe(true);
+    // the task's directory went; main's checkout stays, and so does its watch
+    expect(w.unwatched).toContain(wt.path);
+    expect(w.unwatched).not.toContain(w.repo);
     // the archive is listed by project, so it is back once the project is
     const again = await registered();
     expect(w.worktrees.archived(again)).toMatchObject([{ id: wt.id, restorable: true }]);

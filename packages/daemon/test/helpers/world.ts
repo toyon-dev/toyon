@@ -70,6 +70,8 @@ export function world() {
   /** the landing messages a hook refused, each with what the hook said */
   const refused: Array<[worktreeId: string, said: string]> = [];
   hub.on("messageRefused", (id, said) => refused.push([id, said]));
+  /** the directories whose watchman watch a removal asked to have dropped */
+  const unwatched: string[] = [];
   const fix = new FixService({ state, hub, runtime });
   const pageErrors = new PageErrorService({ hub, known: (id) => state.worktree(id) !== undefined });
   // who is subscribed, as the socket layer would say: a test subscribes a key to read the panel's tier
@@ -99,6 +101,11 @@ export function world() {
     message: async () => {
       writing.calls++;
       return writing.reply;
+    },
+    watches: {
+      drop: async (path) => {
+        unwatched.push(path);
+      },
     },
   });
   const turns = new TurnService({ state, hub, transcript: (id) => runtime.agentFor(id)?.transcript() ?? [] });
@@ -130,6 +137,7 @@ export function world() {
     writing,
     cache,
     refused,
+    unwatched,
     fix,
     pageErrors,
     handoff,

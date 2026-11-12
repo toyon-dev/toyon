@@ -98,13 +98,13 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     name: "Claude Code",
     short: "Claude",
     builtin: true,
-    // Toyon's fork of claude-agent-acp: upstream 0.99.1 plus the upstream PRs it is waiting on (#1350,
+    // Toyon's fork of claude-agent-acp: upstream 0.106.0 plus the upstream PRs it is waiting on (#1350,
     // a client-chosen steer priority). The fork's TOYON.md holds the queue and the per-release
     // routine; the pin goes back to `forkOf` once every queued PR has landed there.
     run: {
       kind: "npm-bin",
       pkg: "@toyon-dev/claude-agent-acp",
-      version: "0.99.1-toyon.1",
+      version: "0.106.0-toyon.1",
       forkOf: "@agentclientprotocol/claude-agent-acp",
       bin: "claude-agent-acp",
     },
@@ -124,7 +124,8 @@ export const BUILTIN_AGENTS: AgentSpec[] = [
     setup: (cwd, bounds) => writeClaudeLocalSettings(cwd, bounds).then(() => undefined),
     systemPrompt: "meta-append",
     // "default" is Claude's ask-before-changes mode: every write and command reaches the policy,
-    // which is what lets toyon decide. Its own "auto" would decide without us.
+    // which is what lets toyon decide. Its own "auto" would decide without us, and "auto" is the
+    // mode the adapter opens a new session in, so the switch at session start is what holds this.
     modes: { plan: "plan", build: "default" },
     // spread into the SDK's query options: without `tools` every side question carries the whole
     // tool preset's definitions, and without `persistSession` each one is saved under

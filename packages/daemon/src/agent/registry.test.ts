@@ -29,7 +29,7 @@ import type { Prepared } from "./sandbox.ts";
 const MIRROR_404 =
   "GET https://artifacts.example.dev/artifactory/api/npm/npm-packages/@toyon-dev%2fclaude-agent-acp - 404";
 const AGE_BLOCKED =
-  'No version matching "0.99.1-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds)';
+  'No version matching "0.106.0-toyon.1" found for specifier "@toyon-dev/claude-agent-acp" (blocked by minimum-release-age: 691200 seconds)';
 const AGE_HELD = `${AGE_BLOCKED}. bun's minimumReleaseAge rule in ~/.bunfig.toml holds this version back: wait it out, or install anyway to set the rule aside for this download`;
 
 const prepared: Prepared = {
@@ -67,7 +67,7 @@ describe("claude's terminal login", () => {
     const claude = BUILTIN_AGENTS.find((a) => a.id === "claude")!;
     // claude-agent-acp names its no-browser login `claude-login` and takes `--cli auth login`: a new
     // adapter version is checked for both before this pin moves
-    expect(claude.run).toMatchObject({ pkg: "@toyon-dev/claude-agent-acp", version: "0.99.1-toyon.1" });
+    expect(claude.run).toMatchObject({ pkg: "@toyon-dev/claude-agent-acp", version: "0.106.0-toyon.1" });
     // `plan` marks it as the consumer sign-in a managed policy can withhold
     expect(claude.terminalLogins).toEqual({
       "claude-login": { args: ["--cli", "auth", "login", "--claudeai"], env: { NO_BROWSER: "1" }, plan: true },
@@ -100,14 +100,14 @@ describe("agent registry", () => {
     ]);
     expect(() => reg.require("claude")).toThrow(/not ready/);
     await reg.installMissing();
-    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.106.0-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
     expect(changes[0]).toEqual(["claude:installing", "codex:not installed yet", "opencode:not installed"]);
     expect(changes.at(-1)).toEqual(["claude:ok", "codex:ok", "opencode:not installed"]);
     const l = reg.launch(reg.require("claude"), prepared);
     expect(l.command).toBe(process.execPath);
     expect(l.env).toEqual({ FROM_SETUP: "1" });
     expect(l.args[0]).toMatch(/claude-agent-acp\/dist\/index\.js$/);
-    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.99.1-toyon.1");
+    expect(JSON.parse(readFileSync(join(l.args[0]!, "../../package.json"), "utf8")).version).toBe("0.106.0-toyon.1");
     // already at the pinned version: nothing to do
     await reg.installMissing();
     expect(calls).toHaveLength(2);
@@ -180,7 +180,7 @@ describe("agent registry", () => {
     expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
     // OpenCode is fetched on demand and nobody asked, so it is not listed
     expect(reg.adapters()).toEqual([
-      { id: "claude", installed: "0.75.1", pinned: "0.99.1-toyon.1", error: "install failed: registry unreachable" },
+      { id: "claude", installed: "0.75.1", pinned: "0.106.0-toyon.1", error: "install failed: registry unreachable" },
       { id: "codex", installed: "2.5.0", pinned: "2.5.0" },
     ]);
   });
@@ -349,13 +349,13 @@ describe("agent registry", () => {
     const { installer, calls } = fakeInstaller(fail);
     const reg = new AgentRegistry(BUILTIN_AGENTS, tmp(), installer, undefined, undefined, () => now);
     await reg.installMissing();
-    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.106.0-toyon.1", "@agentclientprotocol/codex-acp@2.5.0"]);
     // a tab reloaded right after: too soon to download again
     await reg.retryFailed();
     expect(calls).toHaveLength(2);
     now += 31_000;
     await reg.retryFailed();
-    expect(calls).toEqual([...calls.slice(0, 2), "@toyon-dev/claude-agent-acp@0.99.1-toyon.1"]);
+    expect(calls).toEqual([...calls.slice(0, 2), "@toyon-dev/claude-agent-acp@0.106.0-toyon.1"]);
     // failed again, so the window starts over, and doubles: a failure that will not change is
     // not downloaded on every reconnect
     await reg.retryFailed();
@@ -413,14 +413,14 @@ describe("agent registry", () => {
     expect(reg.adapters()[0]).toMatchObject({ id: "claude", error: "install failed: registry unreachable" });
     // the files arrive without this registry's install having put them there
     fail.clear();
-    await installer(join(dir, "claude"), "@toyon-dev/claude-agent-acp", "0.99.1-toyon.1");
+    await installer(join(dir, "claude"), "@toyon-dev/claude-agent-acp", "0.106.0-toyon.1");
     await reg.install("claude");
-    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.99.1-toyon.1", pinned: "0.99.1-toyon.1" });
+    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.106.0-toyon.1", pinned: "0.106.0-toyon.1" });
   });
 
   describe("borrowing another daemon's adapters", () => {
     const CLAUDE = "@toyon-dev/claude-agent-acp";
-    const PIN = "0.99.1-toyon.1";
+    const PIN = "0.106.0-toyon.1";
     const withPin = (version: string) =>
       BUILTIN_AGENTS.map((a) => (a.id === "claude" ? { ...a, run: { ...a.run, version } } : a)) as AgentSpec[];
     const borrowing = (dir: string, from: string, installer: Installer, specs = BUILTIN_AGENTS) =>
@@ -522,7 +522,7 @@ describe("agent registry", () => {
     };
     const reg = new AgentRegistry(BUILTIN_AGENTS, dir, mirrored);
     await reg.install("claude");
-    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.99.1-toyon.1"]);
+    expect(calls).toEqual(["@toyon-dev/claude-agent-acp@0.106.0-toyon.1"]);
     expect(readFileSync(join(dir, "claude", ".npmrc"), "utf8")).toBe(
       "registry=https://registry.npmjs.org/\n@toyon-dev:registry=https://registry.npmjs.org/\n",
     );

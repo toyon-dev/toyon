@@ -40,10 +40,10 @@ export interface WireFlags {
 
 const FLAG_NAMES = ["noStartSignal", "cutCallUnreported", "backgroundFinish", "modelIdOffList"] as const;
 
-// The pin is toyon's fork of the adapter: upstream 0.99.1 plus the queued PRs named in the rows
+// The pin is toyon's fork of the adapter: upstream 0.106.0 plus the queued PRs named in the rows
 // they close. A row upstream has not shipped is read against the fork's base.
 const CLAUDE: AdapterWire = {
-  at: "0.99.1-toyon.1",
+  at: "0.106.0-toyon.1",
   gaps: {
     partialInput: {
       gap:
@@ -98,7 +98,7 @@ const CLAUDE: AdapterWire = {
         "ordering are harmless either way.",
       upstream:
         "Asked upstream twice, agentclientprotocol/claude-agent-acp#1175 and #1350 (the better shape, " +
-        "`_meta.steering.priority`), both unreviewed; still `now` at 0.99.1. The fork pin carries #1350 " +
+        "`_meta.steering.priority`), both unreviewed; still `now` at 0.106.0. The fork pin carries #1350 " +
         "(`pr/1350-steer-priority`) until one lands; back #1350 rather than open a third. The steering " +
         "extension itself says nothing about the running step.",
       open: false,
@@ -181,9 +181,14 @@ const CLAUDE: AdapterWire = {
     authStatusMeta: {
       gap:
         "Which credential the agent runs on arrives as `_auth/status_update`, advertised under " +
-        "`agentCapabilities._meta.authStatus`, with no request method.",
-      here: "authstatus.ts. No flag.",
-      upstream: "Interim extension, on both builtin adapters; first-class fields when the RFD lands.",
+        "`agentCapabilities._meta.authStatus`, with no request method. Since 0.104.0 the same identity is " +
+        "also pushed as ACP's own `auth/status_update` and answered on `auth/status` (`auth.status`).",
+      here:
+        "authstatus.ts reads the private one. The daemon's SDK has no `auth/status_update`, so that push " +
+        "meets no handler and is dropped. No flag.",
+      upstream:
+        "Interim extension, on both builtin adapters. Claude's first-class method has shipped; reading it " +
+        "comes with an SDK that carries it.",
       open: true,
     },
     steeringMeta: {
@@ -204,7 +209,8 @@ const CLAUDE: AdapterWire = {
     },
     droppedUpdates: {
       gap:
-        "Updates toyon gets and does not read: `plan` and `plan_update` (the task list), `compaction_update`, " +
+        "Updates toyon gets and does not read: `plan` (the task list; `plan_update` and `plan_removed` go " +
+        "to a client declaring `clientCapabilities.plan`), `compaction_update`, " +
         "`current_mode_update` beyond the plan check, `promptSuggestions` under `session_info_update._meta`, " +
         "and the title the adapter generates for the session. `notice` is withheld because toyon does not " +
         "declare `clientCapabilities.session.notices`.",

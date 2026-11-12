@@ -34,20 +34,29 @@ export function siblingWorktrees(
   if (!repoId) return [];
   const out: Sibling[] = [];
   for (const r of rows) {
-    const w = r.worktree;
-    if (w.repoId !== repoId || w.id === self || w.kind !== "worktree") continue;
-    const op = shipping[w.id]?.op;
-    out.push({
-      id: w.id,
-      title: w.title,
-      branch: w.branch,
-      dir: w.path.slice(w.path.lastIndexOf("/") + 1),
-      dot: shownDot(r, op),
-      state: shownLabel(r, op),
-      at: sentAt(w),
-    });
+    if (r.worktree.repoId !== repoId || r.worktree.id === self) continue;
+    const named = siblingOf(r, shipping);
+    if (named) out.push(named);
   }
   return out;
+}
+
+/** One row as a mark names it, whichever project it is in, or null for main and the spare. A row
+ * Toyon names itself (the one a piece came from, the one a piece went to) may sit in another
+ * project, on no rail this chat can see, and is still a chat to open. */
+export function siblingOf(r: OwnedWorktree, shipping: ShippingOps = {}): Sibling | null {
+  const w = r.worktree;
+  if (w.kind !== "worktree") return null;
+  const op = shipping[w.id]?.op;
+  return {
+    id: w.id,
+    title: w.title,
+    branch: w.branch,
+    dir: w.path.slice(w.path.lastIndexOf("/") + 1),
+    dot: shownDot(r, op),
+    state: shownLabel(r, op),
+    at: sentAt(w),
+  };
 }
 
 /** The reference a paste of a worktree's name stands for, `@title` as the `@` menu writes one,

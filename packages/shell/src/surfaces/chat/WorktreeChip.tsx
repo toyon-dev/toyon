@@ -1,38 +1,31 @@
-// A worktree of the project named on a row Toyon draws (a handoff row, the plan's worktrees
-// section, the line under the box, a sibling's landing), as the mention a message draws it: the
-// chip with the row's dot and tip, a press opening the row, an archived one its page. One drawing
-// for every place a worktree is named, so the agent's prose, the person's mentions and Toyon's
-// own rows agree on what a worktree looks like. A worktree that is gone from both lists is named
-// in plain words, since there is nothing to open.
+// A worktree named on a row Toyon draws (a handoff row, the plan's worktrees section, the line
+// under the box, a sibling's landing), as the mention a message draws it: the chip with the row's
+// dot and tip, a press opening the row, an archived one its page. One drawing for every place a
+// worktree is named, so the agent's prose, the person's mentions and Toyon's own rows agree on
+// what a worktree looks like. Toyon names a worktree by id, so the chip reaches one in another
+// project too, and the press switches to that project. A worktree that is gone from both lists is
+// named in plain words, since there is nothing to open.
 
 import { useMemo } from "react";
 import { linkOpener } from "../../state/actions/message.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
-import { worktreeById } from "../../state/store.ts";
+import { archivedById, worktreeById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { mentionTip } from "./mentions.ts";
-import { siblingWorktrees } from "./siblings.ts";
+import { siblingOf } from "./siblings.ts";
 
 /** `inert`: the chip is the label of a control (a fate button naming where a piece goes), so a
  * press is the control's and the chip opens nothing of its own */
 export function WorktreeChip({ id, title, inert }: { id: string; title?: string; inert?: boolean }) {
   const sock = useSock();
   const dispatch = useDispatch();
-  const rows = useStore((s) => s.visible);
   const shipping = useStore((s) => s.shipping);
-  const row = useStore((s) => worktreeById(s, id));
+  // read from every project's rows and not the rail's: the row a piece came from or went to may
+  // be another project's. One whose remove is in flight is the archive's already.
+  const row = useStore((s) => (s.archiving.includes(id) ? null : worktreeById(s, id)));
   // the archive's record, read only once the row is gone: the lists are stable until they change
-  const archived = useStore((s) =>
-    row
-      ? null
-      : (Object.values(s.archived)
-          .flat()
-          .find((a) => a.id === id) ?? null),
-  );
-  const live = useMemo(
-    () => (row ? (siblingWorktrees(rows, row.worktree.repoId, null, shipping).find((w) => w.id === id) ?? null) : null),
-    [rows, shipping, row, id],
-  );
+  const archived = useStore((s) => (row ? null : archivedById(s, id)));
+  const live = useMemo(() => (row ? siblingOf(row, shipping) : null), [row, shipping]);
   const branch = live?.branch ?? archived?.branch;
   if (!branch) return <span>{title ?? id}</span>;
   // the mark reads as the rail's row does, by title; the branch is the tip's and the right-click's

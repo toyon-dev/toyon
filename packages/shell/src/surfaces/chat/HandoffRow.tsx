@@ -167,10 +167,11 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
 export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
   return (
     <DaemonRow icon="check" word={item.again ? "landed again" : "landed"} tone="aqua" at={item.ts}>
-      {/* a sibling of this project is its chip; work in another project is named with where. Its
-          pull request follows in the sentence, as the list follows the handoff row's */}
+      {/* the worktree is its chip; work in another project is named with where. Its pull request
+          follows in the sentence, as the list follows the handoff row's */}
       <span className="daemon-text">
-        {item.same ? <WorktreeChip id={item.worktreeId} title={item.title} /> : `${item.title} in ${item.repoName}`}
+        <WorktreeChip id={item.worktreeId} title={item.title} />
+        {item.same ? "" : ` in ${item.repoName}`}
         {item.awaited && ", which the work here waited for"}
         {item.url && (
           <>

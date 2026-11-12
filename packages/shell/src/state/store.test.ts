@@ -3336,6 +3336,19 @@ describe("an archived worktree's page", () => {
     expect([back.activeRepoId, back.archivedPage, back.activeId]).toEqual(["q", "z", "qm"]);
   });
 
+  test("another project's archived page opened by hand switches to that project, and a step back returns", () => {
+    const s = run([
+      helloIn([repo("r"), repo("q")], wt("main", "main"), wt("a"), wt("qm", "main", undefined, "q")),
+      { a: "activate", id: "a" },
+      archived("q", "z"),
+      { a: "open-archived", id: "z" },
+    ]);
+    expect([s.activeRepoId, s.archivedPage, s.activeId]).toEqual(["q", "z", "qm"]);
+    expect(s.viewed).toEqual({ ids: ["main", "a", "z"], at: 2 });
+    const back = reducer(s, { a: "viewed-land", at: 1 });
+    expect([back.activeRepoId, back.archivedPage, back.activeId]).toEqual(["r", null, "a"]);
+  });
+
   test("the release notes give way to it, and it to them", () => {
     const s = run([{ a: "open-release-notes" }, { a: "open-archived", id: "x" }], listed());
     expect([s.notesPage, s.archivedPage]).toEqual([false, "x"]);

@@ -1357,6 +1357,17 @@ function openArchivedPage(s: State, id: string): State {
   return { ...s, archivedPage: id, notesPage: false, editor: null, screen: "chat" };
 }
 
+/** An archived worktree's page over its own project's landing row. One in another project
+ * switches to it, as choosing one of its rows does: a step of the viewed walk lands there, and so
+ * does a press on the mark of a worktree Toyon names across projects. */
+function openArchivedIn(s: State, arch: ArchivedWorktree): State {
+  const under =
+    arch.repoId === s.activeRepoId
+      ? s
+      : { ...activate(s, landingIn(s, arch.repoId)), activeRepoId: arch.repoId, lent: null, carryTo: null };
+  return openArchivedPage(under, arch.id);
+}
+
 /** the chat is about to be written in, so its dock opens; a chat in the centre has no dock to open,
  * and writing one into the layout would leave the project's remembered panels holding it */
 function revealChat(s: State): State {
@@ -1667,7 +1678,7 @@ export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | 
 }
 
 /** an archived worktree by id, whichever project's archive lists it */
-function archivedById(s: Pick<State, "archived">, id: string): ArchivedWorktree | null {
+export function archivedById(s: Pick<State, "archived">, id: string): ArchivedWorktree | null {
   for (const items of Object.values(s.archived)) {
     const hit = items.find((a) => a.id === id);
     if (hit) return hit;
@@ -2222,13 +2233,7 @@ function reduce(s: State, action: Action): State {
       // that went between the step and this frame is nowhere to land
       const arch = archivedById(s, id);
       if (!arch) return s;
-      // an archived worktree lands on its page, over its own project's landing row: a step back into
-      // another project switches to it, as a step onto one of its rows does
-      const under =
-        arch.repoId === s.activeRepoId
-          ? s
-          : { ...activate(s, landingIn(s, arch.repoId)), activeRepoId: arch.repoId, lent: null, carryTo: null };
-      return { ...openArchivedPage(under, id), viewed };
+      return { ...openArchivedIn(s, arch), viewed };
     }
     case "open-draft": {
       // not on an empty project: a worktree off the root commit would take the scaffold to a
@@ -2255,8 +2260,9 @@ function reduce(s: State, action: Action): State {
     case "open-archived": {
       // a page opened by hand is a place in the viewed walk, like a row chosen: one step back is
       // the row it opened over
-      const opened = openArchivedPage(s, action.id);
-      return opened === s ? s : { ...opened, viewed: pushViewed(s.viewed, viewedCurrent(s), action.id) };
+      const arch = archivedById(s, action.id);
+      if (!arch) return s;
+      return { ...openArchivedIn(s, arch), viewed: pushViewed(s.viewed, viewedCurrent(s), action.id) };
     }
     case "close-archived": {
       if (!s.archivedPage) return s;

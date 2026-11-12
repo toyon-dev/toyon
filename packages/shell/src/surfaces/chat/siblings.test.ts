@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { OwnedWorktree } from "@toyon/shared";
-import { insertedWorktree, matchesSibling, pastedWorktree, siblingWorktrees } from "./siblings.ts";
+import { insertedWorktree, matchesSibling, pastedWorktree, siblingOf, siblingWorktrees } from "./siblings.ts";
 
 const row = (
   id: string,
@@ -38,6 +38,12 @@ describe("siblingWorktrees", () => {
       ["a", "working"],
       ["b", "idle"],
     ]);
+  });
+
+  test("one row is named whichever project it is in, and main and the spare are not", () => {
+    expect(siblingOf(rows[4]!)).toMatchObject({ id: "c", branch: "toyon/c", dot: "idle" });
+    expect(siblingOf(rows[1]!, { a: { op: "commit" } })?.dot).toBe("working");
+    expect([siblingOf(rows[0]!), siblingOf(rows[2]!)]).toEqual([null, null]);
   });
 
   test("a git op out from a row takes its dot and its word, as the rail's slot does", () => {

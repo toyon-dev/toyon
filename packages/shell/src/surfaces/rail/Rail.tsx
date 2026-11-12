@@ -126,10 +126,14 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const activeRepoId = useStore((s) => s.activeRepoId);
   const connected = useStore((s) => s.connected);
   // the section's count is on the rail before anyone opens it, so ask for the list on the way in;
-  // the daemon pushes it again whenever a worktree is archived, restored or deleted
+  // the daemon pushes it again whenever a worktree is archived, restored or deleted. Every
+  // project's is asked for: a chat names the worktree a piece came from or went to, which may be
+  // archived in a project that is not the one on screen, and its mark opens that page.
+  const repoIds = useStore((s) => s.repos.map((r) => r.id).join(" "));
   useEffect(() => {
-    if (sock && connected && activeRepoId) sock.send({ t: "list-archived", repoId: activeRepoId });
-  }, [sock, connected, activeRepoId]);
+    if (!sock || !connected || !repoIds) return;
+    for (const repoId of repoIds.split(" ")) sock.send({ t: "list-archived", repoId });
+  }, [sock, connected, repoIds]);
   const activeId = useActiveId();
   // offline the live dots empty to a ring in the fault colour and every tip names it; the bar says what the socket is doing
   const offline = useOffline();

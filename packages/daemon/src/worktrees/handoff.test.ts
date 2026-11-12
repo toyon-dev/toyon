@@ -609,6 +609,54 @@ describe("go", () => {
     });
   });
 
+  test("a landed worktree takes a send once it is at work again; at rest the refusal says it landed", async () => {
+    const repoId = await registered();
+    const acp = await otherProject("claude-agent-acp");
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    const c = await w.worktrees.create(acp.id, "task", { title: "Form" });
+    await until(() => b.branch === "toyon/composer" && c.branch === "toyon/form");
+    await land(b.id, "composer.txt");
+    await land(c.id, "form.txt");
+    const decline = async () => {
+      await w.handoff.answer(a.id, lastProposal(a.id).id, false);
+      agentOf(a.id).note({ type: "turn-start", ts: Date.now() });
+    };
+    for (const [wt, project] of [
+      [b, undefined],
+      [c, "claude-agent-acp"],
+    ] as const) {
+      const send = piece({ where: "send", to: wt.title, ...(project ? { project } : {}) });
+      const named = { id: wt.id, branch: wt.branch, title: wt.title };
+      // at rest: the work is on main, nothing is in the tree and no turn runs
+      await w.worktrees.tree.refresh(wt.id);
+      expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+      expect(w.worktrees.tree.counts(wt.id)).toMatchObject({ dirty: 0 });
+      const r = await call(a.id, send);
+      expect(r.isError).toBe(true);
+      expect(r.text).toContain(`"${wt.title}" (${wt.branch}) landed and holds no new work`);
+      expect(r.text).not.toContain("is called");
+      // a turn running there is work, whatever the tree holds
+      agentOf(wt.id).status = "working";
+      expect(await call(a.id, send)).toEqual({ text: SHOWN });
+      expect(lastProposal(a.id).pieces[0]!.to).toEqual(named);
+      await decline();
+      agentOf(wt.id).status = "idle";
+      // files in the tree are new work, and the landed mark stays, since it reads commits alone
+      writeFileSync(join(wt.path, "more.txt"), "x\n");
+      await w.worktrees.tree.refresh(wt.id);
+      expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
+      expect(await call(a.id, send)).toEqual({ text: SHOWN });
+      expect(lastProposal(a.id).pieces[0]!.to).toEqual(named);
+      await decline();
+    }
+    // the tool lists the rows a send reaches, so the list and the check agree
+    expect(w.handoff.tool(a.id).description).toContain(`${b.branch}, "Composer"`);
+    rmSync(join(b.path, "more.txt"));
+    await w.worktrees.tree.refresh(b.id);
+    expect(w.handoff.tool(a.id).description).toContain("No other worktree of this project is open");
+  });
+
   test("a queued piece whose sibling is gone is dropped with the reason; an archived origin takes its queue with it", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });

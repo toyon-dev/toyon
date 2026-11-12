@@ -413,6 +413,14 @@ export class HandoffService implements ToolProvider {
     return this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "worktree" && w.id !== wt.id);
   }
 
+  /** Whether a piece can be sent to a row: its work is not done. A landed row is done until it
+   * goes on, and the landed mark cannot say when it has: it reads commits alone, so a row with
+   * files in its tree or a turn running still carries it. The files are the rail's last read. */
+  private takesSend(w: WorktreeInfo): boolean {
+    if (!w.landed) return true;
+    return (this.d.counts(w.id)?.dirty ?? 0) > 0 || isBusy(this.d.runtime.agentFor(w.id)?.status);
+  }
+
   /** the projects a piece can cross into: every open one but the worktree's own */
   private otherProjects(wt: WorktreeInfo): RepoInfo[] {
     return this.d.state.repos.filter((r) => r.id !== wt.repoId);
@@ -445,7 +453,9 @@ export class HandoffService implements ToolProvider {
   /** the tool as the agent sees it, listed with the worktrees and projects it can name right now */
   tool(worktreeId: string): McpTool {
     const wt = this.d.state.worktree(worktreeId);
-    const names = wt ? this.siblings(wt).map((w) => `${w.branch}, "${w.title}"`) : [];
+    // the rows a send reaches: a landed row at rest is nothing to send to or to wait for
+    const open = wt ? this.siblings(wt).filter((w) => this.takesSend(w)) : [];
+    const names = open.map((w) => `${w.branch}, "${w.title}"`);
     const projects = wt ? this.otherProjects(wt).map((r) => r.name) : [];
     return handoffTool(names, projects);
   }
@@ -569,10 +579,12 @@ export class HandoffService implements ToolProvider {
       if (p.where === "send") {
         const q = p.to?.trim() ?? "";
         if (!q) return refused(`Piece ${i + 1} ("${title}") is \`send\` and names no worktree in \`to\`.`);
+        const all = this.siblings(wt, piece.project?.id);
         const found = this.named(
-          this.siblings(wt, piece.project?.id).filter((w) => !w.landed),
+          all.filter((w) => this.takesSend(w)),
           q,
           piece.project?.name,
+          all.filter((w) => !this.takesSend(w)),
         );
         if ("refused" in found) return refused(`Piece ${i + 1} ("${title}"): ${found.refused}`);
         piece.to = found.worktree;
@@ -686,16 +698,27 @@ export class HandoffService implements ToolProvider {
   }
 
   /** the worktree a branch or a title names, on the ladder the project picker uses; `where` is
-   * the project as the refusal names it */
+   * the project as the refusal names it. `done` is the rows left out of `among` for having landed:
+   * a name that only they answer to is refused as landed, since "none is called that" reads as a
+   * wrong name or an archived row, and the row is neither. */
   private named(
     among: readonly WorktreeInfo[],
     q: string,
     where = "this project",
+    done: readonly WorktreeInfo[] = [],
   ): { worktree: Named } | { refused: string } {
     const bare = q.startsWith("@") ? q.slice(1) : q;
     const list = among.map((w) => `${w.branch}, "${w.title}"`).join("; ");
+    const keys = [(w: WorktreeInfo) => w.branch, (w: WorktreeInfo) => w.title];
+    const found = matchBy(among, bare, keys);
+    const landed = found.length === 0 ? matchBy(done, bare, keys) : [];
+    if (landed.length > 0) {
+      const names = landed.map((w) => `"${w.title}" (${w.branch})`).join(", ");
+      return {
+        refused: `${names} landed and ${landed.length === 1 ? "holds" : "hold"} no new work, so no piece is sent there; a \`worktree\` piece starts a new one.`,
+      };
+    }
     if (among.length === 0) return { refused: `no other worktree of ${where} is open.` };
-    const found = matchBy(among, bare, [(w) => w.branch, (w) => w.title]);
     if (found.length === 1) {
       const w = found[0]!;
       return { worktree: { id: w.id, branch: w.branch, title: w.title } };

@@ -4,7 +4,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 
 ## What you can do
 
-| What | Details |
+|  |  |
 |---|---|
 | [Point at the page](using.md#ask-for-a-change) | Click an element in the preview to add it to your message or open its code. |
 | [Split off work](agents.md#handoff) | A piece of the work goes to a chat of its own, and its agent starts at once. |
@@ -20,7 +20,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 
 ## Automatic
 
-| What | Details |
+|  |  |
 |---|---|
 | Commit messages | After each finished turn with changes, Toyon writes a one-sentence recap and a commit message. `/check` writes them again, and takes a note for the message. |
 | Chat titles | Each chat gets a short title for its task, and its branch is named from the title. |

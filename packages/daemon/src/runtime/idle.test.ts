@@ -223,7 +223,7 @@ describe("IdlePolicy clock", () => {
 
   test("short memory sleeps a waiting row's servers and leaves its card; the card lapses on the clock all the same", async () => {
     const { runtime, hub, policy, advance } = make({
-      memory: async () => ({ tight: true, why: "memory pressure" }),
+      memory: async () => ({ tight: true, hard: false, why: "memory pressure" }),
     });
     runtime.agents.set("a", { status: "waiting", queueItems: [] });
     hub.emit("agentStatus", "a", "waiting");
@@ -376,7 +376,8 @@ describe("IdlePolicy and the spare", () => {
 });
 
 describe("IdlePolicy under memory pressure", () => {
-  const tight: MemorySignal = { tight: true, why: "memory pressure warn with 9% available" };
+  const tight: MemorySignal = { tight: true, hard: false, why: "memory pressure warn with 9% available" };
+  const fine: MemorySignal = { tight: false, hard: false, why: "memory pressure warn with 42% available" };
 
   test("main is shown while a worktree reaching its shared tier is, wakes with it, and sleeps after it", () => {
     const m = row("m", { kind: "main" });
@@ -426,9 +427,114 @@ describe("IdlePolicy under memory pressure", () => {
     expect(runtime.slept).toEqual(["b", "c"]);
   });
 
+  test("a hard signal sleeps three per check, least recently used first", async () => {
+    const { policy, runtime } = make({
+      worktrees: [row("a"), row("b"), row("c"), row("d"), row("e")],
+      memory: async () => ({ ...tight, hard: true }),
+    });
+    policy.view("tab", "b");
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a", "c", "d"]);
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a", "c", "d", "e"]);
+  });
+
+  test("a run waits while the check still has a worktree to sleep, and goes once nothing is left", async () => {
+    const { policy, runtime } = make({ worktrees: [row("a"), row("b"), row("c")], memory: async () => tight });
+    // nothing read yet: nothing to wait on
+    expect(policy.short()).toBeNull();
+    await policy.eased();
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a"]);
+    expect(policy.short()).toBe(tight.why);
+    let gone = false;
+    const waiting = policy.eased().then(() => {
+      gone = true;
+    });
+    // something waits on the memory now, so the check frees at the hard rate
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a", "b", "c"]);
+    await Bun.sleep(1);
+    expect(gone).toBe(false);
+    // still short, and nothing left to put down: waiting longer frees nothing
+    await policy.checkPressure();
+    await waiting;
+    expect(policy.short()).toBeNull();
+  });
+
+  test("a row that came back up and is picked again holds no run", async () => {
+    const { policy, runtime } = make({ memory: async () => tight });
+    await policy.checkPressure();
+    expect(policy.short()).toBe(tight.why);
+    const waiting = policy.eased();
+    // a request woke it; it is the one row there is, so the next check takes it down again
+    const procs = runtime.procs.get("a");
+    if (procs) procs.asleep = false;
+    for (const s of procs?.states ?? []) s.status = "running";
+    await policy.checkPressure();
+    expect(runtime.slept).toEqual(["a", "a"]);
+    await waiting;
+    expect(policy.short()).toBeNull();
+  });
+
+  test("a waiting run goes at the check that reads memory as eased", async () => {
+    let signal: MemorySignal | null = tight;
+    const { policy } = make({ worktrees: [row("a"), row("b")], memory: async () => signal });
+    await policy.checkPressure();
+    const waiting = policy.eased();
+    signal = fine;
+    await policy.checkPressure();
+    await waiting;
+    expect(policy.short()).toBeNull();
+    // and at one that could not read at all
+    signal = tight;
+    await policy.checkPressure();
+    const again = policy.eased();
+    signal = null;
+    await policy.checkPressure();
+    await again;
+  });
+
+  test("a check whose read throws lets what waits go", async () => {
+    let broken = false;
+    const { policy } = make({
+      worktrees: [row("a"), row("b")],
+      memory: async () => {
+        if (broken) throw new Error("no reading");
+        return tight;
+      },
+    });
+    await policy.checkPressure();
+    const waiting = policy.eased();
+    broken = true;
+    await expect(policy.checkPressure()).rejects.toThrow("no reading");
+    await waiting;
+    expect(policy.short()).toBeNull();
+  });
+
+  test("one check at a time: a second asked for while the first is reading does nothing", async () => {
+    let reads = 0;
+    let answer: (s: MemorySignal) => void = () => {};
+    const { policy, runtime } = make({
+      worktrees: [row("a"), row("b")],
+      memory: () => {
+        reads++;
+        return new Promise<MemorySignal>((r) => {
+          answer = r;
+        });
+      },
+    });
+    const first = policy.checkPressure();
+    await policy.checkPressure();
+    expect(reads).toBe(1);
+    answer(tight);
+    await first;
+    expect(runtime.slept).toEqual(["a"]);
+  });
+
   test("a machine that is fine sleeps nothing", async () => {
     const { policy, runtime } = make({
-      memory: async () => ({ tight: false, why: "memory pressure warn with 42% available" }),
+      memory: async () => fine,
     });
     await policy.checkPressure();
     expect(runtime.slept).toEqual([]);

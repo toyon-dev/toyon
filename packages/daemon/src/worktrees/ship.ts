@@ -303,7 +303,13 @@ export class Ship {
         const where = cwd === wt.path ? "git" : `git -C ${cwd}`;
         const commit = args[0] === "commit";
         const ceiling = commit ? timeoutFor(repo.config, "commit") : STEP_TIMEOUT_MS;
-        const handle = commit ? this.d.runs.begin(wt.id, "commit", { timeoutMs: ceiling }) : null;
+        const handle = commit ? this.d.runs.begin(wt.id, "commit", { timeoutMs: ceiling, memory: true }) : null;
+        // queued while memory is short, before the row for it opens on the chat: the hooks are
+        // what the wait is for. Only a newer commit on the row takes this one's place.
+        if (handle && !(await handle.admitted)) {
+          const err = "a newer commit took its place";
+          return { ok: false, out: "", err, exit: err, text: "" };
+        }
         const run = (onText: (text: string) => void, signal?: AbortSignal) =>
           stepRun(cwd, args, onText, signal, {
             timeoutMs: ceiling,

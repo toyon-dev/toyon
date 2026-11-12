@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { log } from "../core/log.ts";
 import {
   bootId,
   darwinSignal,
   memoryTight,
   parseEtime,
+  parseSysctl,
   parseVmStat,
   psGroups,
   sampleCosts,
@@ -16,6 +18,57 @@ describe("memoryTight", () => {
     expect(signal).not.toBeNull();
     expect(typeof signal?.tight).toBe("boolean");
     expect(signal?.why).toMatch(/available/);
+  });
+});
+
+describe("memoryTight, a read that fails", () => {
+  test("is logged at the first of a run of failures and again when it reads", async () => {
+    const warn = spyOn(log, "warn").mockImplementation(() => {});
+    const info = spyOn(log, "info").mockImplementation(() => {});
+    try {
+      const failed = async () => ({ failed: "sysctl: EBADF: bad file descriptor, posix_spawn" });
+      const fine = async () => ({ tight: false, hard: false, why: "memory pressure normal with 49% available" });
+      expect(await memoryTight(failed)).toBeNull();
+      expect(await memoryTight(failed)).toBeNull();
+      expect(warn.mock.calls).toEqual([
+        [
+          "memory",
+          "memory reading failed: sysctl: EBADF: bad file descriptor, posix_spawn; nothing sleeps for memory until it reads again",
+        ],
+      ]);
+      expect((await memoryTight(fine))?.tight).toBe(false);
+      expect(info.mock.calls).toEqual([["memory", "memory reads again after 2 failed checks"]]);
+      // the next run of failures is its own: nothing was latched by the first
+      expect(await memoryTight(failed)).toBeNull();
+      expect(warn.mock.calls.length).toBe(2);
+      await memoryTight(fine);
+      expect(info.mock.calls.at(-1)).toEqual(["memory", "memory reads again after 1 failed check"]);
+    } finally {
+      warn.mockRestore();
+      info.mockRestore();
+    }
+  });
+});
+
+describe("parseSysctl", () => {
+  test("reads the level, the share, and the fuller of the compressor's two limits", () => {
+    // pages 57% of their limit, segments 37% of theirs
+    const read = parseSysctl("2\n42\n3656587\n6446480\n295038\n805810\n");
+    expect(read?.level).toBe(2);
+    expect(read?.available).toBe(42);
+    expect(read?.compressor).toBeCloseTo(0.567, 3);
+    expect(parseSysctl("2\n42\n100\n1000\n900\n1000")?.compressor).toBe(0.9);
+  });
+
+  test("a kernel that names no compressor limits still gives the level and the share", () => {
+    expect(parseSysctl("1\n49\n")).toEqual({ level: 1, available: 49, compressor: null });
+    expect(parseSysctl("1\n49\n5\n0\n5\n0")?.compressor).toBeNull();
+  });
+
+  test("gives nothing without the level and the share", () => {
+    expect(parseSysctl("")).toBeNull();
+    expect(parseSysctl("2\n")).toBeNull();
+    expect(parseSysctl("sysctl: unknown oid\n42")).toBeNull();
   });
 });
 
@@ -40,6 +93,25 @@ describe("darwinSignal", () => {
     const signal = darwinSignal(2, 35, 200 * 2 ** 20);
     expect(signal.tight).toBe(true);
     expect(signal.why).toBe("memory pressure warn with 35% available, swapping out 200 MB/s");
+  });
+
+  test("a compressor near its limit is short while the level says warn and a third is available", () => {
+    expect(darwinSignal(2, 42, null, 0.57).tight).toBe(false);
+    const signal = darwinSignal(2, 35, 0, 0.9);
+    expect(signal.tight).toBe(true);
+    expect(signal.hard).toBe(false);
+    expect(signal.why).toBe("memory pressure warn with 35% available, swapping out 0 MB/s, compressor 90% full");
+  });
+
+  test("hard is critical, half the floor or less left, or paging at four times its floor", () => {
+    expect(darwinSignal(4, 40).hard).toBe(true);
+    expect(darwinSignal(2, 7).hard).toBe(true);
+    expect(darwinSignal(2, 35, 161 * 2 ** 20).hard).toBe(true);
+    expect(darwinSignal(2, 35, null, 0.95).hard).toBe(true);
+    // short, and one sleep per check answers it
+    expect(darwinSignal(2, 9).hard).toBe(false);
+    expect(darwinSignal(2, 35, 33 * 2 ** 20).hard).toBe(false);
+    expect(darwinSignal(2, 42).hard).toBe(false);
   });
 
   test("a trickle to swap is not short", () => {

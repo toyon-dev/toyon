@@ -257,7 +257,12 @@ const drafts = new DraftStore({
 });
 // the setup, check and commit runs as every row carries them: one book for the three services
 // that write it
-const runs = new RunService({ state, hub });
+const runs = new RunService({
+  state,
+  hub,
+  // the policy is made further down, once what it wakes exists; a run asks long after
+  memory: { short: () => idle.short(), eased: () => idle.eased() },
+});
 // typed, since the two services name each other
 const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefined => worktrees.shippingOf(id) });
 // what a worktree built to pass the check, kept for the next one; it publishes on the hub's

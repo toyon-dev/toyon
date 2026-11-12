@@ -9,12 +9,19 @@ import { run } from "../git/exec.ts";
 
 export interface MemorySignal {
   /** memory is short: available memory under the floor, the same on every platform, the macOS
-   * kernel at critical, or macOS paging to disk at a steady rate. What a worktree is put to sleep
-   * on. */
+   * kernel at critical, macOS paging to disk at a steady rate, or the macOS compressor near its
+   * limit. What a worktree is put to sleep on. */
   tight: boolean;
+  /** short past what one sleep per check answers: the macOS kernel at critical, half the floor
+   * or less left of memory or of the compressor, or paging at four times its floor. Several
+   * worktrees sleep per check on it. */
+  hard: boolean;
   /** the reading in words, for the log line a sleep leaves behind */
   why: string;
 }
+
+/** a platform's reading, or why it could not be taken this time */
+export type Reading = MemorySignal | { failed: string };
 
 /** macOS levels are 1 normal, 2 warn, 4 critical. Warn is raised as soon as the kernel compresses
  * and holds for hours on a laptop with a third of its memory free, so it is no signal on its own;
@@ -27,6 +34,7 @@ const AVAILABLE_FLOOR = 0.15;
  * warn and a third of memory reads as available, because the compressor and the SSD absorb the
  * paging and the kernel counts that as working. */
 const PAGING_FLOOR_BPS = 16 * 2 ** 20;
+const HARD_PAGING_BPS = 4 * PAGING_FLOOR_BPS;
 
 /** one reading of the cumulative swap-out counter */
 export interface PagingSample {
@@ -39,29 +47,69 @@ export interface PagingSample {
 /** the last readings, enough for two windows */
 let paging: PagingSample[] = [];
 
-let unsupportedLogged = false;
+const readers: Partial<Record<NodeJS.Platform, () => Promise<Reading>>> = { darwin, linux };
 
-/** Null when this platform gives no reading (logged once), which a caller reads as never tight. */
-export async function memoryTight(): Promise<MemorySignal | null> {
-  const signal = process.platform === "darwin" ? await darwin() : process.platform === "linux" ? await linux() : null;
-  if (signal === null && !unsupportedLogged) {
-    unsupportedLogged = true;
-    log.warn("memory", `no memory pressure reading on ${process.platform}; nothing sleeps for memory`);
+let unsupportedLogged = false;
+/** how many checks in a row could not read */
+let failures = 0;
+
+/** Null when there is no reading, which a caller reads as never tight: on a platform that gives
+ * none (logged once), and at a check whose read failed. A failed read is logged at the first of a
+ * run of them and again when one succeeds: a spawn that failed once is on the log as that, and a
+ * machine that can never read (a sandbox that refuses `sysctl`) does not write the line every
+ * check. */
+export async function memoryTight(read = readers[process.platform]): Promise<MemorySignal | null> {
+  if (!read) {
+    if (!unsupportedLogged) {
+      unsupportedLogged = true;
+      log.warn("memory", `no memory pressure reading on ${process.platform}; nothing sleeps for memory`);
+    }
+    return null;
   }
-  return signal;
+  const reading = await read();
+  if ("failed" in reading) {
+    if (failures++ === 0) {
+      log.warn("memory", `memory reading failed: ${reading.failed}; nothing sleeps for memory until it reads again`);
+    }
+    return null;
+  }
+  if (failures > 0) {
+    log.info("memory", `memory reads again after ${failures} failed ${failures === 1 ? "check" : "checks"}`);
+    failures = 0;
+  }
+  return reading;
 }
 
-async function darwin(): Promise<MemorySignal | null> {
-  const [r, v] = await Promise.all([
-    run("sysctl", ["-n", "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level"], "/"),
-    run("vm_stat", [], "/"),
-  ]);
-  if (!r.ok) return null;
-  const [level, available] = r.out.split(/\s+/).map(Number);
-  if (level === undefined || available === undefined || Number.isNaN(level) || Number.isNaN(available)) return null;
+/** The level and the share first, which every macOS has; the compressor's four after them, which
+ * an older kernel does not name. `sysctl` prints what it knows and exits non-zero for the rest,
+ * so the output is read for what is in it and the exit is not. */
+const SYSCTL_NAMES = [
+  "kern.memorystatus_vm_pressure_level",
+  "kern.memorystatus_level",
+  "vm.compressor.pages_compressed",
+  "vm.compressor.pages_compressed_limit",
+  "vm.compressor.segment.total",
+  "vm.compressor.segment.limit",
+];
+
+async function darwin(): Promise<Reading> {
+  const [r, v] = await Promise.all([run("sysctl", ["-n", ...SYSCTL_NAMES], "/"), run("vm_stat", [], "/")]);
+  const read = parseSysctl(r.out);
+  if (!read) return { failed: `sysctl: ${r.err || "nothing to read in what it printed"}` };
   const sample = v.ok ? parseVmStat(v.out, Date.now()) : null;
   if (sample) paging = [...paging, sample].slice(-3);
-  return darwinSignal(level, available, sustainedPaging(paging));
+  return darwinSignal(read.level, read.available, sustainedPaging(paging), read.compressor);
+}
+
+/** `sysctl -n` over SYSCTL_NAMES, a number a line: the level, the percent available, and how full
+ * the compressor is when its four numbers are there. Null without the first two. */
+export function parseSysctl(text: string): { level: number; available: number; compressor: number | null } | null {
+  const [level, available, pages, pageLimit, segments, segmentLimit] = text
+    .split("\n")
+    .map((line) => (/^\d+$/.test(line.trim()) ? Number(line) : undefined));
+  if (level === undefined || available === undefined) return null;
+  const known = pages !== undefined && segments !== undefined && !!pageLimit && !!segmentLimit;
+  return { level, available, compressor: known ? Math.max(pages / pageLimit, segments / segmentLimit) : null };
 }
 
 /** `vm_stat`: the page size from its header and the cumulative swap-outs, as one sample in bytes */
@@ -90,27 +138,47 @@ export function sustainedPaging(samples: PagingSample[]): number | null {
   return Math.min(...rates);
 }
 
-/** `kern.memorystatus_vm_pressure_level`, `kern.memorystatus_level` (percent available), and the
- * sustained swap-out rate in bytes per second when two windows have been read */
-export function darwinSignal(level: number, available: number, pagingBps: number | null = null): MemorySignal {
+/** `kern.memorystatus_vm_pressure_level`, `kern.memorystatus_level` (percent available), the
+ * sustained swap-out rate in bytes per second when two windows have been read, and how full the
+ * compressor is, 0 to 1, when the kernel says.
+ *
+ * The compressor is measured against its own limits, the pages it holds and its segments: the
+ * room a kill for compressor space is about, which can run out with a third of memory still
+ * reading as available. Swap in use says nothing here: macOS adds swap files as it fills them,
+ * so used over total sits near full on a machine that is fine. */
+export function darwinSignal(
+  level: number,
+  available: number,
+  pagingBps: number | null = null,
+  compressor: number | null = null,
+): MemorySignal {
   const pressure =
     level === 1 ? "normal" : level === 2 ? "warn" : level === MAC_PRESSURE_CRITICAL ? "critical" : `level ${level}`;
   const swapping = pagingBps === null ? "" : `, swapping out ${Math.round(pagingBps / 2 ** 20)} MB/s`;
+  const full = compressor === null ? "" : `, compressor ${Math.round(compressor * 100)}% full`;
+  const share = available / 100;
+  const room = compressor === null ? 1 : 1 - compressor;
   return {
     tight:
       level === MAC_PRESSURE_CRITICAL ||
-      available < AVAILABLE_FLOOR * 100 ||
+      share < AVAILABLE_FLOOR ||
+      room < AVAILABLE_FLOOR ||
       (pagingBps !== null && pagingBps >= PAGING_FLOOR_BPS),
-    why: `memory pressure ${pressure} with ${available}% available${swapping}`,
+    hard:
+      level === MAC_PRESSURE_CRITICAL ||
+      share <= AVAILABLE_FLOOR / 2 ||
+      room <= AVAILABLE_FLOOR / 2 ||
+      (pagingBps !== null && pagingBps >= HARD_PAGING_BPS),
+    why: `memory pressure ${pressure} with ${available}% available${swapping}${full}`,
   };
 }
 
-async function linux(): Promise<MemorySignal | null> {
+async function linux(): Promise<Reading> {
   let text: string;
   try {
     text = await Bun.file("/proc/meminfo").text();
-  } catch {
-    return null;
+  } catch (e) {
+    return { failed: `/proc/meminfo: ${e instanceof Error ? e.message : e}` };
   }
   const field = (name: string) => {
     const m = text.match(new RegExp(`^${name}:\\s+(\\d+)`, "m"));
@@ -118,9 +186,13 @@ async function linux(): Promise<MemorySignal | null> {
   };
   const total = field("MemTotal");
   const available = field("MemAvailable");
-  if (!total || available === null) return null;
-  const percent = Math.round((available / total) * 100);
-  return { tight: available / total < AVAILABLE_FLOOR, why: `${percent}% of memory available` };
+  if (!total || available === null) return { failed: "/proc/meminfo names no MemTotal or MemAvailable" };
+  const share = available / total;
+  return {
+    tight: share < AVAILABLE_FLOOR,
+    hard: share <= AVAILABLE_FLOOR / 2,
+    why: `${Math.round(share * 100)}% of memory available`,
+  };
 }
 
 /** Resident memory per process group, in KB, for the groups asked about: one `ps` for every

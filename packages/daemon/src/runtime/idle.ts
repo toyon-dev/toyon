@@ -50,6 +50,8 @@ export function sleepMsFrom(raw: string | undefined, inCloud: boolean): number |
 export const DEFAULT_SLEEP_MS = sleepMsFrom(process.env.TOYON_PROC_SLEEP_MS, cloud.enabled);
 
 const PRESSURE_EVERY_MS = 15_000;
+/** how many worktrees one check puts to sleep when one is behind what is being taken */
+const HARD_PICKS = 3;
 const COSTS_EVERY_MS = 60_000;
 /** how long a queued wake waits for the one before it to answer on its port, so two dev servers
  * never boot against each other on the core the person is waiting on */
@@ -73,6 +75,14 @@ export class IdlePolicy {
   private draining = false;
   /** who is waiting for the queue to empty */
   private drained: Array<() => void> = [];
+  private checking = false;
+  /** the reading a run about to start waits on: memory short at the last check, which still had
+   * a worktree to put to sleep for it */
+  private freeing: MemorySignal | null = null;
+  /** the runs waiting on it */
+  private eases: Array<() => void> = [];
+  /** what was put to sleep since memory last read as fine */
+  private putDown = new Set<string>();
   private readonly sleepMs: number | null;
   private readonly now: () => number;
 
@@ -237,18 +247,63 @@ export class IdlePolicy {
     return out;
   }
 
-  /** When memory is short, the idle worktree unused for longest sleeps, one per check: the next
-   * check sees the memory it freed before deciding whether another follows. */
+  /** When memory is short, the idle worktrees unused for longest sleep. One per check, since the
+   * next check sees the memory it freed before deciding whether another follows; three when the
+   * signal is hard or a run is waiting on the memory, where a preview a check is behind what is
+   * being taken or asked for. One check at a time: a read that outlasts the interval on a machine
+   * that is paging would pick the same rows twice. */
   async checkPressure(): Promise<void> {
-    const signal = await (this.d.memory ?? memoryTight)();
-    if (!signal?.tight) return;
-    const pick = this.d.state.worktrees
-      .filter((w) => this.candidate(w.id) && this.awakeProcs(w.id))
-      .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)[0];
-    if (!pick) return;
-    // the numbers go to the log; the person reads the one reason that is theirs to act on
-    log.info("idle", `${signal.why}; ${pick.id} is the least recently used`);
-    this.sleep(pick.id, "short of memory");
+    if (this.checking) return;
+    this.checking = true;
+    try {
+      const signal = await (this.d.memory ?? memoryTight)();
+      const picks = signal?.tight
+        ? this.d.state.worktrees
+            .filter((w) => this.candidate(w.id) && this.awakeProcs(w.id))
+            .sort((a, b) => this.entry(a.id).activeAt - this.entry(b.id).activeAt)
+            .slice(0, signal.hard || this.eases.length > 0 ? HARD_PICKS : 1)
+        : [];
+      if (!signal?.tight) this.putDown.clear();
+      // A run waits only while a sleep is still to come: once memory has eased, or nothing is
+      // left to put down for it, the wait frees nothing. A row that came back up and is picked
+      // again is not memory still to come, or a page that polls a sleeping preview would hold a
+      // commit for as long as it polled.
+      if (signal && picks.some((p) => !this.putDown.has(p.id))) this.freeing = signal;
+      else {
+        this.freeing = null;
+        this.letGo();
+      }
+      for (const pick of picks) {
+        // the numbers go to the log; the person reads the one reason that is theirs to act on
+        log.info("idle", `${signal?.why}; ${pick.id} is the least recently used`);
+        this.putDown.add(pick.id);
+        this.sleep(pick.id, "short of memory");
+      }
+    } catch (e) {
+      // no check, no answer: nothing waits on a reading that is not coming
+      this.freeing = null;
+      this.letGo();
+      throw e;
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  /** The reading in words while a run about to start should wait: memory is short and the check
+   * is still putting worktrees to sleep for it. Null once it has eased or nothing is left to
+   * sleep, and on a machine that gives no reading. */
+  short(): string | null {
+    return this.freeing?.why ?? null;
+  }
+
+  /** resolves at the check that lets a waiting run go, at once when nothing is being waited on */
+  eased(): Promise<void> {
+    if (!this.freeing) return Promise.resolve();
+    return new Promise((r) => this.eases.push(r));
+  }
+
+  private letGo(): void {
+    for (const go of this.eases.splice(0)) go();
   }
 
   /** what each awake worktree holds, for /health; never a reason to sleep one. The same minute

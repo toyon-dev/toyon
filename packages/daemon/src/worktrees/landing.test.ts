@@ -10,7 +10,7 @@ import { Hub } from "../core/hub.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
 import { treeFingerprint } from "../git/status.ts";
-import { RunService } from "../runs/service.ts";
+import { RunService, type RunServiceDeps } from "../runs/service.ts";
 import { LandingService } from "./landing.ts";
 
 // A real git worktree on a branch, a hub the test drives, and the check and the judge as stubs:
@@ -35,6 +35,8 @@ interface Opts {
   extra?: number;
   /** a check that runs until the test ends it by worktree id, so several can be in flight */
   slow?: boolean;
+  /** memory as the pressure check reports it to a run about to start */
+  memory?: RunServiceDeps["memory"];
 }
 
 /** a transcript of one finished turn: the ask, the reply, and how it ended */
@@ -105,7 +107,7 @@ function world(opts: Opts = {}) {
   /** the prompts the answer question was asked with */
   const recapped: string[] = [];
   hub.on("checkFailed", (_id, run) => fixed.push(run));
-  const runs = new RunService({ state, hub });
+  const runs = new RunService({ state, hub, ...(opts.memory ? { memory: opts.memory } : {}) });
   const service = new LandingService({
     state,
     hub,
@@ -680,6 +682,33 @@ describe("LandingService", () => {
     for (let i = 0; i < 50 && ids.some((id) => w?.wt(id)?.landing?.check === "pending"); i++) await Bun.sleep(10);
     expect(ids.map((id) => w?.wt(id)?.landing?.check)).toEqual(["pass", "pass", "pass"]);
     expect(ids.map(status)).toEqual([undefined, undefined, undefined]);
+  });
+
+  test("a check about to start while memory is short stands queued with the reason, and runs when the wait ends", async () => {
+    let short: string | null = "memory pressure warn with 35% available, swapping out 161 MB/s";
+    const waiting: Array<() => void> = [];
+    w = world({
+      check: "bun run check",
+      verdict: "none",
+      slow: true,
+      memory: {
+        short: () => short,
+        eased: () => (short ? new Promise<void>((r) => waiting.push(r)) : Promise.resolve()),
+      },
+    });
+    const run = () => w?.wt("w1")?.runs?.find((r) => r.kind === "check");
+    await w.lineUp(["w1"]);
+    await until(() => run()?.stage === "short of memory");
+    expect(run()?.status).toBe("queued");
+    expect(w.started).toEqual([]);
+    expect(w.wt("w1")?.landing?.check).toBe("pending");
+    short = null;
+    for (const go of waiting.splice(0)) go();
+    await until(() => w?.started.length === 1);
+    expect(run()).toMatchObject({ status: "running" });
+    expect(run()?.stage).toBeUndefined();
+    w.end("w1");
+    await until(() => w?.wt("w1")?.landing?.check === "pass");
   });
 
   test("a run that goes stale while it stands queued never spawns its check", async () => {

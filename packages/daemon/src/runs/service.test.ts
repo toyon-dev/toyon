@@ -6,12 +6,14 @@ import type { RunState, WorktreeInfo } from "@toyon/shared";
 import { Hub } from "../core/hub.ts";
 import { ensureDirs, makePaths } from "../core/paths.ts";
 import { StateStore } from "../core/state.ts";
-import { RunService } from "./service.ts";
+import { RunService, type RunServiceDeps } from "./service.ts";
 
 const home = mkdtempSync(join(tmpdir(), "toyon-runs-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean; ids?: string[] } = {}) {
+function world(
+  opts: { runs?: RunState[]; alive?: (pid: number) => boolean; ids?: string[]; memory?: RunServiceDeps["memory"] } = {},
+) {
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
   const wt: WorktreeInfo = {
@@ -36,9 +38,24 @@ function world(opts: { runs?: RunState[]; alive?: (pid: number) => boolean; ids?
     kill: async (pid) => {
       killed.push(pid);
     },
+    ...(opts.memory ? { memory: opts.memory } : {}),
   });
   const row = (id = "w1") => state.worktree(id)?.runs;
   return { runs, row, killed, state };
+}
+
+/** memory as the pressure check reports it to a run: short until the test eases it */
+function shortMemory() {
+  let short: string | null = "memory pressure warn with 35% available, swapping out 161 MB/s";
+  const waiting: Array<() => void> = [];
+  return {
+    short: () => short,
+    eased: () => (short ? new Promise<void>((r) => waiting.push(r)) : Promise.resolve()),
+    ease() {
+      short = null;
+      for (const go of waiting.splice(0)) go();
+    },
+  };
 }
 
 /** the check run's status on a row, or nothing when none stands there */
@@ -83,6 +100,57 @@ describe("RunService", () => {
     expect(await next.admitted).toBe(true);
     expect(checkStatus(w, "w1")).toBe("running");
     next.finish(0);
+  });
+
+  test("a run that waits for memory stands queued with the reason, and starts when the wait ends", async () => {
+    const memory = shortMemory();
+    const w = world({ memory });
+    const h = w.runs.begin("w1", "commit", { timeoutMs: 1000, memory: true });
+    expect(w.row()?.[0]).toMatchObject({ kind: "commit", status: "queued", stage: "short of memory" });
+    const asked = w.row()?.[0]?.since ?? 0;
+    let admitted: boolean | undefined;
+    const settled = h.admitted.then((ok) => {
+      admitted = ok;
+    });
+    await Bun.sleep(5);
+    expect(admitted).toBeUndefined();
+    memory.ease();
+    await settled;
+    expect(admitted).toBe(true);
+    expect(w.row()?.[0]?.status).toBe("running");
+    expect(w.row()?.[0]?.stage).toBeUndefined();
+    expect(w.row()?.[0]?.since).toBeGreaterThan(asked);
+    // with nothing short the next one runs from the start
+    h.finish(0);
+    const next = w.runs.begin("w1", "commit", { timeoutMs: 1000, memory: true });
+    expect(w.row()?.[0]?.status).toBe("running");
+    expect(await next.admitted).toBe(true);
+  });
+
+  test("only a run that asks waits for memory", async () => {
+    const w = world({ memory: shortMemory() });
+    const h = w.runs.begin("w1", "setup", { timeoutMs: 1000, stage: "bun install" });
+    expect(w.row()?.[0]).toMatchObject({ status: "running", stage: "bun install" });
+    expect(await h.admitted).toBe(true);
+  });
+
+  test("under a slot the wait for memory is inside it, and a run dropped while it waits never starts", async () => {
+    const memory = shortMemory();
+    const ids = ["w1", "w2"];
+    const w = world({ ids, memory });
+    const slot = { key: "/repo-memory", max: 1 };
+    const h = ids.map((id) => w.runs.begin(id, "check", { timeoutMs: 1000, slot, memory: true }));
+    await Bun.sleep(1);
+    // the first holds the slot while it waits; the second is behind it, with no reason of its own yet
+    expect(w.row("w1")?.[0]).toMatchObject({ status: "queued", stage: "short of memory" });
+    expect(w.row("w2")?.[0]?.status).toBe("queued");
+    expect(w.row("w2")?.[0]?.stage).toBeUndefined();
+    w.runs.drop("w1", "check");
+    memory.ease();
+    expect(await h[0]?.admitted).toBe(false);
+    expect(await h[1]?.admitted).toBe(true);
+    expect(ids.map((id) => checkStatus(w, id))).toEqual([undefined, "running"]);
+    h[1]?.finish(0);
   });
 
   test("a queued run counts its time from when it starts", async () => {

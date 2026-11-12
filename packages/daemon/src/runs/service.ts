@@ -14,6 +14,9 @@ import { reclaimGroup } from "../runtime/kill.ts";
 /** how often a run the last daemon left is asked whether it is still there */
 const DETACHED_POLL_MS = 5_000;
 
+/** the stage of a run that waits for memory, where the row says why it has not started */
+export const SHORT_OF_MEMORY = "short of memory";
+
 /** a cap on how many runs hold a key at once: a run asked for under one is `queued` until a slot
  * frees, and holds it until it is over */
 export interface Slot {
@@ -53,6 +56,10 @@ export interface RunServiceDeps {
   alive?: (pid: number) => boolean;
   /** kill a group the last daemon left */
   kill?: (pgid: number) => Promise<void>;
+  /** Memory as the pressure check last read it. `short` is the reading in words while the check
+   * is still putting worktrees to sleep for it, and `eased` resolves at the check that reads it
+   * as eased or finds nothing left to sleep. Without it no run waits for memory. */
+  memory?: { short(): string | null; eased(): Promise<void> };
 }
 
 export class RunService {
@@ -67,16 +74,23 @@ export class RunService {
    * `drop` first when it is still going. Under a `slot` it stands queued until one frees, and the
    * caller spawns only once `admitted` says so: a check is the repo's whole typecheck and test
    * run, and several worktrees settling together would run one each, each slower than
-   * the last, so at most `max` of a key run at once and the row says the rest are waiting. */
+   * the last, so at most `max` of a key run at once and the row says the rest are waiting.
+   *
+   * With `memory`, a run that is a suite (the check, a commit with its hooks) stands queued while
+   * memory is short and the pressure check is still freeing some: a test runner's workers are
+   * gigabytes inside seconds, on a machine a sleeping preview gives back megabytes to. It goes at
+   * the check that ends the wait, short or not, since past it nothing more is coming back. Under
+   * a slot the wait is inside it, so the run holds its place in line. */
   begin(
     worktreeId: string,
     kind: RunKind,
-    opts: { timeoutMs: number; stage?: string; queued?: boolean; slot?: Slot },
+    opts: { timeoutMs: number; stage?: string; queued?: boolean; slot?: Slot; memory?: boolean },
   ): RunHandle {
     const key = keyOf(worktreeId, kind);
+    const memory = opts.memory ? this.d.memory : undefined;
     const run: RunState = {
       kind,
-      status: opts.queued || opts.slot ? "queued" : "running",
+      status: opts.queued || opts.slot || memory?.short() ? "queued" : "running",
       since: Date.now(),
       timeoutMs: opts.timeoutMs,
       ...(opts.stage ? { stage: opts.stage } : {}),
@@ -93,6 +107,27 @@ export class RunService {
       run.since = Date.now();
       this.write(worktreeId, run);
     };
+    const stage = (text: string | undefined) => {
+      if (!mine() || run.stage === text) return;
+      if (text) run.stage = text;
+      else delete run.stage;
+      this.write(worktreeId, run);
+    };
+    /** the wait for memory, when there is one to wait out; false for a run dropped or replaced
+     * by the end of it */
+    const roomy = async (): Promise<boolean> => {
+      const why = memory?.short();
+      if (!memory || !why) return mine();
+      const was = run.stage;
+      const since = Date.now();
+      log.info(worktreeId, `${kind} waits for memory: ${why}`);
+      stage(SHORT_OF_MEMORY);
+      await memory.eased();
+      if (!mine()) return false;
+      log.info(worktreeId, `${kind} starts after ${describeDuration(Date.now() - since)} waiting for memory`);
+      stage(was);
+      return true;
+    };
     let admitted = Promise.resolve(true);
     if (opts.slot) {
       let admit: (ok: boolean) => void = () => {};
@@ -104,9 +139,9 @@ export class RunService {
       });
       fireAndForget(
         worktreeId,
-        withSlot(opts.slot.key, opts.slot.max, () => {
+        withSlot(opts.slot.key, opts.slot.max, async () => {
           // dropped or replaced while it waited: the slot goes straight on to the next in line
-          if (!mine()) {
+          if (!mine() || !(await roomy())) {
             admit(false);
             return;
           }
@@ -116,6 +151,11 @@ export class RunService {
         }),
         `${kind} slot`,
       );
+    } else if (run.status === "queued" && !opts.queued) {
+      admitted = roomy().then((ok) => {
+        if (ok) start();
+        return ok;
+      });
     }
     return {
       admitted,
@@ -126,12 +166,7 @@ export class RunService {
         run.pid = pgid;
         this.write(worktreeId, run);
       },
-      stage: (text) => {
-        if (!mine() || run.stage === text) return;
-        if (text) run.stage = text;
-        else delete run.stage;
-        this.write(worktreeId, run);
-      },
+      stage,
       finish: (exit) => {
         if (!mine()) return;
         if (typeof exit !== "string") return this.remove(worktreeId, kind);

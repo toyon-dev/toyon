@@ -379,10 +379,11 @@ export class LandingService {
       const run = this.d.runs.begin(worktreeId, "check", {
         timeoutMs: ceiling,
         slot: { key: repo.path, max: CHECK_SLOTS },
+        memory: true,
       });
-      // queued behind the repo's other checks until a slot frees; one dropped meanwhile (a new
-      // turn, a newer run) never spawns, and one admitted for a run that has since gone stale
-      // gives its slot straight back
+      // queued behind the repo's other checks until a slot frees, and then while memory is
+      // short; one dropped meanwhile (a new turn, a newer run) never spawns, and one admitted for
+      // a run that has since gone stale gives its slot straight back
       if (!(await run.admitted)) return undefined;
       if (!live()) {
         run.finish(null);
@@ -462,10 +463,11 @@ export class LandingService {
     // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
     if (verdict) this.recapTurn(worktreeId, verdict);
     // how long the word took to appear: the check and the side question are the two costs here,
-    // and a wait for a slot behind the repo's other checks is named so a slow verdict has a reason
+    // and a wait to start, behind the repo's other checks or for memory, is named so a slow
+    // verdict has a reason
     log.info(
       worktreeId,
-      `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms${waited > 100 ? ` (waited ${waited}ms for a check slot)` : ""}`,
+      `landing: check ${check}${landing.why ? ", doubted" : ""}${opts.ask ? "" : ", check only"}, ${Date.now() - started}ms${waited > 100 ? ` (waited ${waited}ms to start)` : ""}`,
     );
     this.d.worktrees.setLanding(worktreeId, landing);
     // After the verdict is on the row, since the turn this starts is what takes the verdict down.

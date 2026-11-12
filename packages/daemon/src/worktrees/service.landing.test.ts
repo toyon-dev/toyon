@@ -10,6 +10,8 @@ import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
 import { CARRIED } from "../git/land.ts";
 import { treeFingerprint } from "../git/status.ts";
+import { RunService } from "../runs/service.ts";
+import { WorktreeService } from "./service.ts";
 
 // Landing on the merge route: the commit, the sync, the verdict on the tree it saw, and the hooks in the way.
 
@@ -20,6 +22,44 @@ describe("landing", () => {
   const subjects = async () => (await git(w.repo, "log", "--format=%s", "-n", "6")).out.split("\n");
   /** how many parents main's tip has: two for a merge commit, one otherwise */
   const parents = async () => (await git(w.repo, "log", "-1", "--format=%P")).out.split(" ").filter(Boolean).length;
+
+  test("a commit pressed while memory is short stands queued with the reason, and git runs when the wait ends", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    let short: string | null = "memory pressure warn with 35% available, swapping out 161 MB/s";
+    const waiting: Array<() => void> = [];
+    // a second service over the same state, whose run book is told memory is short
+    const held = new WorktreeService({
+      state: w.state,
+      hub: w.hub,
+      runtime: w.runtime,
+      paths: w.paths,
+      agents: w.registry,
+      namer: async () => null,
+      fix: w.fix,
+      runs: new RunService({
+        state: w.state,
+        hub: w.hub,
+        memory: {
+          short: () => short,
+          eased: () => (short ? new Promise<void>((r) => waiting.push(r)) : Promise.resolve()),
+        },
+      }),
+    });
+    const run = () => w.state.worktree(wt.id)?.runs?.find((r) => r.kind === "commit");
+    const head = async () => (await git(wt.path, "log", "-1", "--format=%s")).out;
+    const before = await head();
+    const pressed = held.commit(wt.id, "add feature");
+    await until(() => run()?.stage === "short of memory");
+    expect(run()?.status).toBe("queued");
+    expect(await head()).toBe(before);
+    short = null;
+    for (const go of waiting.splice(0)) go();
+    expect((await pressed).ok).toBe(true);
+    expect(await head()).toBe("add feature");
+    expect(run()).toBeUndefined();
+  });
 
   test("a committed branch lands under a merge commit, marks landed, and restarts from main; an edit keeps the mark, a commit ends it", async () => {
     const repoId = await registered();

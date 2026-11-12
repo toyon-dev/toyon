@@ -407,8 +407,20 @@ type Named = { id: string; branch: string; title: string };
 /** one entry of a worktree's `awaits`, with the pieces always on it when written here */
 type Awaits = { id: string; pieces: string[] };
 
-/** a landing a wake tells of: the branch and, when it is not this project's, its project */
-type Woke = { title: string; branch: string; url?: string; project?: string; pieces: string[] };
+/** a landing a wake tells of: the branch and, when it is not this project's, its project.
+ * `pieces` are the worktree's own that waited for it; `handed` is a piece it handed off and set
+ * nothing to wait for, whose landing its agent is started on all the same. */
+type Woke = { title: string; branch: string; url?: string; project?: string; pieces: string[]; handed?: true };
+
+/** the landed worktree as a wake in `to` names it */
+function wokeBy(landed: WorktreeInfo, repo: RepoInfo, to: WorktreeInfo): Omit<Woke, "pieces" | "handed"> {
+  return {
+    title: landed.title,
+    branch: landed.branch,
+    ...(landed.pr?.url ? { url: landed.pr.url } : {}),
+    ...(to.repoId === landed.repoId ? {} : { project: repo.name }),
+  };
+}
 
 /** what a piece became in one pass of go, for the pieces of the list that wait on it */
 type Became = { fate: PieceFate; worktree?: Named; queued?: true };
@@ -441,9 +453,10 @@ export class HandoffService implements ToolProvider {
     return this.d.state.worktrees.filter((w) => w.repoId === repoId && w.kind === "worktree" && w.id !== wt.id);
   }
 
-  /** Whether a piece can be sent to a row: its work is not done. A landed row is done until it
-   * goes on, and the landed mark cannot say when it has: it reads commits alone, so a row with
-   * files in its tree or a turn running still carries it. The files are the rail's last read. */
+  /** Whether a piece can be sent to a row, or its agent started on a landing: its work is not
+   * done. A landed row is done until it goes on, and the landed mark cannot say when it has: it
+   * reads commits alone, so a row with files in its tree or a turn running still carries it. The
+   * files are the rail's last read. */
   private takesSend(w: WorktreeInfo): boolean {
     if (!w.landed) return true;
     return (this.d.counts(w.id)?.dirty ?? 0) > 0 || isBusy(this.d.runtime.agentFor(w.id)?.status);
@@ -1303,19 +1316,42 @@ export class HandoffService implements ToolProvider {
       }
     }
     for (const id of this.tellWaiters(landedId, madeNow, mark)) told.add(id);
-    this.tellAwaiting(landedId, told, mark);
+    const awaited = this.tellAwaiting(landedId, told, mark);
+    if (origin && !awaited.has(origin)) this.wakeOrigin(origin, landedId);
+  }
+
+  /** The origin of a piece is started when the piece first lands, though nothing of its own was
+   * set to wait: handing the work off was the ask, and the landing is the answer, which its agent
+   * takes up or says it has no use for. Without this the answer sits until the person next writes
+   * there. Only the first landing: what that worktree lands later is its own follow-up, which
+   * rides the next prompt as a note. Not an origin whose own piece still waits for another
+   * branch: that landing starts it, on a prompt that carries this one's note. Never an origin
+   * whose own work is done. */
+  private wakeOrigin(originId: string, landedId: string): void {
+    const origin = this.d.state.worktree(originId);
+    const landed = this.d.state.worktree(landedId);
+    const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
+    if (origin?.kind !== "worktree" || !landed || !repo) return;
+    if ((landed.lands?.length ?? 0) > 1 || origin.awaits?.length || !this.takesSend(origin)) return;
+    this.wake(origin, this.d.runtime.ensureAgent(origin).agent, {
+      ...wokeBy(landed, repo, origin),
+      pieces: [],
+      handed: true,
+    });
   }
 
   /** every worktree whose own work waited for the landed branch (recordAwaits) hears of it, once:
    * not again when the landing already told it as its origin or as a waiter. The record lets the
    * wait go either way, so the line under its box does too. Then its agent is started on the
-   * piece, unless the worktree itself has landed. */
-  private tellAwaiting(landedId: string, told: ReadonlySet<string>, mark?: LandMark): void {
+   * piece, unless the worktree's own work is done. The worktrees that waited are named. */
+  private tellAwaiting(landedId: string, told: ReadonlySet<string>, mark?: LandMark): Set<string> {
     const landed = this.d.state.worktree(landedId);
     const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
+    const awaited = new Set<string>();
     let changed = false;
     for (const w of this.d.state.worktrees) {
       if (!w.awaits?.some((a) => a.id === landedId)) continue;
+      awaited.add(w.id);
       const pieces = w.awaits.filter((a) => a.id === landedId).flatMap((a) => a.pieces ?? []);
       w.awaits = w.awaits.filter((a) => a.id !== landedId);
       if (w.awaits.length === 0) delete w.awaits;
@@ -1323,28 +1359,22 @@ export class HandoffService implements ToolProvider {
       if (!landed || !repo || w.kind !== "worktree") continue;
       const agent = this.d.runtime.ensureAgent(w).agent;
       if (!told.has(w.id)) agent.note(pieceLanded(landed, repo, w, mark, { awaited: true }));
-      if (!w.landed) {
-        this.wake(w, agent, {
-          title: landed.title,
-          branch: landed.branch,
-          ...(landed.pr?.url ? { url: landed.pr.url } : {}),
-          ...(w.repoId === landed.repoId ? {} : { project: repo.name }),
-          pieces,
-        });
-      }
+      if (this.takesSend(w)) this.wake(w, agent, { ...wokeBy(landed, repo, w), pieces });
     }
     if (changed) {
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
     }
+    return awaited;
   }
 
-  /** The agent whose own piece waited for the landed branch is started on it, between turns: the
-   * landing's note rides the next prompt, but an agent with nothing else to do sends none, and
-   * what is queued behind this branch waits on that piece. Landings during one turn make one
-   * wake naming them all, since the first wake's own message would make a second read as told.
-   * Nothing is sent when a message went out meanwhile, the person's or Toyon's, which carried the
-   * note already, or when the worktree has landed or gone while the turn ran. */
+  /** The agent whose own piece waited for the landed branch, or who handed the landed work off,
+   * is started on it, between turns: the landing's note rides the next prompt, but an agent with
+   * nothing else to do sends none, and what is queued behind this branch waits on that piece.
+   * Landings during one turn make one wake naming them all, since the first wake's own message
+   * would make a second read as told. Nothing is sent when a message went out meanwhile, the
+   * person's or Toyon's, which carried the note already, or when the worktree's work was done or
+   * the worktree gone by the time the turn ended. */
   private wake(w: WorktreeInfo, agent: AgentAdapter, woke: Woke): void {
     const pending = this.wakes.get(w.id);
     if (pending) return void pending.push(woke);
@@ -1356,7 +1386,7 @@ export class HandoffService implements ToolProvider {
         const landed = this.wakes.get(w.id) ?? [];
         this.wakes.delete(w.id);
         const live = this.d.state.worktree(w.id);
-        if (live?.kind !== "worktree" || live.landed) return;
+        if (live?.kind !== "worktree" || !this.takesSend(live)) return;
         if (
           agent
             .transcript()
@@ -1366,13 +1396,10 @@ export class HandoffService implements ToolProvider {
           return;
         const titles = landed.map((l) => `"${l.title}"`).join(", ");
         const pieces = new Set(landed.flatMap((l) => l.pieces));
-        agent.send(pieceWakePrompt(landed), {
-          asked: {
-            kind: "handoff",
-            why: `${titles} landed, so the agent starts the ${pieces.size === 1 ? "piece" : "pieces"} that waited`,
-          },
-          keepCards: true,
-        });
+        const why = landed.every((l) => l.handed)
+          ? `${titles} landed, so the agent takes up what it handed off`
+          : `${titles} landed, so the agent starts the ${pieces.size === 1 ? "piece" : "pieces"} that waited`;
+        agent.send(pieceWakePrompt(landed), { asked: { kind: "handoff", why }, keepCards: true });
       }),
       "piece woken",
     );

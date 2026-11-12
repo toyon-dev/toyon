@@ -170,6 +170,20 @@ describe("prompts for work in another project", () => {
     expect(pieceWakePrompt([{ title: "First", branch: "acp/first", project: "acp", pieces: ["Mine"] }])).toBe(
       'The branch your own piece "Mine" waited for, "First" (acp/first), has landed on main in the project acp. Do "Mine" here now, and only that. What "First" landed is readable on main now.',
     );
+    // work handed off with nothing set to wait: the agent brings in line what depends on it and reports
+    expect(pieceWakePrompt([{ title: "Docs", branch: "toyon/docs", project: "toyon", pieces: [], handed: true }])).toBe(
+      'The work this worktree handed off, "Docs" (toyon/docs), has landed on main in the project toyon. Nothing here was set to wait for it. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it. What "Docs" landed is readable on main now.',
+    );
+    // beside a landing that was waited for, the piece that waited is the work
+    const mixed = pieceWakePrompt([
+      { title: "Docs", branch: "toyon/docs", pieces: [], handed: true },
+      { title: "First", branch: "toyon/first", pieces: ["Mine"] },
+    ]);
+    expect(mixed).toStartWith(
+      'The work this worktree handed off, "Docs" (toyon/docs), has landed on this project\'s main.',
+    );
+    expect(mixed).toContain('Do "Mine" here now, and only that.');
+    expect(mixed).not.toContain("Nothing here was set to wait");
     // a wait recorded without its pieces still says what to do
     expect(pieceWakePrompt([{ title: "First", branch: "toyon/first", pieces: [] }])).toContain(
       'your own piece waited for, "First" (toyon/first), has landed on this project\'s main. Do the piece that waited here now, and only that.',

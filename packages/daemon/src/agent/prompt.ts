@@ -405,25 +405,39 @@ export function pieceLandedContext(
  * between turns: each landing is also an ambient sentence on this prompt (pieceLandedContext),
  * so this names the pieces and says to build them. A landing in another project says so, and
  * then nothing of it is on this project's main. `pieces` may be empty for a wait recorded
- * without them. */
+ * without them. `handed` is work this worktree handed off and set nothing to wait for: when no
+ * landing here was waited for, the agent is asked to bring in line what depends on it, if
+ * anything does, and to say what it did, which is the piece reporting back. */
 export function pieceWakePrompt(
-  landed: ReadonlyArray<{ title: string; branch: string; url?: string; project?: string; pieces: readonly string[] }>,
+  landed: ReadonlyArray<{
+    title: string;
+    branch: string;
+    url?: string;
+    project?: string;
+    pieces: readonly string[];
+    handed?: boolean;
+  }>,
 ): string {
   const quoted = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(", ");
   const sentences = landed.map((l) => {
     const where = l.url ? ` (${l.url})` : "";
     const main = l.project ? `main in the project ${l.project}` : "this project's main";
+    if (l.handed)
+      return `The work this worktree handed off, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
     const own =
       l.pieces.length === 0
         ? "your own piece"
         : `your own ${l.pieces.length === 1 ? "piece" : "pieces"} ${quoted(l.pieces)}`;
     return `The branch ${own} waited for, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
   });
-  const pieces = [...new Set(landed.flatMap((l) => l.pieces))];
+  const waited = landed.filter((l) => !l.handed);
+  const pieces = [...new Set(waited.flatMap((l) => l.pieces))];
   const build =
-    pieces.length === 0
-      ? "Do the piece that waited here now, and only that."
-      : `Do ${quoted(pieces)} here now, and only ${pieces.length === 1 ? "that" : "those"}.`;
+    waited.length === 0
+      ? `Nothing here was set to wait for ${landed.length === 1 ? "it" : "them"}. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it.`
+      : pieces.length === 0
+        ? "Do the piece that waited here now, and only that."
+        : `Do ${quoted(pieces)} here now, and only ${pieces.length === 1 ? "that" : "those"}.`;
   const titles = quoted(landed.map((l) => l.title));
   const here = landed.some((l) => !l.project);
   const commits = `What ${titles} landed is readable on main now${here ? ", and Toyon rebases onto main when this lands" : ""}.`;

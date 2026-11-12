@@ -1187,6 +1187,7 @@ describe("another project", () => {
     expect(first.handed).toMatchObject({ via: "plan", note: "and add a test", origin: { id: a.id, project: "repo" } });
     // the made worktree landing tells the origin, as a landing in another project
     await until(() => b.branch === "toyon/fix-form");
+    const before = agentOf(a.id).sent.length;
     await land(b.id, "form.txt");
     await until(() => recorded(a.id, "piece-landed").length === 1);
     expect(recorded(a.id, "piece-landed")[0]).toMatchObject({
@@ -1195,6 +1196,45 @@ describe("another project", () => {
       subjects: ["add form.txt"],
     });
     expect(recorded(a.id, "piece-landed")[0]).not.toHaveProperty("same");
+    // nothing in the origin was set to wait, and its agent is started all the same: handing the
+    // work off was the ask, and the landing is the piece reporting back
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const woke = agentOf(a.id).sent.at(-1)!;
+    expect(woke.text).toContain(
+      'The work this worktree handed off, "Fix form" (toyon/fix-form), has landed on main in the project claude-agent-acp.',
+    );
+    expect(woke.text).toContain("Then say in a line or two what landed and what you did with it.");
+    expect(woke.asked).toEqual({ kind: "handoff", why: '"Fix form" landed, so the agent takes up what it handed off' });
+    expect(woke.keepCards).toBe(true);
+    // what it lands after that is its own follow-up: a note for the next prompt, and no start
+    await land(b.id, "more.txt");
+    await until(() => recorded(a.id, "piece-landed").length === 2);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before + 1);
+  });
+
+  test("a piece landing starts no origin whose own work is done, until it is at work again", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await call(a.id, piece({ title: "Theirs" }), piece({ title: "Theirs too" }));
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    const [theirs, too] = [madeTitled("Theirs")!, madeTitled("Theirs too")!];
+    await until(() => a.branch === "toyon/rail");
+    await land(a.id, "rail.txt");
+    await w.worktrees.tree.refresh(a.id);
+    expect(w.state.worktree(a.id)).toMatchObject({ landed: true });
+    // at rest: the row is told, and nothing starts in a worktree whose work is on main
+    const before = agentOf(a.id).sent.length;
+    w.hub.emit("landed", theirs.id);
+    await until(() => recorded(a.id, "piece-landed").length === 1);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    // files in its tree are new work, as they are for a send: the next piece to land starts it
+    writeFileSync(join(a.path, "more.txt"), "x\n");
+    await w.worktrees.tree.refresh(a.id);
+    w.hub.emit("landed", too.id);
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    expect(agentOf(a.id).sent.at(-1)!.text).toContain('The work this worktree handed off, "Theirs too"');
   });
 
   test("the own project, an unknown one and a `here` piece with a project are refused in words", async () => {

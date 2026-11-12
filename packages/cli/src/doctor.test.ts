@@ -123,6 +123,26 @@ describe("agentLines", () => {
       },
     ]);
   });
+  test("an upgrade the machine's rule held names both versions and the press, while the older adapter runs", () => {
+    expect(
+      agentLines([
+        {
+          id: "claude",
+          installed: "0.75.1",
+          pinned: "0.84.0",
+          error: "install failed: blocked by minimum-release-age",
+          held: true,
+        },
+      ]),
+    ).toEqual([
+      {
+        ok: false,
+        label: "agents",
+        detail:
+          "claude runs 0.75.1, not the pinned 0.84.0: install failed: blocked by minimum-release-age. The agent's install anyway button in Settings runs it past the rule",
+      },
+    ]);
+  });
   test("an adapter off the pin with no failure recorded is still installing, which is not a fault", () => {
     expect(agentLines([{ id: "claude", installed: null, pinned: "0.84.0" }])).toEqual([
       { ok: true, label: "agents", detail: "claude 0.84.0 is not installed; it may still be installing" },

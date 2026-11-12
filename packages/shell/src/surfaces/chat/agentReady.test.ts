@@ -13,6 +13,23 @@ const agent = (id: string, over: Partial<AgentInfo> = {}): AgentInfo => ({
 describe("agentReadiness", () => {
   test("says nothing for an agent that can run, or none at all", () => {
     expect(agentReadiness(agent("claude"), [agent("claude")], true)).toBeNull();
+    // an upgrade that failed is fetched again by the daemon, and the older adapter takes the message
+    const behind = agent("claude", {
+      install: { failed: "unreachable", behind: { runs: "0.99.1", pinned: "0.106.0" } },
+    });
+    expect(agentReadiness(behind, [behind], true)).toBeNull();
+  });
+
+  test("an upgrade the machine's rule holds says so with the press past it, blocks nothing, and yields to a missing login", () => {
+    const install = { failed: "held", held: true, behind: { runs: "0.99.1", pinned: "0.106.0" } } as const;
+    const held = agent("claude", { install });
+    expect(agentReadiness(held, [held, agent("codex")], true)).toEqual({
+      kind: "unready",
+      text: "Claude Code 0.106.0 is held back on this machine",
+      retry: "install anyway",
+    });
+    const out = agent("claude", { install, checkFailed: "Claude is not logged in" });
+    expect(agentReadiness(out, [out], true)).toMatchObject({ text: "Claude is not logged in", retry: null });
     expect(agentReadiness(undefined, [], true)).toBeNull();
   });
 

@@ -177,12 +177,52 @@ describe("agent registry", () => {
       fakeInstaller(new Set(["@toyon-dev/claude-agent-acp"])).installer,
     );
     await reg.installMissing();
-    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    // the agent still runs, and the fetch it is owed is offered beside it with both versions
+    expect(reg.infos()[0]).toMatchObject({
+      id: "claude",
+      available: true,
+      install: { failed: "registry unreachable", behind: { runs: "0.75.1", pinned: "0.106.0-toyon.1" } },
+    });
+    expect(reg.infos()[0]).not.toHaveProperty("reason");
     // OpenCode is fetched on demand and nobody asked, so it is not listed
     expect(reg.adapters()).toEqual([
       { id: "claude", installed: "0.75.1", pinned: "0.106.0-toyon.1", error: "install failed: registry unreachable" },
       { id: "codex", installed: "2.5.0", pinned: "2.5.0" },
     ]);
+  });
+
+  test("an upgrade the machine's release age holds offers install anyway beside the older adapter, and the press lands it", async () => {
+    const dir = tmp();
+    const { installer } = fakeInstaller();
+    const old = BUILTIN_AGENTS.map((a) => (a.id === "claude" ? { ...a, run: { ...a.run, version: "0.75.1" } } : a));
+    await new AgentRegistry(old as AgentSpec[], dir, installer).installMissing();
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const held: Installer = async (d, pkg, version, opts) => {
+      if (pkg !== "@toyon-dev/claude-agent-acp") return installer(d, pkg, version, opts);
+      if (!opts?.pastAge) return { ok: false, err: AGE_BLOCKED };
+      await gate;
+      return installer(d, pkg, version, opts);
+    };
+    const reg = new AgentRegistry(BUILTIN_AGENTS, dir, held);
+    await reg.installMissing();
+    expect(reg.infos()[0]).toMatchObject({
+      id: "claude",
+      available: true,
+      install: { failed: AGE_HELD, held: true, behind: { runs: "0.75.1", pinned: "0.106.0-toyon.1" } },
+    });
+    expect(reg.require("claude").id).toBe("claude");
+    // the press is under way: the older adapter still answers, and the offer is not made twice
+    const pressed = reg.install("claude", { anyway: true });
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true, installing: true });
+    expect(reg.infos()[0]).not.toHaveProperty("install");
+    release();
+    await pressed;
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+    expect(reg.infos()[0]).not.toHaveProperty("install");
+    expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.106.0-toyon.1", pinned: "0.106.0-toyon.1" });
   });
 
   test("unknown ids and uninstalled custom commands are UserErrors with a reason", () => {

@@ -1,6 +1,6 @@
 import type { AgentConfigFile, McpServerInfo } from "@toyon/shared";
 import { useEffect } from "react";
-import { agentItems } from "../../state/actions/agent.ts";
+import { adapterRow, agentItems, installMsg } from "../../state/actions/agent.ts";
 import { useDispatch, useSock, useStore } from "../../state/context.tsx";
 import { useActiveWorktreeRepo } from "../../state/selectors.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
@@ -29,7 +29,9 @@ export function AgentPage({ agentId }: { agentId: string }) {
   useAgentCheck(sock, agentId, agent ?? undefined);
   if (!agent) return null;
 
-  const actions = agentItems(agent, { sock, dispatch });
+  // the adapter has a row of its own below, which is where its fetch is pressed
+  const actions = agentItems(agent, { sock, dispatch }).filter((i) => i.id !== "install");
+  const adapter = adapterRow(agent);
   const back = () => dispatch({ a: "close", back: true });
   const short = (path: string) => (home && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
   const reveal = (f: AgentConfigFile) =>
@@ -58,6 +60,18 @@ export function AgentPage({ agentId }: { agentId: string }) {
             {authLabel(agent)}
           </Button>
         </div>
+        {adapter && (
+          <div className="keys-setting">
+            <span className="keys-d">{adapter.text}</span>
+            {adapter.busy ? (
+              <span className="keys-d live-text">installing</span>
+            ) : (
+              <Button variant="field" mono data-tip={adapter.why} onClick={() => sock?.send(installMsg(agent))}>
+                {adapter.verb}
+              </Button>
+            )}
+          </div>
+        )}
         {/* said once here rather than under every turn's box: an agent with no quick model gives
             no verdict, no recap and no commit message. Toyon picks the quick model off the list the
             agent offers; nothing here or in a file names one for a builtin */}

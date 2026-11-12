@@ -404,7 +404,7 @@ export class AgentRegistry {
   }
 
   /** One look at the disk answers both of what the shell reads: why the agent cannot run, and
-   * whether a fetch is the way out. A sandbox that cannot start is the reason whether or not the
+   * whether a fetch is owed. A sandbox that cannot start is the reason whether or not the
    * adapter is on disk, since it would still stand after the download, and then no fetch is
    * offered. */
   private status(spec: AgentSpec): { reason: string | null; install?: AgentInfo["install"] } {
@@ -415,7 +415,16 @@ export class AgentRegistry {
       return { reason: found ? boxed : `${cmd} not found on PATH` };
     }
     if (!this.packageName(spec)) return { reason: `no build for ${this.host.platform} ${this.host.arch}` };
-    if (this.installed(spec)) return { reason: boxed };
+    if (this.installed(spec)) {
+      // an upgrade that did not land: the older adapter answers, so nothing else would say that the
+      // pinned one is still owed, and a fetch a rule of the machine's held waits on a press that
+      // has to be offered somewhere. Not beside a sandbox that cannot start, as below.
+      const owed = boxed || this.installing.has(spec.id) ? undefined : this.installErrors.get(spec.id);
+      const runs = owed ? this.installedVersion(spec) : null;
+      if (!owed || !runs || runs === spec.run.version) return { reason: boxed };
+      const behind = { runs, pinned: spec.run.version };
+      return { reason: null, install: { failed: owed.why, ...(owed.held ? { held: true } : {}), behind } };
+    }
     // the download is the state every surface names while it runs; the sandbox takes over once it lands
     if (this.installing.has(spec.id)) return { reason: "installing" };
     const failed = this.installErrors.get(spec.id);

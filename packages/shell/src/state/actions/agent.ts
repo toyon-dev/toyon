@@ -41,6 +41,23 @@ export function installMsg(a: AgentInfo): ClientMsg {
   return { t: "install-agent", agent: a.id, ...(anyway ? { anyway: true } : {}) };
 }
 
+/** The adapter row on the agent's page: what is on disk against what this Toyon pins, and the
+ * verb that fetches it. Null while the pinned adapter is installed, and where no install would
+ * help. An older adapter that still answers is named with its version, since the agent runs and
+ * nothing else on screen says the pinned one is owed; `why` is what the last fetch printed. */
+export function adapterRow(
+  a: AgentInfo,
+): { text: string; verb: ReturnType<typeof installVerb>; why?: string; busy?: true } | null {
+  if (a.installing) return { text: "adapter", verb: null, busy: true };
+  const verb = installVerb(a);
+  if (!verb || !a.install) return null;
+  if (a.install === "missing") return { text: "adapter is not installed", verb };
+  const { behind, held, failed } = a.install;
+  if (!behind) return { text: "adapter did not install", verb, why: failed };
+  const state = held ? "is held back" : "did not install";
+  return { text: `runs adapter ${behind.runs}; ${behind.pinned} ${state}`, verb, why: failed };
+}
+
 /** why an agent cannot run, as every surface words it: the daemon's reason, and one default where
  * it gave none */
 export const notReady = (a: AgentInfo): string => a.reason ?? "not installed";

@@ -24,7 +24,7 @@
     }
   }
   /* The top bar in zen is topbar.css's: hidden there, except in the installed app, where it is the
-     window's own title bar and keeps a bare title strip. */
+     window's own title bar and keeps the page's address and the way out. */
 
   /* The row fits the window it is in, not the one its widths were dragged in: the installed app
      opens at the size its own window last had. Each dock's width is its basis and it gives from

@@ -122,7 +122,6 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
   );
   return (
     <div className="top-bar" ref={barRef} data-float-up={floatUp || undefined}>
-      {zen && <span className="bar-zen-title">{active?.worktree.title ?? "Toyon"}</span>}
       {/* the lead: what stands at the bar's start in flow, measured so the cluster clears it */}
       <span className="bar-lead" ref={leadRef}>
         {chatLeft ? railToggle : changesToggle}
@@ -178,7 +177,7 @@ export function TopBar({ center }: { center: HTMLDivElement | null }) {
         )}
         {chatLeft ? changesToggle : chatToggle}
         {!chatLeft && railToggle}
-        {/* the one control the installed app's zen strip keeps: the strip is the window's title bar
+        {/* the one tool the installed app's zen strip keeps: the strip is the window's title bar
             and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
             standing sign that this is a mode with a way out */}
         {!chatCentred && (
@@ -330,9 +329,12 @@ function RouteBar({
         {previewSize && <span className="bar-size">{previewSize}</span>}
       </span>
       {/* ⌘I's own button: the page's inspector belongs in the page's chrome, where devtools keeps
-          it, and the chat's pick keeps its seat in the composer, where that pick lands */}
+          it, and the chat's pick keeps its seat in the composer, where that pick lands. The zen
+          strip leaves it out (topbar.css): the file a pick opens is a pane, and zen has those off
+          screen */}
       <IconButton
         icon="inspect"
+        className="bar-inspect"
         label="Pick an element to open its code"
         hint={chord("inspect")}
         // the same pick with the chat as its landing: named here so the pair is learned together

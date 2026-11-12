@@ -156,36 +156,25 @@
       -webkit-app-region: no-drag;
       app-region: no-drag;
     }
-    /* zen keeps a bare title strip here: the top bar *is* the window's title bar (drag region,
-     traffic lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls
-     and the window undraggable. The worktree name centred, and the zen toggle alone at its usual
-     edge, lit: the strip stands anyway, so the button costs the preview nothing, and with no
-     browser chrome around the window it is the one standing sign of a way out. The other
-     toggles are what zen removes, and each is a chord away once out. */
+    /* zen keeps a strip here: the top bar *is* the window's title bar (drag region, traffic
+     lights, ⌄ ⋮ overlay), so dropping it would leave the preview under the controls and the
+     window undraggable. It holds what a browser's own bar would: back, forward, reload and the
+     address, over the page they steer, since the strip stands anyway and the page is all there
+     is to act on. The zen toggle is alone at its usual edge, lit: with no browser chrome around
+     the window it is the one standing sign of a way out. The other toggles are what zen
+     removes, and each is a chord away once out. The lead empties rather than goes, so its box
+     still stands at the bar's inset and the cluster is measured clear of the window's controls. */
     .app.zen {
       grid-template-rows: auto 1fr;
     }
     .app.zen .top-bar {
       display: flex;
     }
-    .app.zen .top-bar > :not(.bar-zen-title, .bar-grow, .bar-tools),
+    .app.zen .bar-lead > *,
+    .app.zen .bar-center > .bar-inspect,
     .app.zen .bar-tools > :not(.bar-zen) {
       display: none;
     }
-    .app.zen .top-bar .bar-zen-title {
-      display: block;
-    }
-  }
-  /* only the window-controls-overlay zen strip shows this. Laid over the strip's full width and
-   centred as text, so the toggle at the right edge does not push it off the window's centre; no
-   pointer so the toggle under it stays pressable and the strip under it stays a drag region */
-  .bar-zen-title {
-    display: none;
-    position: absolute;
-    inset-inline: 0;
-    text-align: center;
-    pointer-events: none;
-    color: var(--text2);
   }
   /* Safari-style: nav+path anchored over the centre, out of the bar's flow. The bar sets `left`
    and `width` (navCluster.ts): centred over the preview, and held off the lead and the tools when

@@ -101,12 +101,8 @@ export function QuickOpen({ worktreeId }: { worktreeId: string }) {
       placeholder="jump to file · type > for commands, / for pages"
       keys={(active, q) =>
         q.startsWith("/")
-          ? {
-              complete: "completes the path",
-              pick: active?.kind === "page" ? goVerb(active.page) : undefined,
-              back: "closes",
-            }
-          : { pick: "opens", back: "closes" }
+          ? { complete: "completes the path", pick: active?.kind === "page" ? goVerb(active.page) : undefined }
+          : {}
       }
       initialQuery={initialQuery}
       empty={(q) =>

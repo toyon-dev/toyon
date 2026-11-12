@@ -134,6 +134,8 @@ function fakeAgent(
     slowNew?: number;
     /** more model rows after the two every fake lists */
     models?: Array<{ value: string; name: string; description?: string }>;
+    /** refuse a switch to this model, as a provider does for one the account may not call */
+    refuse?: string;
   } = {},
 ): FakeAgent {
   const f: FakeAgent = {
@@ -298,6 +300,8 @@ function fakeAgent(
     .onRequest(acp.methods.agent.session.setConfigOption, (c) => {
       f.configs.push(`${c.params.configId}=${String(c.params.value)}`);
       f.calls.push(`config ${c.params.configId}=${String(c.params.value)}`);
+      // a plain throw, as the adapter's own handler fails: the words reach the client as details
+      if (opts.refuse && c.params.value === opts.refuse) throw new Error(`API error: 403 no access to ${opts.refuse}`);
       if (c.params.configId === "model") f.model = String(c.params.value);
       else if (c.params.configId === "mode") agentMode = String(c.params.value);
       else f.effort = String(c.params.value);
@@ -2129,6 +2133,40 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a handler that threw is reported in its own words, not as the code's name", async () => {
+    const fake = fakeAgent(async () => {
+      // not a RequestError: the SDK answers "Internal error" and carries these under `details`
+      throw new Error("API error: 403 not authorized to perform: bedrock:InvokeModel");
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.events.at(-2)).toMatchObject({
+      type: "agent-error",
+      message: "API error: 403 not authorized to perform: bedrock:InvokeModel",
+    });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "failed" });
+    expect(w.types()).not.toContain("agent-auth-required");
+    await w.session.close();
+  });
+
+  test("a lapsed AWS session a handler threw on still gets the daemon's logins", async () => {
+    const fake = fakeAgent(async () => {
+      throw new Error("API Error: Could not load AWS credentials · Token is expired.");
+    });
+    const w = world(fake);
+    w.session.send("a");
+    await w.idle();
+    expect(w.types()).not.toContain("agent-error");
+    expect(w.events.at(-2)).toMatchObject({
+      type: "agent-auth-required",
+      provider: "aws",
+      detail: "API Error: Could not load AWS credentials · Token is expired.",
+    });
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "auth" });
+    await w.session.close();
+  });
+
   test("the connection dying mid-turn is an agent-error, not a hang", async () => {
     let conn: acp.ClientConnection | null = null;
     const fake = fakeAgent(
@@ -3608,6 +3646,18 @@ describe("AcpSession options", () => {
     expect(fake.prompts).toHaveLength(1);
     for (let i = 0; i < 100 && fake.calls.length < 2; i++) await Bun.sleep(5);
     expect(fake.calls).toEqual(["close s1", "close s2"]);
+    await w.session.close();
+  });
+
+  test("with the quick model refused on the switch, prefer asks on the default and require asks nothing", async () => {
+    const fake = fakeAgent(say("ok"), { refuse: "big-model" });
+    const w = world(fake, { ...claudeSpec, quickModel: "big-model" });
+    expect(await w.session.ask("sys", "name this", { quick: "prefer" })).toBe("ok");
+    expect(await w.session.ask("sys", "recap this", { quick: "require" })).toBeNull();
+    // both tried the switch; only the first went on to a prompt, on the model the session opened on
+    expect(fake.calls).toEqual(["config model=big-model", "config model=big-model"]);
+    expect(fake.prompts).toHaveLength(1);
+    expect(fake.model).toBe("test-model");
     await w.session.close();
   });
 

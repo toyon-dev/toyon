@@ -21,6 +21,20 @@ test("a refusal, a git failure or a closed connection is one line: its name and 
   expect(git).not.toContain("\n");
 });
 
+test("a JSON-RPC error whose message is only its code's name is followed by its details", () => {
+  const refused = Object.assign(new Error("Internal error"), {
+    name: "RequestError",
+    data: { details: "API error: 403 not authorized to perform: bedrock:InvokeModel\nmodel not changed" },
+  });
+  expect(formatLine("warn", "abc", "auto-naming failed", refused, ISO)).toBe(
+    "09:14:19 warn  [abc] auto-naming failed RequestError: Internal error: API error: 403 not authorized to perform: bedrock:InvokeModel",
+  );
+  // with the stack, the details stay on the first line and the frames follow
+  const whole = formatLine("error", "abc", "auto-naming failed", refused, ISO).split("\n");
+  expect(whole[0]).toEndWith("bedrock:InvokeModel");
+  expect(whole[1]).toStartWith("    at ");
+});
+
 test("an error of the daemon's own making keeps its stack, as does anything at error level", () => {
   const bug = formatLine("warn", "abc", "git status failed", new TypeError("undefined is not an object"), ISO);
   expect(bug.startsWith("09:14:19 warn  [abc] git status failed TypeError: undefined is not an object\n")).toBe(true);

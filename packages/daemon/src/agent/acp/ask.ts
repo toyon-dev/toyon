@@ -8,6 +8,7 @@ import type { Quick } from "../adapter.ts";
 import { agentModeFor } from "../modes.ts";
 import { quickModelFor } from "../quick.ts";
 import type { AgentSpec } from "../registry.ts";
+import { errorWords } from "./errors.ts";
 import { readModeOption, readOptions } from "./options.ts";
 
 export interface Ask {
@@ -91,17 +92,25 @@ async function askRun(ctx: acp.ClientContext, a: Ask, opened: Opened): Promise<s
     if (a.quick) {
       const model = readOptions(s.configOptions).get("model");
       const quick = model && quickModelFor(a.spec, model.ids, model.current);
-      if (model && quick) {
+      let onQuick = !!quick && model?.current === quick;
+      if (model && quick && !onQuick) {
         // before the mode: Claude reconciles its permission mode against the model it is moved to
-        if (model.current !== quick) {
+        try {
           await ctx.request(acp.methods.agent.session.setConfigOption, {
             sessionId: s.sessionId,
             configId: model.id,
             value: quick,
           });
+          onQuick = true;
+        } catch (e) {
+          // Offered and then refused: a provider lists a model the account may not call (a Bedrock
+          // role without that inference profile). The session stays on the model it opened on,
+          // which makes this the same as a quick model that was never offered.
+          log.warn(a.tag, `ask: ${a.spec.id} would not move to its quick model ${quick}`, e);
         }
-      } else if (a.quick === "require") {
-        log.debug(a.tag, `ask: ${a.spec.id} offers no quick model; not asked`);
+      } else if (model && !quick) noteNotOffered(a, model.ids);
+      if (!onQuick && a.quick === "require") {
+        log.debug(a.tag, `ask: ${a.spec.id} has no quick model to run on; not asked`);
         return null;
       }
     }
@@ -142,11 +151,27 @@ async function askRun(ctx: acp.ClientContext, a: Ask, opened: Opened): Promise<s
   }
 }
 
+/** the agents whose named quick model was missing from their list, as `agent model`: said once
+ * per daemon, since every side question would say it again */
+const notOffered = new Set<string>();
+
+/** A quick model named for the agent (agents.json, or a builtin's fixed id) that its list does not
+ * carry: the name belongs to another provider or a retired model, and nothing else says the
+ * setting has stopped doing anything. */
+function noteNotOffered(a: Ask, offered: readonly string[]) {
+  const named = a.spec.quickModel;
+  if (typeof named !== "string") return;
+  const key = `${a.spec.id} ${named}`;
+  if (notOffered.has(key)) return;
+  notOffered.add(key);
+  log.warn(a.tag, `ask: ${a.spec.id} does not offer its quick model ${named}; it offers ${offered.join(", ")}`);
+}
+
 /** close first, so the adapter stops whatever the session is still doing (Claude's title
  * generation runs after the turn), then delete what it kept */
 async function cleanUp(ctx: acp.ClientContext, a: Ask, sessionId: string): Promise<void> {
   const quietly = (what: string) => (e: unknown) => {
-    log.debug(a.tag, `ask: session/${what} failed: ${e instanceof Error ? e.message : String(e)}`);
+    log.debug(a.tag, `ask: session/${what} failed: ${errorWords(e)}`);
   };
   if (a.caps.close) await ctx.request(acp.methods.agent.session.close, { sessionId }).catch(quietly("close"));
   if (a.caps.delete) await ctx.request(acp.methods.agent.session.delete, { sessionId }).catch(quietly("delete"));

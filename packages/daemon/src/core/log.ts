@@ -19,10 +19,21 @@ let threshold = LEVELS[envLevel()];
  * and its frames were a seventh of a month's log without naming anything the message did not. */
 const BUGS = [TypeError, RangeError, ReferenceError, SyntaxError];
 
+/** What a JSON-RPC error carries beside its message. An agent's handler that threw is answered
+ * with the code's name alone ("Internal error") and the thrown words under `data.details`, so the
+ * message by itself names no cause. Read by shape: the log sits under the agent code and
+ * imports none of it. */
+function details(e: Error): string {
+  const d = (e as { data?: { details?: unknown } | null }).data?.details;
+  return typeof d === "string" && d ? `: ${d.split("\n")[0]}` : "";
+}
+
 function fmtError(level: LogLevel, e: Error): string {
-  const line = `${e.name}: ${e.message}`;
+  const head = `${e.name}: ${e.message}`;
+  const line = head + details(e);
   const whole = level === "error" || threshold <= LEVELS.debug || BUGS.some((c) => e instanceof c);
-  return whole ? (e.stack ?? line) : line;
+  if (!whole || !e.stack) return line;
+  return e.stack.startsWith(head) ? line + e.stack.slice(head.length) : e.stack;
 }
 
 function fmtExtra(level: LogLevel, extra: unknown): string {

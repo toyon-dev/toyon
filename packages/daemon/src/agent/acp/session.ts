@@ -60,6 +60,7 @@ import {
 } from "./authstatus.ts";
 import { BackgroundTasks, claudeConfigDir } from "./background.ts";
 import { parseForm, toContent } from "./elicit.ts";
+import { errorWords } from "./errors.ts";
 import { endOfAsk, mapCommands, mapStopReason, mapUpdate, preempted, release, type ToolMemos } from "./map.ts";
 import {
   currentName,
@@ -1115,7 +1116,7 @@ export class AcpSession implements AgentAdapter {
         ...(apiKey ? { _meta: { "api-key": { apiKey } } } : {}),
       });
     } catch (e) {
-      throw new UserError(`${conn.spec.name} login failed: ${e instanceof Error ? e.message : String(e)}`);
+      throw new UserError(`${conn.spec.name} login failed: ${errorWords(e)}`);
     }
     this.loggedIn();
     return { kind: "done" };
@@ -1179,13 +1180,12 @@ export class AcpSession implements AgentAdapter {
    * Only asked when a connection is up, and only when that connection offered a way back in. */
   private rejectedCredential(e: unknown): boolean {
     if (!this.conn?.authMethods.length) return false;
-    return REJECTED_CREDENTIAL_RE.test(e instanceof Error ? e.message : String(e));
+    return REJECTED_CREDENTIAL_RE.test(errorWords(e));
   }
 
   private describe(e: unknown): string {
     if (isAuthRequired(e)) return this.conn?.spec.loginHint ?? this.d.spec().loginHint;
-    // JSON-RPC's name for the error code, which the adapter puts in front of the provider's own words
-    const message = (e instanceof Error ? e.message : String(e)).replace(/^Internal error: /, "");
+    const message = errorWords(e);
     // the SDK's generic close message; the process's own exit is the useful part
     return /connection closed/i.test(message) ? (this.conn?.link.exitInfo() ?? message) : message;
   }

@@ -16,6 +16,7 @@ import {
   parseAuthStatus,
   supportsLogout,
 } from "./acp/authstatus.ts";
+import { errorWords } from "./acp/errors.ts";
 import { type OptionCategory, readOptions } from "./acp/options.ts";
 import type { AcpLink } from "./acp/transport.ts";
 import type { AgentSpec } from "./registry.ts";
@@ -205,7 +206,7 @@ export class AgentReadiness {
       }
       if (init.agentCapabilities?.sessionCapabilities?.close) {
         await link.conn.agent.request(acp.methods.agent.session.close, { sessionId: s.sessionId }).catch((e) => {
-          log.debug(tag, `session/close failed: ${e instanceof Error ? e.message : String(e)}`);
+          log.debug(tag, `session/close failed: ${errorWords(e)}`);
         });
       }
     } catch (e) {
@@ -284,20 +285,18 @@ export class AgentReadiness {
       log.info("agents", `${agentId} signed out`);
     } catch (e) {
       if (e instanceof UserError) throw e;
-      throw new UserError(`${spec.name} could not be signed out: ${e instanceof Error ? e.message : String(e)}`);
+      throw new UserError(`${spec.name} could not be signed out: ${errorWords(e)}`);
     } finally {
       await link.kill();
     }
   }
 }
 
-/** the one line of an error a row can carry: the SDK's "Internal error: " prefix and the stderr
- * tail an exit report drags along are not for a picker row */
+/** the one line of an error a row can carry: the stderr tail an exit report drags along is not
+ * for a picker row */
 function firstLine(e: unknown): string {
-  // the SDK answers a handler that threw with "Internal error" and the thrown words under `details`
-  const details = e instanceof acp.RequestError ? (e.data as { details?: unknown } | null)?.details : undefined;
-  const message = typeof details === "string" ? details : e instanceof Error ? e.message : String(e);
-  return message.replace(/^Internal error: /, "").split("\n")[0] ?? message;
+  const message = errorWords(e);
+  return message.split("\n")[0] ?? message;
 }
 
 function sameLimits(a: AgentLimits | undefined, b: AgentLimits | undefined): boolean {

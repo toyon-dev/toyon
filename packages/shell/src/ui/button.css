@@ -219,7 +219,7 @@
   }
   /* the one hover colour a surface class still names: the editor deep link, a bordered chip whose
      hover is the link colour because following it leaves the app. It is here rather than a tone
-     because it is one control in two places (the pane head's switches and the file menu),
+     because it is one control in a few places (the editor head's actions, a pasted chip),
      and a tone with one user is a class with a grander name. */
   .deep-link {
     border-color: var(--border0);

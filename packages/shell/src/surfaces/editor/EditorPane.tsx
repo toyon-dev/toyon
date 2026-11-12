@@ -19,7 +19,7 @@ import {
   worktreeById,
   zenShowsFile,
 } from "../../state/store.ts";
-import { Button } from "../../ui/Button.tsx";
+import { Button, IconButton } from "../../ui/Button.tsx";
 import { cx } from "../../ui/cx.ts";
 import { ErrorBoundary } from "../../ui/ErrorBoundary.tsx";
 import { useAtLeast, useOnChange, useSettled } from "../../ui/hooks.ts";
@@ -31,14 +31,14 @@ import { endCarry, startCarry, useCarries } from "../chat/carried.ts";
 import { defaultTab, handoffOn, listPage } from "../chat/handoff.ts";
 import { usePlanTitle } from "../chat/usePlanTitle.ts";
 import { splitPath } from "../util.ts";
+import { type DiffSeat, DiffSeats, SPLIT_MIN, useSplit } from "./DiffSeats.tsx";
 import { FileViewer } from "./FileViewer.tsx";
 import { HandoffTrack, PiecePage, usePieceTabs } from "./Handoff.tsx";
 import { HtmlPreview, servedPath } from "./HtmlPreview.tsx";
 import { MarkdownPreview } from "./MarkdownPreview.tsx";
 import { PrCommentsPage } from "./PrCommentsPage.tsx";
-import { type DiffSeat, DiffSeats, SPLIT_MIN, useSplit } from "./SplitToggle.tsx";
 import { SvgPreview } from "./SvgPreview.tsx";
-import { useWrap, WrapToggle } from "./WrapToggle.tsx";
+import { useWrap } from "./wrap.ts";
 import "./editor.css";
 
 // the grammars come in with the editor, and a file is only shown once they can colour it
@@ -403,7 +403,6 @@ export function EditorPane({
               columns={!onScreen}
             />
           )}
-          {wrappable && <WrapToggle wrap={wrap} onWrap={setWrap} />}
           {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
           {runnable && (
             <Button
@@ -416,6 +415,18 @@ export function EditorPane({
             >
               <Icon name="run" className="icon-inline" /> run
             </Button>
+          )}
+          {/* a toolbar switch, last, so it stands with the pane's own beside it: chosen once and
+              left, it takes an icon's room and no word */}
+          {wrappable && (
+            <IconButton
+              icon="wrap"
+              tone="chrome"
+              on={wrap}
+              aria-pressed={wrap}
+              label="Wrap lines: fold a long line at the pane's edge"
+              onClick={() => setWrap(!wrap)}
+            />
           )}
         </>
       }

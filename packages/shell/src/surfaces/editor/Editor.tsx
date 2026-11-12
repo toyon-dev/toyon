@@ -21,12 +21,12 @@ import { passPinch, useFontsReady, useKeepWheel, useOnChange, useWheelAxis } fro
 import { openOut } from "../../ui/links.ts";
 import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
+import { SPLIT_MIN } from "./DiffSeats.tsx";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { registerMenus } from "./monacoMenu.ts";
 import { toMonacoTheme } from "./monacoTheme.ts";
-import { SPLIT_MIN } from "./SplitToggle.tsx";
 import { languageFor, registerTsx } from "./tsx.ts";
 
 // ahead of every other call into Monaco: the first one to need a service fixes the set

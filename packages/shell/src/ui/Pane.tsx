@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { Button, IconButton } from "./Button.tsx";
+import { IconButton } from "./Button.tsx";
 import "./pane.css";
 import { cx } from "./cx.ts";
-import { Icon } from "./Icon.tsx";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { Tabs, type TabsProps } from "./Tabs.tsx";
 
@@ -66,20 +65,17 @@ export function Pane({
   children: ReactNode;
 }) {
   const cm = useContextMenu("pane");
-  // one word, lit while the pane has the column: a head's switches say the state it is in
+  // a toolbar switch beside the close, seated while the pane has the column: the head's words
+  // are left to what the pane shows
   const fullToggle = onToggleFull && (
-    <Button
-      variant="outline"
+    <IconButton
+      icon="full"
       tone="chrome"
-      mono
       on={full}
       aria-pressed={!!full}
-      className="deep-link"
+      label="Full height: hide the preview"
       onClick={onToggleFull}
-      data-tip="Full height: hide the preview"
-    >
-      <Icon name="full" className="icon-inline" /> full
-    </Button>
+    />
   );
   // the pane's own controls sit together at the end: both are about the pane's shape, and a gap
   // keeps them apart from what the pane's content put in the head

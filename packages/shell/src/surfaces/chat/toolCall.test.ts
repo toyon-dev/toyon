@@ -474,6 +474,15 @@ describe("toolLabel", () => {
     expect(toolLabel({ ...peer, input: { to: "worker", notify_when_idle: true } }).hint).toBe(
       "waiting to hear from worker",
     );
+    // the address streams in ahead of the message: the row says where it is going and no more
+    expect(toolLabel({ ...peer, input: { to: "worker" } }).hint).toBe("sent to worker");
+    // a subagent with no name is addressed by its spawn's id, which the row does not print
+    expect(
+      toolLabel({
+        ...peer,
+        input: { to: "a1cf47df67232752f", summary: "Shell fixes from the code review", message: "x" },
+      }).hint,
+    ).toBe("sent to a subagent: Shell fixes from the code review");
     // until the input is in, the name is all there is
     expect(toolLabel({ ...peer, input: {} })).toMatchObject({ name: "SendMessage", icon: "send", hint: "" });
     // the worktrees tool reads its query, and with none says what the bare call lists

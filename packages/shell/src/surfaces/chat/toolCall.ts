@@ -304,20 +304,28 @@ function worktreesScope(call: ToolCall): string {
   return call.name === WORKTREES_TOOL && !field(call, "query").trim() ? "the open ones and the newest archived" : "";
 }
 
+/** the id a spawn returns for its subagent, which is its address until it is given a name */
+const AGENT_ID = /^a[0-9a-f]{8,}(?:-[0-9a-f]+)*$/i;
+
 /** A message the agent sent with its own tool says who it went to and what it was about. The row
  * is the only trace of it in Toyon: the call arrives with no kind and no description, so without
  * this the row was a dot beside the tool's name, and nothing in either chat said a message had
  * left. The label is the one the agent wrote for its own row, else the message's first line. The
- * name is the agent's address for the session, with the ref it may carry dropped. A call with no
- * message sends nothing: it asks to be told when the other session goes quiet. */
+ * name is the agent's address for the session, with the ref it may carry dropped; a subagent with
+ * no name is addressed by the id its spawn returned, which says nothing to a person, so the row
+ * says what it is instead. The input streams in a field at a time, address first, so a call with
+ * no message yet says only where it is going. One that asks to hear back and carries no message
+ * sends nothing: it waits for the other session to go quiet. */
 function sentTo(call: ToolCall): string {
   if (call.name !== PEER_TOOL) return "";
-  const to = field(call, "to")
+  const named = field(call, "to")
     .replace(/\s*\[[0-9a-f]+\]\s*$/i, "")
     .trim();
-  if (!to) return "";
+  if (!named) return "";
+  const to = AGENT_ID.test(named) ? "a subagent" : named;
   const message = field(call, "message").trim();
-  if (!message) return `waiting to hear from ${to}`;
+  const input = call.input as Record<string, unknown> | null;
+  if (!message && input?.notify_when_idle === true) return `waiting to hear from ${to}`;
   const about = field(call, "summary").trim() || (message.split("\n")[0] ?? "").trim();
   return about ? `sent to ${to}: ${about}` : `sent to ${to}`;
 }

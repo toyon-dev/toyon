@@ -460,6 +460,22 @@ describe("toolLabel", () => {
     expect(toolLabel({ name: "handoff", title: "handoff", input: { pieces: pieces.slice(0, 1) } }).hint).toBe(
       "offered sticky header",
     );
+    // the agent's own message to another session says who it went to and the label it wrote for
+    // the row, under the send glyph; the ref on the address is the tool's, not a name
+    const peer = { name: "SendMessage", title: "SendMessage", toolKind: "other" as const };
+    expect(
+      toolLabel({ ...peer, input: { to: "worker [3fa9c1]", summary: "hold the header work", message: "Stop.\nWhy." } }),
+    ).toMatchObject({ name: "", icon: "send", hint: "sent to worker: hold the header work" });
+    // no label: the message's first line stands in
+    expect(
+      toolLabel({ ...peer, input: { to: "worker", message: "Stop where you are.\nThe plan is on hold." } }).hint,
+    ).toBe("sent to worker: Stop where you are.");
+    // no message: the call only asks to hear when the other session is done
+    expect(toolLabel({ ...peer, input: { to: "worker", notify_when_idle: true } }).hint).toBe(
+      "waiting to hear from worker",
+    );
+    // until the input is in, the name is all there is
+    expect(toolLabel({ ...peer, input: {} })).toMatchObject({ name: "SendMessage", icon: "send", hint: "" });
     // the worktrees tool reads its query, and with none says what the bare call lists
     expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} })).toMatchObject({
       name: "",

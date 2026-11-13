@@ -73,6 +73,9 @@ const KIND_ICON: Record<ToolKind, IconName> = {
 const SKILL_TOOL = "Skill";
 /** Claude Code's booking of its own return, the self-paced loop: a call that returns at once */
 const WAKEUP_TOOL = "ScheduleWakeup";
+/** Claude Code's message to another agent: a subagent it started, or another session on this
+ * machine, which Toyon neither carries nor hears of at the far end */
+const PEER_TOOL = "SendMessage";
 
 /** Claude's tools that arrive with no kind, which would otherwise all wear the dot: the glyph is
  * picked by the tool's name instead. A Map, since a name is the agent's string and an object would
@@ -101,6 +104,8 @@ const NAME_ICON = new Map<string, IconName>([
   [STOP_TOOL, "stop"],
   // the other half of ExitPlanMode, which the adapter kinds as a mode switch
   ["EnterPlanMode", "swap"],
+  // a message that left this chat, by the glyph the composer's own send wears
+  [PEER_TOOL, "send"],
 ]);
 
 /** The kind Claude's adapter gives each of its own tools, for the one call the shell shapes before
@@ -299,6 +304,24 @@ function worktreesScope(call: ToolCall): string {
   return call.name === WORKTREES_TOOL && !field(call, "query").trim() ? "the open ones and the newest archived" : "";
 }
 
+/** A message the agent sent with its own tool says who it went to and what it was about. The row
+ * is the only trace of it in Toyon: the call arrives with no kind and no description, so without
+ * this the row was a dot beside the tool's name, and nothing in either chat said a message had
+ * left. The label is the one the agent wrote for its own row, else the message's first line. The
+ * name is the agent's address for the session, with the ref it may carry dropped. A call with no
+ * message sends nothing: it asks to be told when the other session goes quiet. */
+function sentTo(call: ToolCall): string {
+  if (call.name !== PEER_TOOL) return "";
+  const to = field(call, "to")
+    .replace(/\s*\[[0-9a-f]+\]\s*$/i, "")
+    .trim();
+  if (!to) return "";
+  const message = field(call, "message").trim();
+  if (!message) return `waiting to hear from ${to}`;
+  const about = field(call, "summary").trim() || (message.split("\n")[0] ?? "").trim();
+  return about ? `sent to ${to}: ${about}` : `sent to ${to}`;
+}
+
 export interface ToolRowText {
   /** what happened, as a word: the row's accessible name, since the glyph carries it on screen */
   label: string;
@@ -380,6 +403,7 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
     skillForm(call) ||
     handoffPieces(call) ||
     worktreesScope(call) ||
+    sentTo(call) ||
     (call.title && call.title !== call.name ? call.title : "") ||
     (mcp ? mcp.tool : "");
   // Claude's Bash tool sends a sentence of its own ("Build the project"); it beats the command as

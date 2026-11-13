@@ -54,7 +54,7 @@ import type { RowCounts } from "./treeState.ts";
 
 /** the origin as the chat the piece lands in names it: kept whole, since the row outlives the
  * origin, and with the project's name when the piece crossed into another one */
-function handedOrigin(origin: WorktreeInfo, project: string | undefined): HandedOrigin {
+export function handedOrigin(origin: WorktreeInfo, project: string | undefined): HandedOrigin {
   return {
     id: origin.id,
     repoId: origin.repoId,

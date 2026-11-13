@@ -477,6 +477,11 @@ describe("toolLabel", () => {
       hint: "run api here",
     });
     expect(toolLabel({ name: "own", title: "own", input: {} }).hint).toBe("run it here");
+    // the stop tool presses another chat's stop: the stop glyph, and the line names the worktree
+    expect(
+      toolLabel({ name: "stop", title: "stop", input: { worktree: "Sticky header", reason: "on hold" } }),
+    ).toMatchObject({ name: "", icon: "stop", hint: "stop Sticky header" });
+    expect(toolLabel({ name: "stop", title: "stop", input: {} }).hint).toBe("stop a worktree");
     expect(toolLabel({ name: "EnterPlanMode", title: "EnterPlanMode", input: {} }).icon).toBe("swap");
   });
 

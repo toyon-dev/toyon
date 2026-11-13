@@ -24,6 +24,7 @@ import type {
   PermissionMode,
   Piece,
   QueuedMessage,
+  StoppedBy,
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, nextNumbers, relistChoice } from "@toyon/shared";
 import { UserError } from "../../core/errors.ts";
@@ -347,8 +348,9 @@ export class AcpSession implements AgentAdapter {
    * through endTurn. `stopping` is a stop pressed for this turn whose cancel has not come back:
    * nothing steers into a turn that is going away, the prompt does not go out if the press came
    * first, and the rows show the press as landed, since the status stays busy until the agent
-   * has in fact stopped. */
-  private turn: { open: boolean; stopping: boolean } | null = null;
+   * has in fact stopped. `by` is who asked for that stop when another chat's agent did, for the
+   * turn's end to carry. */
+  private turn: { open: boolean; stopping: boolean; by?: StoppedBy } | null = null;
   private stopped = false;
   /** landing ops out on the worktree: while any is, nothing starts a turn and nothing is steered
    * into one, and what is sent meanwhile waits in the queue. A count, since a sync that waited for
@@ -899,7 +901,7 @@ export class AcpSession implements AgentAdapter {
 
   /** Interrupt the running turn. Context up to the interrupt persists in the agent's session, and
    * anything queued goes next from there: a stop is for the turn, not for the messages behind it. */
-  stop() {
+  stop(by?: StoppedBy): boolean {
     // before the running guard and before session/cancel: an open card is the thing holding the
     // turn open, so the agent unblocks on our answer whether or not its own cancel reaches it
     this.cancelAsks();
@@ -908,10 +910,13 @@ export class AcpSession implements AgentAdapter {
       if (this.own && this.live) {
         const { conn, sessionId } = this.live;
         fireAndForget(this.d.worktreeId, conn.ctx.notify(acp.methods.agent.session.cancel, { sessionId }), "cancel");
-        this.endOwn("interrupted");
+        this.endOwn("interrupted", by);
+        return true;
       }
-      return;
+      return false;
     }
+    // a stop already on its way is whoever pressed it first's: a second asker does not rename it
+    if (by && this.turn && !this.turn.stopping) this.turn.by = by;
     this.setStopping(true);
     // what the agent had not got to goes first, ahead of anything sent after it
     if (this.steered.length > 0) {
@@ -928,6 +933,7 @@ export class AcpSession implements AgentAdapter {
         "cancel",
       );
     }
+    return true;
   }
 
   /** the worktree is going away (or the daemon is): kill the process, remember nothing new */
@@ -1040,14 +1046,14 @@ export class AcpSession implements AgentAdapter {
     const turn = this.turn;
     if (!turn?.open) return;
     turn.open = false;
-    this.turnOver(stopReason);
+    this.turnOver(stopReason, stopReason === "interrupted" ? turn.by : undefined);
     this.setStopping(false);
   }
 
   /** The turn's last event, whichever kind it was, and what a turn's end owes: a pieces list
    * handed over for a plan card that never came is the person's to answer anyway. */
-  private turnOver(stopReason: string) {
-    this.emit({ type: "turn-end", stopReason, ts: Date.now() });
+  private turnOver(stopReason: string, by?: StoppedBy) {
+    this.emit({ type: "turn-end", stopReason, ...(by ? { by } : {}), ts: Date.now() });
     this.showHeld();
   }
 
@@ -1998,11 +2004,11 @@ export class AcpSession implements AgentAdapter {
     this.own.settle = t;
   }
 
-  private endOwn(stopReason: string) {
+  private endOwn(stopReason: string, by?: StoppedBy) {
     if (!this.own) return;
     if (this.own.settle) clearTimeout(this.own.settle);
     this.own = null;
-    this.turnOver(stopReason);
+    this.turnOver(stopReason, by);
     this.syncStatus();
     this.maybeArmReaper();
   }

@@ -59,6 +59,7 @@ import type {
   ShipOp,
   Shipping,
   Stamps,
+  StoppedBy,
   TailscaleReadiness,
   TermServerMsg,
   Theme,
@@ -168,8 +169,9 @@ export type ChatItem =
   /** `seq` on the agent's own failure, the one the box offers to go on from; absent on a line the
    * daemon answered with, which is about a press and not the turn */
   | { kind: "error"; text: string; seq?: number }
-  /** the turn was stopped here, by a press: what the agent had got to is the rows above */
-  | { kind: "stopped"; seq?: number }
+  /** the turn was stopped here: what the agent had got to is the rows above. By a press, or, with
+   * `by`, by the agent of the chat this worktree's piece came from */
+  | { kind: "stopped"; by?: StoppedBy; seq?: number }
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
    * the kind of thing it was sent for, which is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
@@ -4125,9 +4127,12 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
     }
     case "turn-end": {
       const closed = closeOpenCalls(items);
-      // a stop is the person's press, so the log marks where it landed: the placeholder under
-      // the box says it stopped, and the cut above would otherwise read as a reply that trailed off
-      return event.stopReason === "interrupted" ? [...closed, { kind: "stopped", ...stamp }] : closed;
+      // a stop is a press, the person's or another chat's agent's, so the log marks where it
+      // landed: the placeholder under the box says it stopped, and the cut above would otherwise
+      // read as a reply that trailed off
+      return event.stopReason === "interrupted"
+        ? [...closed, { kind: "stopped", ...(event.by ? { by: event.by } : {}), ...stamp }]
+        : closed;
     }
     default:
       return items;

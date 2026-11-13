@@ -90,6 +90,7 @@ import { OwnTool } from "./worktrees/own.ts";
 import { PrService } from "./worktrees/prs.ts";
 import { RefSearch } from "./worktrees/refs.ts";
 import { WorktreeService } from "./worktrees/service.ts";
+import { StopTool } from "./worktrees/stop.ts";
 import { ArchiveSweep, archiveAfterFrom } from "./worktrees/sweep.ts";
 import { TurnService } from "./worktrees/turns.ts";
 import { WatchmanWatches } from "./worktrees/watchman.ts";
@@ -325,6 +326,9 @@ tools.add(
 );
 // a shared proc taken over ahead of the edit that would flip it, so the server is up when it lands
 tools.add(new OwnTool({ state, own: (id, names) => worktrees.ownProcs(id, names, { by: "agent" }) }));
+// the turn of a worktree made from a chat's piece, stopped from that chat; its row rings, since
+// nobody looking at it asked
+tools.add(new StopTool({ state, agentFor: (id) => runtime.agentFor(id) }));
 // before the server: its agentStatus listener has to run ahead of the one that broadcasts the rows
 const turns = new TurnService({
   state,

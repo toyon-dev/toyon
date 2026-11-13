@@ -1263,6 +1263,25 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a stop another chat's agent asked for rides that turn's end, and no turn after it", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping);
+    const by = { origin: { id: "o", repoId: "r", branch: "toyon/o", title: "Origin" }, reason: "on hold" };
+    // nothing running: nothing to stop, and nothing written
+    expect(w.session.stop(by)).toBe(false);
+    w.session.send("go");
+    w.session.send("later");
+    await Bun.sleep(30);
+    expect(w.session.stop(by)).toBe(true);
+    // the person pressing after it does not make the stop theirs, nor a second asker's
+    expect(w.session.stop({ ...by, reason: "again" })).toBe(true);
+    await w.idle();
+    const ends = w.events.filter((e) => e.type === "turn-end");
+    expect(ends).toMatchObject([{ stopReason: "interrupted", by }, { stopReason: "end_turn" }]);
+    expect(ends[1]).not.toHaveProperty("by");
+    await w.session.close();
+  });
+
   // the agent is mid-message when the steer and the stop land; after the cancel it sends one more
   // chunk, under the message it was writing (its tail trailing in) or under a new one (an answer)
   const trailingAfterStop = (messageId: string) => {

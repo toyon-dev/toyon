@@ -53,6 +53,11 @@ export const WORKTREES_TOOL = "worktrees";
  * the edit lands. No card, since nothing a person decides is in it; the transcript gets a note. */
 export const OWN_TOOL = "own";
 
+/** The agent stops the turn a worktree made from a piece of its own work is running: the stop the
+ * person presses, reached from the chat that handed the piece off. No card, since a stop loses
+ * nothing and the stopped chat offers the way on; that chat's stopped row says who asked and why. */
+export const STOP_TOOL = "stop";
+
 /** where one piece of a plan goes: the agent proposes one of the first three, the person may
  * change it, and `skip` is theirs alone */
 export type PieceFate = "here" | "worktree" | "send" | "skip";
@@ -317,6 +322,13 @@ export interface HandedOrigin {
   project?: string;
 }
 
+/** A stop another chat's agent asked for, as the stopped chat names it: the worktree the piece
+ * came from, and that agent's reason in its own words. */
+export interface StoppedBy {
+  origin: HandedOrigin;
+  reason: string;
+}
+
 export type AgentEvent =
   | { type: "user-message"; text: string; ts: number; attachments?: AttachmentRef[] }
   /** A message Toyon sent the agent on another agent's behalf, which the chat draws as a row of
@@ -401,8 +413,9 @@ export type AgentEvent =
    * end_turn, max_tokens, refusal, ...) or the daemon's: `interrupted` for a stop, `failed` when
    * the turn ended in an error (the agent-error row before it says what), `auth` when it was
    * refused for want of a credential (the card before it says which), `lost` when the daemon
-   * went away under the turn (written when the transcript is next opened). */
-  | { type: "turn-end"; stopReason: string; ts: number }
+   * went away under the turn (written when the transcript is next opened). `by` is on a stop the
+   * agent of another chat asked for through its `stop` tool; a stop without it is the person's. */
+  | { type: "turn-end"; stopReason: string; by?: StoppedBy; ts: number }
   /** the agent's running figures after a reply: context tokens in use of the window's size, and
    * the session's spend so far when the agent prices itself (Claude does; a rate-limit notice
    * carries no cost). Cumulative on purpose: a turn's cost is the difference from the last one. */

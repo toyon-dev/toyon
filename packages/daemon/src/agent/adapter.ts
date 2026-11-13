@@ -9,6 +9,7 @@ import type {
   Asked,
   AttachmentInput,
   QueuedMessage,
+  StoppedBy,
 } from "@toyon/shared";
 
 /** what a message sent on another agent's behalf records beside its text: the plan this
@@ -121,8 +122,10 @@ export interface AgentAdapter {
    * turn while a landing op is moving the tree under the agent. Holds nest; the last release
    * starts what waited. */
   hold(): () => void;
-  /** interrupt the running turn; anything queued goes next */
-  stop(): void;
+  /** Interrupt the running turn; anything queued goes next. `by` is another chat's agent asking,
+   * and rides the turn's end onto the transcript; without it the stop is the person's. Whether
+   * there was a turn to stop. */
+  stop(by?: StoppedBy): boolean;
   /** `index` is a position in `queueItems`. `taken` is handed the message as it leaves the queue,
    * while its uploads are still held: a message taken back to be changed goes to its box there. */
   unqueue(index: number, taken?: (message: QueuedMessage) => void): void;

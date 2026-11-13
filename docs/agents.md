@@ -21,13 +21,14 @@ Sign in to an agent from the chat, with that agent's account. MCP servers run th
 
 ## Tools
 
-Toyon gives each agent three tools over MCP.
+Toyon gives each agent four tools over MCP.
 
 | Tool | What it does |
 |---|---|
 | [`worktrees`](#worktrees) | Lists the project's other worktrees. |
 | [`handoff`](#handoff) | Proposes splitting work into pieces, each for a worktree. |
 | [`own`](#own) | Starts the copy's own instance of a shared command. |
+| [`stop`](#stop) | Stops the turn of a worktree made from one of the chat's pieces. |
 
 An agent gets the tools if it announces HTTP MCP support when a session starts. Claude Code and Codex do. Who can call the tools is in [trust.md](trust.md).
 
@@ -69,6 +70,16 @@ Starts the copy's own instance of a shared command. See [backends.md](backends.m
 - The command's `setup` runs first, in its terminal tab. The chat shows what changed and why.
 - It cannot switch a command back to main or to a remote. Use the chip under the chat box for that.
 - It is refused in plan mode.
+
+### `stop`
+
+Stops the running turn of a worktree that was made from a piece of this chat's work. It does what the stop button does, from the chat that handed the piece off.
+
+- The agent calls it when you drop or pause that work. It gives a reason.
+- The stopped chat shows which chat stopped it and why. Its rail row rings, and its chat box offers to continue.
+- The worktree, its files and its chat stay. A message already queued there runs next, as after any stop.
+- It cannot stop a worktree a piece was sent into, or any other worktree. Stop those yourself.
+- It cannot archive a worktree.
 
 ## Claude Code
 

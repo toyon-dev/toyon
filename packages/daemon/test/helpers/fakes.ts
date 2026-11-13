@@ -5,8 +5,10 @@ import type {
   LogLine,
   ProcState,
   QueuedMessage,
+  StoppedBy,
   WorktreeInfo,
 } from "@toyon/shared";
+import { isBusy } from "@toyon/shared";
 import type { AgentAdapter, AskOpts, AskReply, FollowUp, SendOpts } from "../../src/agent/adapter.ts";
 import { AgentReadiness, type AgentReadinessDeps } from "../../src/agent/readiness.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
@@ -93,8 +95,12 @@ export class FakeAgent implements AgentAdapter {
       this.held = this.open > 0;
     };
   }
-  stop() {
+  /** who asked for each stop another chat's agent asked for */
+  stoppedBy: StoppedBy[] = [];
+  stop(by?: StoppedBy) {
     this.stops++;
+    if (by) this.stoppedBy.push(by);
+    return isBusy(this.status);
   }
   closes = 0;
   async close() {

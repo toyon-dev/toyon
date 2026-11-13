@@ -354,6 +354,9 @@ describe("SYSTEM_APPEND", () => {
     // the object form of a run command, and the tool that moves one here ahead of an edit
     expect(SYSTEM_APPEND).toContain('"from": "copy"');
     expect(SYSTEM_APPEND).toContain("call the `own` tool when you have one");
+    // the stop of a piece's worktree is the agent's; any other stop and the archive are not
+    expect(SYSTEM_APPEND).toContain("call the `stop` tool when you have one, with the reason");
+    expect(SYSTEM_APPEND).toContain("archiving one, is the user's to do in Toyon");
     expect(SYSTEM_APPEND).not.toContain("profile");
   });
   test("says the preview is already running, so the agent starts no server of its own", () => {

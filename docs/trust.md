@@ -61,7 +61,7 @@ The rules match the text of the command. A command written differently could get
 
 ## Tools Toyon gives agents
 
-Toyon gives each agent three tools over MCP: `worktrees`, `handoff` and `own`. What they do is in [agents.md](agents.md). This section covers who can call them and what they are limited to.
+Toyon gives each agent four tools over MCP: `worktrees`, `handoff`, `own` and `stop`. What they do is in [agents.md](agents.md). This section covers who can call them and what they are limited to.
 
 Access:
 
@@ -76,6 +76,7 @@ Limits:
 - `worktrees` only reads. The agent could read the same information from disk.
 - `handoff` only proposes. Nothing starts until you approve. A worktree created from it starts in the proposing chat's permission mode.
 - `own` starts a command in the copy. It is refused in plan mode.
+- `stop` interrupts the running turn of a worktree made from one of the chat's own pieces, and no other. It changes no files and removes nothing. The stopped chat records which chat asked and why.
 
 ## Managed machines
 

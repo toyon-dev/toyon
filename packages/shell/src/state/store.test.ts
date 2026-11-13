@@ -1195,6 +1195,10 @@ describe("chat folding", () => {
     expect(tools[1]).not.toHaveProperty("output");
     // and the stop is marked where it landed; a turn that finished leaves no such row
     expect(s.local.a?.chat.at(-1)).toEqual({ kind: "stopped", seq: 0 });
+    // a stop another chat's agent asked for names that chat and carries its reason
+    const by = { origin: { id: "o", repoId: "r", branch: "toyon/o", title: "Origin" }, reason: "on hold" };
+    const asked = run([hello(wt("a")), agent("a", { type: "turn-end", stopReason: "interrupted", by, ts: 0 })]);
+    expect(asked.local.a?.chat.at(-1)).toEqual({ kind: "stopped", by, seq: 0 });
     const finished = run([hello(wt("a")), agent("a", { type: "turn-end", stopReason: "end_turn", ts: 0 })]);
     expect(finished.local.a?.chat).toEqual([]);
     // a turn lost with its daemon was nobody's press: its rows close and no stop is drawn

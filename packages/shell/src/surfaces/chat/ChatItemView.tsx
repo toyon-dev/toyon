@@ -75,6 +75,7 @@ import { toolRowItems, toolRowOpen } from "./toolRowItems.ts";
 import { codeAt, useCodeCopy } from "./useCodeCopy.tsx";
 import { usePlanTitle } from "./usePlanTitle.ts";
 import { useWorktreeNamer } from "./useWorktreeNamer.ts";
+import { WorktreeChip } from "./WorktreeChip.tsx";
 
 function Markdown({
   text,
@@ -1386,7 +1387,17 @@ export const ChatItemView = memo(function ChatItemView({
     case "stopped":
       // the word alone, with the stop button's glyph: where the turn was cut is the whole news,
       // and the box under the log offers the way on
-      return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
+      if (!item.by) return <DaemonRow icon="stop" word="stopped" tone="quiet" />;
+      // another chat's agent asked: the row names that chat and carries its reason, since the
+      // person reading this one pressed nothing
+      return (
+        <DaemonRow icon="stop" word="stopped" tone="quiet" below={item.by.reason}>
+          <span className="daemon-text">
+            by <WorktreeChip id={item.by.origin.id} title={item.by.origin.title} />
+            {item.by.origin.project ? ` in ${item.by.origin.project}` : ""}
+          </span>
+        </DaemonRow>
+      );
     case "landed":
       return <LandedRow item={item} />;
     case "handed":

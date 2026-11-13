@@ -1,5 +1,5 @@
 // Toyon's own tools, served to each worktree's agent over MCP (streamable HTTP, JSON responses).
-// Hand-rolled: two tools and four JSON-RPC methods are the whole protocol here, and the SDK's
+// Hand-rolled: a few tools and four JSON-RPC methods are the whole protocol here, and the SDK's
 // server would pull a web framework into the bundled daemon for them. Stateless, so a daemon
 // restart under a running agent costs nothing: the next call carries everything it needs.
 

@@ -8,6 +8,7 @@ import {
   OWN_TOOL,
   SHELL_TOOL,
   type Span,
+  STOP_TOOL,
   splitSpanLines,
   TOOL_SEARCH,
   type ToolKind,
@@ -96,6 +97,8 @@ const NAME_ICON = new Map<string, IconName>([
   [WORKTREES_TOOL, "worktrees"],
   // the own tool starts a proc here: the glyph a command that runs wears
   [OWN_TOOL, "run"],
+  // the stop tool presses another chat's stop: the stop button's glyph, as on the row it leaves there
+  [STOP_TOOL, "stop"],
   // the other half of ExitPlanMode, which the adapter kinds as a mode switch
   ["EnterPlanMode", "swap"],
 ]);
@@ -123,6 +126,12 @@ function ownWords(call: ToolCall): string {
   const names = call.input && typeof call.input === "object" ? (call.input as { names?: unknown }).names : undefined;
   const list = Array.isArray(names) ? names.filter((n): n is string => typeof n === "string") : [];
   return list.length > 0 ? `run ${list.join(", ")} here` : "run it here";
+}
+
+/** which worktree the stop tool was asked to stop, as the row's line: `stop Sticky header` */
+function stopWords(call: ToolCall): string {
+  const named = field(call, "worktree").trim();
+  return named ? `stop ${named}` : "stop a worktree";
 }
 
 /** The tool a load fetched the schema of, which is the call that most likely comes next: Claude
@@ -348,7 +357,17 @@ export function toolLabel(call: ToolCall, roots: string[] = []): ToolRowText {
   const reason = call.name === WAKEUP_TOOL ? field(call, "reason") : "";
   // the own tool's line is what it runs here, which its input names; every borrowed proc when none
   const owning = call.name === OWN_TOOL ? ownWords(call) : "";
-  const v = filePathOf(call) || command || field(call, "path") || field(call, "pattern") || query || reason || owning;
+  // the stop tool's line is the worktree it stops; its reason is the stopped chat's to show
+  const stopping = call.name === STOP_TOOL ? stopWords(call) : "";
+  const v =
+    filePathOf(call) ||
+    command ||
+    field(call, "path") ||
+    field(call, "pattern") ||
+    query ||
+    reason ||
+    owning ||
+    stopping;
   // An MCP server's tool arrives with no kind and its wire name for a title (`mcp__Amplitude__
   // search_amp_entities`), which the adapter never replaces with words. The row reads it as two: the
   // server where the tool's name would go, and the tool's own name as words where the path or

@@ -18,17 +18,19 @@
     gap: 10px;
     min-width: 0;
   }
-  /* what will run on it, and the one action, on the row the composer keeps them on */
+  /* the ways out and the one action, closing the form at the column's far edge, where the eye
+     ends after the last row */
   .form-knobs {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--view-gap);
     min-width: 0;
   }
-  /* the file this form becomes, read at the start of the row that writes it */
+  /* the file this form becomes, read beside the choice that names it */
   .form-sign {
-    /* takes the free space rather than pushing with a margin: an auto margin here and another on
-       the primary would split the row three ways and strand whatever sits between them */
+    /* takes what the row has left and gives up its tail first, so the choice beside it never
+       moves for a long path */
     flex: 1;
     min-width: 0;
     overflow: hidden;

@@ -3,18 +3,21 @@
 @layer base {
   /* ---- form rows (FormRow: the setup pane and the new-project form) ----
      A row sits on the app's row height, the slot a settings row uses, and grows downward from its
-     top when the control carries a hint or a second line. The label centres on that first slot
-     rather than on the whole row, so it stays level with the field it names. */
+     top when the control carries a hint or a second line. */
   .form-row {
     display: flex;
     gap: 12px;
     align-items: flex-start;
     min-height: var(--row-height);
+    /* the first line of an md field: its padding and its line, without the rule under it. The
+       label and a picked value both centre on it, so a row's word, a typed value and a picked one
+       share a line whichever control the row holds. */
+    --form-line: calc(var(--size-mono) * 1.6 + 10px);
   }
   .form-label {
     width: 56px;
     flex-shrink: 0;
-    min-height: var(--row-height);
+    min-height: var(--form-line);
     display: flex;
     align-items: center;
     color: var(--text1);
@@ -31,5 +34,19 @@
     & textarea.field {
       resize: none;
     }
+  }
+  /* what a row holds when its value is picked rather than typed: the chips, and anything read
+     beside them, on the line a field's text would sit on */
+  .form-picks {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: var(--form-line);
+  }
+  /* a ghost button on the control column: its padding hangs into the gutter, so its word starts
+     on the edge the fields' text and the hints start on */
+  .form-pick {
+    margin-left: calc(-1 * var(--btn-pad-x));
   }
 }

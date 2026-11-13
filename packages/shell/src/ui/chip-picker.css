@@ -19,6 +19,12 @@
       max-height: min(280px, 40vh);
     }
   }
+  /* a form row's answer: the line a pressable word wears in a sentence, under a value that has
+   no box to say it can be pressed */
+  .chip-picker-answer {
+    text-decoration: underline dotted var(--border1);
+    text-underline-offset: 0.2em;
+  }
   /* the lead covers the chip that opened the panel, so it is the button a second click lands on;
    the seat is Button's own (chrome, on), this is only how it sits in the strip */
   .chip-picker-lead {

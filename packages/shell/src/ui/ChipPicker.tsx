@@ -40,6 +40,7 @@ export function ChipPicker<T extends string>({
   onChange,
   placeholder,
   hint,
+  answer,
   className,
   onClose,
 }: {
@@ -54,6 +55,10 @@ export function ChipPicker<T extends string>({
   placeholder: string;
   /** the chip's tooltip */
   hint: string;
+  /** the chip is what a form row asks for, among values that were typed: it reads at their tier,
+   * over the dotted line that says a word can be pressed. A quiet chip there reads as an example
+   * nobody has filled in, and with no box and no line, as text rather than a control. */
+  answer?: boolean;
   /** how the chip sits in its row, and the surface's own colour for a value worth flagging */
   className?: string;
   /** the panel went away, picked or not: the host puts the caret back where it was */
@@ -71,10 +76,11 @@ export function ChipPicker<T extends string>({
     <span className="chip-picker">
       <Button
         variant="ghost"
-        tone="chrome"
+        // an answer has no seat to deepen: the panel's lead covers it for as long as it is open
+        tone={answer ? "strong" : "chrome"}
         mono
-        on={open}
-        className={cx("chip-picker-btn", className)}
+        on={open && !answer}
+        className={cx("chip-picker-btn", answer && "chip-picker-answer", className)}
         {...tip(hint)}
         onClick={() => (open ? close() : setOpen(true))}
       >

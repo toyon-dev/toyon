@@ -227,6 +227,8 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       {multi && i > 0 && (
         <div className="setup-source">
           <ChipPicker<From>
+            className="form-pick"
+            answer
             value={p.from}
             options={SHARING}
             onChange={(from) => edit(i, { from })}
@@ -235,7 +237,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           />
           {(() => {
             const hint = tierHint(p.name, p.cmd, p.from, repo);
-            return hint ? <span className="hint setup-source-hint">{hint}</span> : null;
+            return hint ? <span className="hint">{hint}</span> : null;
           })()}
         </div>
       )}
@@ -248,7 +250,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
       {services && !apart && (
         <p className="hint setup-shared-note">
           Worktrees will share {sharedWhat}, migrations included.{" "}
-          <Button tone="quiet" disabled={!main} onClick={askApart}>
+          <Button variant="inline" disabled={!main} onClick={askApart}>
             ask the agent to keep them apart
           </Button>
         </p>
@@ -284,8 +286,10 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
           presses merge: a value with two states, so a chip like its neighbours and not a switch. */}
       {repo.remote && (
         <FormRow label="land" hint="where a worktree's finished work goes; one way per repo">
-          <div className="setup-land">
+          <div className="form-picks">
             <ChipPicker<LandRoute>
+              className="form-pick"
+              answer
               value={land}
               options={LAND_ROUTES.map((r) => ({ id: r.id, label: r.name, description: r.description }))}
               onChange={setLand}
@@ -294,6 +298,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
             />
             {onPr && (
               <ChipPicker<"you" | "github">
+                answer
                 value={automerge ? "github" : "you"}
                 options={PR_MERGERS.map((m) => ({ id: m.id, label: m.name, description: m.description }))}
                 onChange={(id) => setAutomerge(id === "github")}
@@ -311,84 +316,86 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         label="merge"
         hint={onPr ? "how GitHub merges the pull request; only what the repo allows" : "how the commits arrive on main"}
       >
-        <ChipPicker<MergeMethod | "default">
-          value={merge === "default" && !onPr ? DEFAULT_MERGE_METHOD : merge}
-          options={[
-            ...(onPr
-              ? [
-                  {
-                    id: "default" as const,
-                    label: "what the repo allows",
-                    description: "the repo's allowed methods on GitHub: squash, else a merge commit, else rebase",
-                  },
-                ]
-              : []),
-            ...MERGE_METHODS.map((m) => ({ id: m.id, label: m.name, description: m.description })),
-          ]}
-          onChange={setMerge}
-          hint="how the commits arrive on main"
-          placeholder="how the commits arrive"
-        />
+        <div className="form-picks">
+          <ChipPicker<MergeMethod | "default">
+            className="form-pick"
+            answer
+            value={merge === "default" && !onPr ? DEFAULT_MERGE_METHOD : merge}
+            options={[
+              ...(onPr
+                ? [
+                    {
+                      id: "default" as const,
+                      label: "what the repo allows",
+                      description: "the repo's allowed methods on GitHub: squash, else a merge commit, else rebase",
+                    },
+                  ]
+                : []),
+              ...MERGE_METHODS.map((m) => ({ id: m.id, label: m.name, description: m.description })),
+            ]}
+            onChange={setMerge}
+            hint="how the commits arrive on main"
+            placeholder="how the commits arrive"
+          />
+        </div>
       </FormRow>
 
-      <FormRow
-        label="start"
-        hint={
-          <>
-            must listen on <code {...tip("Toyon sets a different port for each worktree")}>$PORT</code>
-            {/* where the guess came from, and the way to it: the file opens in the editor pane
-                  under this card, so the script the person meant is a copy and a paste away */}
-            {repo.guess && trunkId && (
-              <>
-                {" · from "}
-                <Button
-                  mono
-                  tone="quiet"
-                  {...tip(`open ${repo.guess} in the editor pane`)}
-                  onClick={() => openSource(store, sock, trunkId, repo.guess ?? "", 1)}
-                >
-                  {repo.guess}
-                </Button>
-              </>
-            )}
-          </>
-        }
-      >
-        {/* never empty: a row is only removable while there are two, so the guard is for the type */}
-        {procs[0] && procRow(procs[0], 0)}
-      </FormRow>
-      {procs.slice(1).map((p, i) => (
-        <div className="form-row" key={p.id}>
-          <span className="form-label" />
-          <div className="form-control">{procRow(p, i + 1)}</div>
-        </div>
-      ))}
-      {!multi && (
-        <div className="form-row">
-          <span className="form-label" />
-          <span className="hint setup-tier-hint">one command: every worktree runs its own</span>
-        </div>
-      )}
+      {/* one row for every command, each with what is its own under it, and one line closing the
+          list: the way to add to it where the next command would start, and what is true of every
+          command at the line's far end. The row's own markup rather than FormRow, whose label
+          names one control: this row holds a list of them. */}
       <div className="form-row">
-        <span className="form-label" />
-        <Button tone="quiet" onClick={() => setProcs([...procs, proc("", "")])}>
-          <Icon name="plus" className="icon-inline" /> another process
-        </Button>
+        <span className="form-label">start</span>
+        <div className="form-control">
+          <div className="setup-procs">{procs.map(procRow)}</div>
+          {/* a repo with one command has nothing to share: said where a second one's chip would be */}
+          {!multi && <span className="hint">one command: every worktree runs its own</span>}
+          <div className="setup-close">
+            <Button tone="quiet" className="form-pick" onClick={() => setProcs([...procs, proc("", "")])}>
+              <Icon name="plus" className="icon-inline" /> another process
+            </Button>
+            <span className="hint">
+              must listen on <code {...tip("Toyon sets a different port for each worktree")}>$PORT</code>
+              {/* where the guess came from, and the way to it: the file opens in the editor pane
+                  under this view, so the script the person meant is a copy and a paste away */}
+              {repo.guess && trunkId && (
+                <>
+                  {" · from "}
+                  <Button
+                    variant="inline"
+                    mono
+                    {...tip(`open ${repo.guess} in the editor pane`)}
+                    onClick={() => openSource(store, sock, trunkId, repo.guess ?? "", 1)}
+                  >
+                    {repo.guess}
+                  </Button>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="form-knobs">
-        {/* the file the button writes, the way the new-project form shows the folder it makes;
-              the repo is named in the lead, so the path is only the file. The chip before it is
-              the one choice about that file, and the name after it is what the choice comes to,
-              so the two read as one phrase: "kept local, .toyon/settings.local.json" */}
-        <ChipPicker<ConfigFileKind>
-          value={kind}
-          options={FILE_KINDS}
-          onChange={setKind}
-          hint="whether the settings file is committed with the repo or kept out of git"
-          placeholder="committed or kept local"
-        />
-        <span className="form-sign">{file}</span>
+      {/* the file the save writes, the way the new-project form shows the folder it makes; the
+          repo is named in the title, so the path is only the file. The chip is the one choice
+          about that file and the name after it is what the choice comes to, so the two read as one
+          phrase, "kept local, .toyon/settings.local.json", with what it means for the repo under. */}
+      <FormRow label="file" hint={FILE_KINDS.find((k) => k.id === kind)?.description}>
+        <div className="form-picks">
+          <ChipPicker<ConfigFileKind>
+            className="form-pick"
+            answer
+            value={kind}
+            options={FILE_KINDS}
+            onChange={setKind}
+            hint="whether the settings file is committed with the repo or kept out of git"
+            placeholder="committed or kept local"
+          />
+          <span className="form-sign">{file}</span>
+        </div>
+      </FormRow>
+
+      <div className="form-knobs setup-foot">
         {onClose && <Button onClick={onClose}>cancel</Button>}
         {/* the third answer, only where it is one: beside a guessed start command it read as a
               verdict on the repo. A repo the detector could not read gets it, and so does the

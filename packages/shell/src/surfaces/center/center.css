@@ -98,27 +98,26 @@
     margin-left: calc(-1 * var(--btn-pad-x));
   }
 
+  /* every command the project starts, one under the other in the start row */
+  .setup-procs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
   .setup-proc {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    column-gap: 6px;
     align-items: center;
   }
   /* who runs a command, under its line and the width of the row: the chip, then what the saved
-     file comes to */
+     file comes to under it, both on the column's edge the way a picked row and its hint are */
   .setup-source {
     flex-basis: 100%;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .setup-source-hint {
-    min-width: 0;
-  }
-  /* a repo with one command has nothing to share: said once, where the second row would start */
-  .setup-tier-hint {
-    margin: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 6px;
   }
   /* what the worktrees would share, under the title: a sentence with its one action inline */
   .setup-shared-note {
@@ -132,12 +131,22 @@
     flex: 1;
     min-width: 0;
   }
-  /* the route chip and, on the PR route, the who-merges-it chip beside it */
-  .setup-land {
+  /* the form is over: the actions stand a step clear of the last row's hint */
+  .setup-foot {
+    margin-top: 8px;
+  }
+  /* the list's last line: the way to add a command on the edge the commands start on, and what
+     holds for all of them at the far end, so the two are one line under the list and not two more
+     in a stack of small text */
+  .setup-close {
     display: flex;
-    gap: 8px;
+    /* centred, not on the baseline: the button's first box is its glyph, whose foot is not the
+       words' line */
     align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
     flex-wrap: wrap;
+    margin-top: 4px;
   }
   .import-error {
     color: var(--text2);

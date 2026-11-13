@@ -2,6 +2,42 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.25.0 (2026-11-13)
+
+The Claude adapter moves to the current release, and a handoff now closes its loop: the row that sent a piece hears when it lands, and an agent can stop or message a sibling chat.
+
+### New
+- When a piece lands, the row that started the handoff and every row that sent a piece into it get a note saying what landed and where the piece's chat is, with the commit subjects under it. Their agents start once idle to bring in line anything that depended on the landing, unless a declared wait is still open or their own work is done.
+- An agent can stop another worktree's running turn. The reason shows on the stopped row beside the calling chat's chip, and the tool refuses the chat that sent it the message, idle rows and itself.
+- A message an agent sends to a sibling or a subagent shows as its own row in the chat, reading "sent to" with the name and the message.
+- Right-clicking selected text leads the menu with copy selection, which copies the selection as plain text with table cells separated by tabs. The message a menu is about takes the accent edge while the menu is open. The file link menu gains copy file, which puts the file itself on the clipboard on a Mac.
+- A question that allows several answers draws a tick box on each row. Digits and space tick and untick, and enter sends once something is ticked.
+- Two fingers on the trackpad throw the full-size picture away, up or down, as a finger does on the phone. The picture follows the fingers while they are down, and a stop short of halfway brings it back.
+- When the pinned Claude Code adapter version is held back by the machine's package age rule, the composer says so in one line and the agent's page names the version that answers in the meantime. Sending still works.
+
+### Changed
+- The Claude adapter is pinned to the fork of the 0.106.0 release. New sessions open in the agent's auto mode at this version, and Toyon's own switch to its default mode is what keeps the write policy in place.
+- A piece reaches a landed worktree that is at work again, meaning it has uncommitted files or its agent is mid-turn. A landed row at rest is refused by name, and the tool's list of targets shows only the rows a send reaches.
+- When a handoff card is answered and nothing starts a turn, the agent reads one sentence about it on its next message: where each piece went, a not now with no words, or a go that broke off. The plan read-off also asks for work a plan defers to a later branch, and reads plans up to 40,000 characters.
+- Memory pressure is read from the compressor's limits instead of swap usage, which sits near 90% on a healthy Mac. A commit or check about to start while memory is short waits as short of memory and starts once memory eases.
+- A background command row waits two hours for its finish notice instead of three minutes, and ends at once when the stop succeeds.
+- An archived row opens its page from the press, without waiting for the worktree to be taken down. Worktree chips and handoff rows find their row across every project, and pressing one from another project switches to it.
+- A chord that lands on a row outside the rail's view scrolls the rail just far enough to show it.
+- In zen, the strip keeps the address, back, forward and reload cluster, and an open file's head draws in the strip beside them instead of on its own row.
+- The expand control in a pane head draws as parting chevrons instead of a square, wrap leads the head's controls so nothing jumps when it hides, and the pickers no longer show a row of key hints.
+- The design pane's button is gone from the top bar; it still opens with cmd+D, the palette and the app menu.
+- Chat rows for plans, messages, restore, take over and the PR put their press in one slot at the far right, drawn as a box, and the rows that open a document share the label "details". A message sent in from another chat reads "message from".
+- Toyon Mono's multiplication sign widened to match the fallback faces.
+
+### Fixed
+- A request the adapter failed on showed "Internal error" in the chat row and the log. The real text shows now, such as a Bedrock 403, so a lapsed AWS session raises the login card.
+- Monaco's built-in formatters re-indented blocks in some files on save. They are off, and typing and pasting no longer reshape text.
+- A handoff outside plan mode that kept no piece here told the agent to finish its turn, so it sat idle until you typed. It continues now.
+- After a PR merged outside Toyon, the row could read as taken but not landed for a moment and offer a new PR.
+- Removing a worktree now drops its file watch, so the watch server stops holding that tree in memory; a boot sweep clears watches left by worktrees already removed.
+- The outline list on a long document ran over the bar; it has its own height and opens scrolled to the section being read.
+- The dimmed verb on a quiet handoff row was hard to read against the dark band, links in a tool's output showed purple while it streamed, and the ! hint in the composer rode along behind every space typed.
+
 ## 0.24.0 (2026-11-12)
 
 Changed markdown files open as a rendered diff, landing no longer drops work, and the daemon and the shell close several holes around tokens and links.

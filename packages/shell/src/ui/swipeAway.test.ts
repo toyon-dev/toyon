@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { flung, leaveMs, NO_ROLL, releaseSpeed, rolled, swipeAxis } from "./swipeAway.ts";
+import { flung, leaveMs, leftAt, NO_ROLL, releaseSpeed, rolled, swipeAxis } from "./swipeAway.ts";
 
 describe("whose a touch is", () => {
   test("nobody's until it has travelled", () => {
@@ -70,7 +70,7 @@ function roll(events: Array<[number, number]>, gap: number) {
   let thrown = 0;
   let now = 1000;
   for (const [deltaX, deltaY] of events) {
-    const next = rolled(r, { deltaX, deltaY }, now);
+    const next = rolled(r, { deltaX, deltaY }, now, FAR);
     r = next.next;
     thrown ||= next.thrown;
     now += gap;
@@ -78,6 +78,8 @@ function roll(events: Array<[number, number]>, gap: number) {
   return { ...r, thrown };
 }
 const times = (n: number, e: [number, number]) => Array.from({ length: n }, () => e);
+/** half a window 800 tall */
+const FAR = 400;
 
 describe("a wheel carrying the thing", () => {
   test("goes against the delta, the way the page under the fingers would", () => {
@@ -90,15 +92,34 @@ describe("a wheel carrying the thing", () => {
     expect(roll([[0, 3]], 16).axis).toBe(null);
   });
   test("a slow roll follows however far it goes, and is never a throw", () => {
-    expect(roll(times(60, [0, 5]), 16).thrown).toBe(0);
+    const r = roll(times(120, [0, 5]), 16);
+    expect(r.dy).toBe(-600);
+    expect(r.thrown).toBe(0);
   });
-  test("a flick is a throw while the fingers are still on it, signed the way it went", () => {
-    expect(roll(times(4, [0, 40]), 16).thrown).toBeCloseTo(-2.5);
-    expect(roll(times(4, [0, -40]), 16).thrown).toBeCloseTo(2.5);
+  test("fingers still on it and moving fast are a drag, not a throw", () => {
+    const r = roll(times(8, [0, 40]), 16);
+    expect(r.dy).toBe(-320);
+    expect(r.thrown).toBe(0);
   });
-  test("a mouse wheel's one notch is a nudge; notches in a spin are a throw", () => {
+  test("carried past halfway at a throw's speed it is thrown, signed the way it went", () => {
+    expect(roll(times(10, [0, 40]), 16).thrown).toBeCloseTo(-2.5);
+    expect(roll(times(10, [0, -40]), 16).thrown).toBeCloseTo(2.5);
+  });
+  test("a flick's momentum is what throws it, and a weak one's runs out first", () => {
+    const momentum = (from: number): Array<[number, number]> =>
+      Array.from({ length: 80 }, (_, i) => [0, Math.round(from * 0.955 ** i)]);
+    expect(roll([...times(4, [0, 40]), ...momentum(40)], 16).thrown).not.toBe(0);
+    expect(roll([...times(4, [0, 12]), ...momentum(12)], 16).thrown).toBe(0);
+  });
+  test("past halfway but on its way back is not thrown", () => {
+    const r = roll([...times(120, [0, 5]), ...times(4, [0, -40])], 16);
+    expect(r.dy).toBe(-440);
+    expect(r.thrown).toBe(0);
+  });
+  test("a mouse wheel's one notch is a nudge; a spin is a throw", () => {
     expect(roll([[0, 100]], 60).thrown).toBe(0);
-    expect(roll(times(2, [0, 100]), 60).thrown).not.toBe(0);
+    expect(roll(times(3, [0, 100]), 60).thrown).toBe(0);
+    expect(roll(times(5, [0, 100]), 60).thrown).not.toBe(0);
   });
   test("sideways is somebody else's for the rest of the gesture, whatever it does next", () => {
     const r = roll([[30, 2], ...times(6, [0, 40])], 16);
@@ -108,6 +129,20 @@ describe("a wheel carrying the thing", () => {
   test("a drag let go slowly keeps its momentum and still is not thrown", () => {
     const momentum: Array<[number, number]> = [8, 7, 6, 5, 4, 3, 2, 1].map((d) => [0, d]);
     expect(roll([...times(20, [0, 6]), ...momentum], 16).thrown).toBe(0);
+  });
+});
+
+describe("a wheel that went quiet", () => {
+  test("short of halfway the thing drops back, however fast it got there", () => {
+    expect(leftAt(roll(times(8, [0, 40]), 16), FAR)).toBe(0);
+    expect(leftAt(roll(times(30, [0, 5]), 16), FAR)).toBe(0);
+  });
+  test("carried past halfway it goes the rest of the way, the way it was carried", () => {
+    expect(leftAt(roll(times(90, [0, 5]), 16), FAR)).toBeLessThan(0);
+    expect(leftAt(roll(times(90, [0, -5]), 16), FAR)).toBeGreaterThan(0);
+  });
+  test("sideways leaves nothing to decide", () => {
+    expect(leftAt(roll(times(30, [40, 0]), 16), FAR)).toBe(0);
   });
 });
 

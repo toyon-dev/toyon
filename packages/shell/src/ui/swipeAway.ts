@@ -46,20 +46,37 @@ export const flung = (speed: number): boolean => Math.abs(speed) >= FLING;
 
 /**
  * A wheel event added to its gesture: two fingers on a trackpad, or a mouse wheel. The thing goes
- * the way the page under the fingers would, which is against the delta.
+ * the way the page under the fingers would, which is against the delta, and only as far as the
+ * wheel takes it.
  *
- * A wheel never says it was let go, so the throw is called in flight: `thrown` is the speed, the
- * moment the travel reaches a throw's. Slower than that the thing follows, and the caller drops it
- * back once the wheel has been quiet for `ROLL_IDLE_MS`. A trackpad's momentum arrives as more of
- * the same events, so a drag let go slowly carries on a little and still drops back.
+ * A wheel never says it was let go, so nothing here guesses that it was: fingers still down and
+ * moving fast are a drag, not a throw. What stands in for the letting go is `far`, how far the
+ * thing has to be carried before it is not coming back. A throw is what a trackpad's momentum
+ * does after the fingers lift, more of the same events, and `thrown` is the speed once they have
+ * carried the thing past `far` still going at a throw's speed. Short of that it follows, and
+ * `leftAt` says what becomes of it when the wheel goes quiet.
  */
-export function rolled(r: Roll, e: { deltaX: number; deltaY: number }, now: number): { next: Roll; thrown: number } {
+export function rolled(
+  r: Roll,
+  e: { deltaX: number; deltaY: number },
+  now: number,
+  far: number,
+): { next: Roll; thrown: number } {
   const dx = r.dx - e.deltaX;
   const dy = r.dy - e.deltaY;
   const axis = r.axis ?? swipeAxis({ dx, dy });
   const samples = [...r.samples, { y: dy, t: now }].slice(-SAMPLES);
-  const speed = axis === "away" ? releaseSpeed(samples, now) : 0;
-  return { next: { dx, dy, axis, samples }, thrown: flung(speed) ? speed : 0 };
+  const next = { dx, dy, axis, samples };
+  const speed = axis === "away" && Math.abs(dy) >= far ? releaseSpeed(samples, now) : 0;
+  // going further out, not on its way back
+  const thrown = flung(speed) && Math.sign(speed) === Math.sign(dy);
+  return { next, thrown: thrown ? speed : 0 };
+}
+
+/** Where a wheel that went quiet left the thing: carried past `far` it goes the rest of the way,
+ * and the answer is the speed it goes at, signed; short of that it is 0, and the thing drops back. */
+export function leftAt(r: Roll, far: number): number {
+  return r.axis === "away" && Math.abs(r.dy) >= far ? Math.sign(r.dy) * FLING : 0;
 }
 
 /** How long the throw takes to carry the thing the rest of the way off, at the speed it was let go. */

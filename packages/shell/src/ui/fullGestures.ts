@@ -1,5 +1,15 @@
 import { type RefObject, useEffect, useRef } from "react";
-import { flung, leaveMs, NO_ROLL, ROLL_IDLE_MS, releaseSpeed, rolled, type Sample, swipeAxis } from "./swipeAway.ts";
+import {
+  flung,
+  leaveMs,
+  leftAt,
+  NO_ROLL,
+  ROLL_IDLE_MS,
+  releaseSpeed,
+  rolled,
+  type Sample,
+  swipeAxis,
+} from "./swipeAway.ts";
 import {
   about,
   type Bounds,
@@ -49,11 +59,13 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * the close button and Escape still do. A double click, and a trackpad pinch or ctrl and the
  * wheel, are the same gestures from a desk; the wheel alone pans a zoomed picture.
  *
- * The wheel alone on a picture at rest is the throw from a desk: two fingers on a trackpad carry
- * it up or down, and it drops back once they are still. A wheel never says it was let go, so the
- * throw is called while it is still turning (`rolled`), and the box then stays, drawn empty, for
- * as long as the wheel keeps sending: a trackpad's momentum outlasts the flight, and with the box
- * gone it would scroll whatever was under the picture.
+ * The wheel alone on a picture at rest is the same from a desk: two fingers on a trackpad carry
+ * it up or down, exactly as far as they go. A wheel never says it was let go, so nothing flies
+ * while the fingers could still be on it. Lifted at speed, the trackpad's own momentum carries the
+ * picture on, and past halfway, where the scrim has cleared, it is thrown the rest of the way
+ * (`rolled`). Once the wheel is quiet the picture drops back, or goes if it was left past halfway
+ * (`leftAt`). The box then stays, drawn empty, for as long as the wheel keeps sending: momentum
+ * outlasts the flight, and with the box gone it would scroll whatever was under the picture.
  *
  * Only a touch that starts on something `grip` matches, or on the box's own scrim, is taken: text
  * in the box scrolls and selects under a finger. And only at the window's own scale, since on a
@@ -102,6 +114,9 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
         bounds: { w, h, W: el.clientWidth, H: el.clientHeight, max: maxScale(natural, w) },
       };
     };
+    // how far the picture is carried before the scrim has cleared, which for a wheel is also
+    // where it is not coming back
+    const far = () => window.innerHeight / 2;
     const put = (y: number, state: "drag" | "settle" | "leave", ms?: number) => {
       if (ms !== undefined) el.style.setProperty("--swipe-ms", `${ms}ms`);
       if (el.dataset.swipe !== state) {
@@ -111,7 +126,7 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
         void el.offsetWidth;
       }
       el.style.setProperty("--swipe-y", `${y}px`);
-      el.style.setProperty("--swipe-fade", `${Math.min(1, Math.abs(y) / (window.innerHeight / 2))}`);
+      el.style.setProperty("--swipe-fade", `${Math.min(1, Math.abs(y) / far())}`);
     };
     const rest = () => {
       el.style.removeProperty("--swipe-y");
@@ -263,11 +278,13 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       samples = [];
       leave(dy, speed, e.timeStamp);
     };
-    // the wheel went quiet: what it was carrying is put down
+    // the wheel went quiet: what it was carrying is put down, or goes if it was left far enough out
     const still = () => {
-      const carried = roll.axis === "away";
+      const was = roll;
       roll = NO_ROLL;
-      if (!carried) return;
+      if (was.axis !== "away") return;
+      const speed = leftAt(was, far());
+      if (speed) return leave(was.dy, speed, performance.now());
       put(0, "settle");
       timer = window.setTimeout(rest, SETTLE_MS);
     };
@@ -301,7 +318,7 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
         // from the gesture's first event: a wheel the page let go once is not its to cancel later
         e.preventDefault();
         window.clearTimeout(rollTimer);
-        const r = rolled(roll, e, e.timeStamp);
+        const r = rolled(roll, e, e.timeStamp, far());
         roll = r.next;
         if (roll.axis === "away") {
           window.clearTimeout(timer);

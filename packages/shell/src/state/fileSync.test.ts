@@ -223,6 +223,19 @@ describe("the open file and the disk", () => {
     expect(h.last("write-file")).toMatchObject({ content: "abc", base: "v2" });
   });
 
+  test("a save with nothing edited writes nothing, nor does one after an edit undone", () => {
+    const h = harness();
+    h.open("x.ts");
+    h.read({ after: "a" });
+    const b = h.attach("x.ts", "a");
+    h.sync.bind({ worktreeId: "a", path: "x.ts" }).saveNow();
+    h.edit("x.ts", b, "ab");
+    h.edit("x.ts", b, "a");
+    h.timers.pass();
+    h.win.fire("pagehide");
+    expect(h.count("write-file")).toBe(0);
+  });
+
   test("the page going saves an edit still inside the pause", () => {
     const h = harness();
     h.open("x.ts");

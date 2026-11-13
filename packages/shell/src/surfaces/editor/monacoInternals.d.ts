@@ -92,15 +92,6 @@ declare module "monaco-editor/languages/features/typescript/tsMode.js" {
     constructor(libFiles: LibFiles, worker: Worker);
     provideRenameEdits: monaco.languages.RenameProvider["provideRenameEdits"];
   }
-  export class FormatAdapter implements monaco.languages.DocumentRangeFormattingEditProvider {
-    constructor(worker: Worker);
-    provideDocumentRangeFormattingEdits: monaco.languages.DocumentRangeFormattingEditProvider["provideDocumentRangeFormattingEdits"];
-  }
-  export class FormatOnTypeAdapter implements monaco.languages.OnTypeFormattingEditProvider {
-    constructor(worker: Worker);
-    autoFormatTriggerCharacters: string[];
-    provideOnTypeFormattingEdits: monaco.languages.OnTypeFormattingEditProvider["provideOnTypeFormattingEdits"];
-  }
   export class CodeActionAdaptor implements monaco.languages.CodeActionProvider {
     constructor(worker: Worker);
     provideCodeActions: monaco.languages.CodeActionProvider["provideCodeActions"];

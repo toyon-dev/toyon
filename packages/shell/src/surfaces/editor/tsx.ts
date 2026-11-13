@@ -3,6 +3,7 @@
 // The price of a second language is that Monaco wires its TypeScript features (hover, completions,
 // syntax errors) to `typescript` by name. The worker behind them reads any file it is handed, so
 // the same adapters are registered here for `typescriptreact`, over the one worker `typescript` has.
+// All but the two that format: no language in the pane has a formatter (formatting.ts).
 
 import * as monaco from "monaco-editor";
 import { conf } from "monaco-editor/languages/definitions/typescript/typescript.js";
@@ -11,8 +12,6 @@ import {
   DefinitionAdapter,
   DiagnosticsAdapter,
   DocumentHighlightAdapter,
-  FormatAdapter,
-  FormatOnTypeAdapter,
   InlayHintsAdapter,
   LibFiles,
   OutlineAdapter,
@@ -50,8 +49,6 @@ export function registerTsx() {
     if (on.references) l.registerReferenceProvider(TSX, new ReferenceAdapter(libFiles, worker));
     if (on.documentSymbols) l.registerDocumentSymbolProvider(TSX, new OutlineAdapter(worker));
     if (on.rename) l.registerRenameProvider(TSX, new RenameAdapter(libFiles, worker));
-    if (on.documentRangeFormattingEdits) l.registerDocumentRangeFormattingEditProvider(TSX, new FormatAdapter(worker));
-    if (on.onTypeFormattingEdits) l.registerOnTypeFormattingEditProvider(TSX, new FormatOnTypeAdapter(worker));
     if (on.codeActions) l.registerCodeActionProvider(TSX, new CodeActionAdaptor(worker));
     if (on.inlayHints) l.registerInlayHintsProvider(TSX, new InlayHintsAdapter(worker));
     if (on.diagnostics) new DiagnosticsAdapter(libFiles, defaults, TSX, worker);

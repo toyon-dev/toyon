@@ -23,6 +23,7 @@ import type { Placement, Rect } from "../../ui/place.ts";
 import { blameCommit, blameLine } from "./blameLine.ts";
 import { SPLIT_MIN } from "./DiffSeats.tsx";
 import { diffFit, FOLD_MIN, type Hunk, type Pane } from "./diffFit.ts";
+import { NO_FORMAT, withoutFormatters } from "./formatting.ts";
 import { registerGrammars } from "./grammar.ts";
 import { minimalEdit } from "./minimalEdit.ts";
 import { registerMenus } from "./monacoMenu.ts";
@@ -78,6 +79,7 @@ for (const d of [typescriptDefaults, javascriptDefaults]) {
     noEmit: true,
   });
   d.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false, noSuggestionDiagnostics: true });
+  d.setModeConfiguration(withoutFormatters(d.modeConfiguration));
 }
 
 /** The shell's own mono ramp, read off the root element rather than restated here, so the editor
@@ -160,6 +162,7 @@ function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
     // shipping six more colours; with them off a bracket is punctuation, which is what the
     // chat log's own diffs already draw, so a file reads the same on both surfaces
     bracketPairColorization: { enabled: false },
+    ...NO_FORMAT,
   };
 }
 

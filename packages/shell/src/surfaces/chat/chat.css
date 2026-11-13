@@ -1146,16 +1146,14 @@
     }
     /* the word stands on the sentence's first line, not the middle of the block: a sentence that
        wraps on a phone is two lines, and a word centred between them floated off both. Each part
-       keeps the row's own line box, so on one line nothing moves. The gap is the face's own word
-       space: the word leads into the sentence rather than standing off from it. The band
-       spans the log but what it says keeps to a measure: the press stands at the far end of the
-       line, and in a wide chat that end was a chat's width from a short sentence. A dock is
-       narrower than the measure, so there the far end is the row's own. */
+       keeps the row's own line box, so on one line nothing moves. The gap is the row's own inset,
+       the room between the edge and the glyph: the word is a column, and a gutter that matches
+       the one on its other side reads as one. Nearer a word space, the word ran into its
+       sentence; between the two, it read as a mistake. */
     & .daemon-head {
       display: flex;
       align-items: flex-start;
-      gap: 3px;
-      max-width: 440px;
+      gap: var(--row-inset);
     }
     /* the sentence and the lines under it, as one column beside the word */
     & .daemon-body {

@@ -71,7 +71,7 @@ const ICON_PATHS: Record<IconName, string> = {
   zen: "M2 6V3a1 1 0 0 1 1-1h3 M10 2h3a1 1 0 0 1 1 1v3 M14 10v3a1 1 0 0 1-1 1h-3 M6 14H3a1 1 0 0 1-1-1v-3",
   back: "M9.5 3.5 5 8l4.5 4.5",
   forward: "M6.5 3.5 11 8l-4.5 4.5",
-  reload: "M13.5 2.5v3.5H10 M12.4 9.2a4.8 4.8 0 1 1-1-4.9l2.1 1.7",
+  reload: "M13.2 3.1v3.5H9.7 M12.1 9.8a4.8 4.8 0 1 1-1-4.9l2.1 1.7",
   // crosshair: ring with four ticks
   pick: "M8 4.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 1 0 0-7.6z M8 1.5v2.7 M8 11.8v2.7 M1.5 8h2.7 M11.8 8h2.7",
   // a pointer over a box left open at its corner: the devtools element select, which is what ⌘I is.
@@ -115,14 +115,14 @@ const ICON_PATHS: Record<IconName, string> = {
   copy: "M5.5 5.5h8v8h-8z M10.5 5.5v-3h-8v8h3",
   // plain down arrow: bring work from elsewhere into this worktree, main's commits or another
   // worktree's chat (download has the tray, and means saving a file)
-  pull: "M8 3.2v7.4 M4.9 7.4 8 10.6l3.1-3.2",
+  pull: "M8 4.3v7.4 M4.9 8.5 8 11.7l3.1-3.2",
   text: "M3.5 3.5h9 M3.5 6.5h9 M3.5 9.5h9 M3.5 12.5h5",
   // `text` with its second line turning back under itself: a long line folded at the edge
-  wrap: "M3.5 4h9 M3.5 8h7a2 2 0 0 1 0 4H8 M9.5 10.5 8 12l1.5 1.5 M3.5 12h2.5",
+  wrap: "M3.5 3.5h9 M3.5 7.5h7a2 2 0 0 1 0 4H8 M9.5 10 8 11.5l1.5 1.5 M3.5 11.5h2.5",
   // a sheet with a turned corner: a file as a thing handed over, where `text` is what one holds
   file: "M4.5 2.5h4.5l2.5 2.5v8.5h-7z M9 2.5V5h2.5",
   // a plus over a minus: what changed in a file, where `text` is the file itself
-  diff: "M8 2.8v5 M5.5 5.3h5 M5.5 11.2h5",
+  diff: "M8 3.8v5 M5.5 6.3h5 M5.5 12.2h5",
   // a folder with its tab: somewhere on disk, as opposed to a project the daemon already knows
   folder: "M2.2 3.9a1 1 0 0 1 1-1h2.9l1.5 1.7h5.2a1 1 0 0 1 1 1v5.9a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1z",
   // an open book: a file the agent read but did not change (edit is the pencil). A sheet with a
@@ -135,14 +135,14 @@ const ICON_PATHS: Record<IconName, string> = {
   trash:
     "M3.6 4.6h8.8 M6.4 4.6V3.2a.7.7 0 0 1 .7-.7h1.8a.7.7 0 0 1 .7.7v1.4 M5 4.6l.55 8.1a.9.9 0 0 0 .9.84h3.1a.9.9 0 0 0 .9-.84L11 4.6",
   // one arrow across the box: a file leaving one path for another
-  move: "M2.8 8h9.2 M8.9 4.9 12 8l-3.1 3.1",
+  move: "M3.4 8h9.2 M9.5 4.9 12.6 8l-3.1 3.1",
   search: "M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 1 0 0-9.2z M10.5 10.5 13.5 13.5",
   // a bare prompt: the chevron and cursor of `terminal` without the pane, so a run row and the
   // terminal button do not read as the same control
   run: "M3.4 4.2 7.6 8l-4.2 3.8 M9 11.8h4",
   // a slash command at the prompt: `run`'s cursor line with a slash in the chevron's place, for a
   // skill, which is typed as /name. Not two stacked panes: at 13px those are `copy` mirrored
-  slash: "M8.4 3.2 4.6 12.2 M9.6 11.8h3.4",
+  slash: "M7.8 3.2 4 12.2 M9 11.8h3.4",
   // a bulb for a thought: the glass as one arc over two shoulders, the base as one line under
   // it. At 13px a filament or a second base line is a smudge, so there is neither.
   bulb: "M4.8 8.8a4 4 0 1 1 6.4 0L9.5 10.6v1.4H6.5v-1.4z M6.7 13.8h2.6",
@@ -173,7 +173,7 @@ const ICON_PATHS: Record<IconName, string> = {
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
   // another tool holds this worktree. The shackle is drawn closed: a lock that reads as open says
   // the opposite of what the row means.
-  lock: "M4.4 7.3h7.2v6.1H4.4z M6.2 7.3V5.5a1.8 1.8 0 0 1 3.6 0v1.8",
+  lock: "M4.4 6.8h7.2v6.1H4.4z M6.2 6.8V5a1.8 1.8 0 0 1 3.6 0v1.8",
   // a phone: a tall rounded body and a short bar at its foot, which is what keeps it from reading
   // as a document at 16px
   phone:
@@ -185,7 +185,7 @@ const ICON_PATHS: Record<IconName, string> = {
   // edge. The screen's outline stops where the phone covers it, since two closed boxes crossing
   // read as a window over a window at 16px; the phone keeps its foot bar so it stays a phone
   devices:
-    "M8.8 11.2H3.2a1 1 0 0 1-1-1V4.2a1 1 0 0 1 1-1h8.8a1 1 0 0 1 1 1v1.3 M4.6 13.6h4.2 M10.6 6.9h3a.9.9 0 0 1 .9.9v5a.9.9 0 0 1-.9.9h-3a.9.9 0 0 1-.9-.9v-5a.9.9 0 0 1 .9-.9z M11.6 12.1h1",
+    "M8.5 10.8H2.9a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1h8.8a1 1 0 0 1 1 1v1.3 M4.3 13.2h4.2 M10.3 6.5h3a.9.9 0 0 1 .9.9v5a.9.9 0 0 1-.9.9h-3a.9.9 0 0 1-.9-.9v-5a.9.9 0 0 1 .9-.9z M11.3 11.7h1",
   // a pull request: the branch glyph's left rail, and a second rail arriving from the right with
   // an arrowhead, which is the one thing that separates it from `branch` at 16px
   pr: "M4.5 5.1v5.8 M4.5 1.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M4.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 1 0 0-3.2z M11.5 10.9V6.6a2 2 0 0 0-2-2H8 M9.6 2.9 7.9 4.6l1.7 1.7",

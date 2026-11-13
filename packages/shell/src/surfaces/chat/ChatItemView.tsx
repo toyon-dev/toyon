@@ -1453,9 +1453,10 @@ export const ChatItemView = memo(function ChatItemView({
   }
 });
 
-/** the plan the person decided, read back as the document: the row goes by the plan's own title,
- * as the composer's row over the box does, since the file is the agent's and named by it; the path
- * is in the tip and the menu, where the composer's row keeps it, and the press opens the file. */
+/** the plan the person decided, read back as the document: the row goes by the plan's own title
+ * and wears its glyph, as the composer's row over the box does, since the file is the agent's and
+ * named by it; the path is in the tip and the menu, where the composer's row keeps it, and the
+ * press opens the file. */
 function PlanRow({ file, worktreeId }: { file: string; worktreeId?: string | null }) {
   const sock = useSock();
   const dispatch = useDispatch();
@@ -1463,7 +1464,7 @@ function PlanRow({ file, worktreeId }: { file: string; worktreeId?: string | nul
   const title = usePlanTitle(worktreeId ?? undefined, file);
   return (
     <DaemonRow
-      icon="file"
+      icon="text"
       word="plan"
       tone="quiet"
       {...cm.contextMenu(() =>

@@ -1452,14 +1452,14 @@ export function Composer({
           <Icon name={plan ? "text" : "handoff"} className="icon-inline" />
           {plan && (
             <Button
-              variant="inline"
+              variant="word"
               className="composer-plan-path"
               data-tip={plan}
               onClick={() =>
                 openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
               }
             >
-              <span className="composer-plan-title">{planLabel}</span>
+              {planLabel}
             </Button>
           )}
           {born && (

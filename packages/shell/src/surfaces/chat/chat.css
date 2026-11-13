@@ -1184,10 +1184,9 @@
       overflow-wrap: anywhere;
     }
     /* The row's one press, at its far end, on the sentence's first line: a word or two that keeps
-       its width and its one line while the sentence wraps beside it. */
+       its width while the sentence wraps beside it. */
     & .daemon-press {
       flex: none;
-      white-space: nowrap;
     }
     /* the rows a card in the transcript offers (the flip's), under the sentence: at the row's own
        face, since a card's rows at the card's size stood a tier above the sentence they answer,
@@ -1264,37 +1263,10 @@
       flex: none;
       margin-right: 6px;
     }
-    /* The title's dotted line is a box and not the text's decoration. A mention stands beside it
-       on this line under a solid underline, and the browser snaps a dotted decoration and a
-       solid one to the device's pixels by different rules, so at 2x the two sat a device pixel
-       apart on half the heights the line can land on, whatever the offset. A box is snapped as
-       the solid line is. The button is one grid cell holding the title and the line, both on
-       the baseline: an empty box's baseline is its foot, so the line's foot starts level with
-       the letters' feet and is let down onto the mention's row, two pixels under and one thick. */
+    /* the title is the one part of the line that gives up width, and ends in the ellipsis the
+       word it is drawn as keeps for that */
     & .composer-plan-path {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      align-items: baseline;
       min-width: 0;
-      text-decoration: none;
-      &::after {
-        content: "";
-        grid-area: 1 / 1;
-        height: 1px;
-        position: relative;
-        top: 3px;
-        background: repeating-linear-gradient(to right, var(--border1) 0 1px, transparent 1px 2px);
-      }
-      :where([data-hover]) &:hover::after {
-        background: currentColor;
-      }
-    }
-    & .composer-plan-title {
-      grid-area: 1 / 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     /* the row it was born from keeps its words whole however short the line: the plan's title is
        what gives, since the mark is the way back and the title is restated in the pane. "from" is
@@ -1489,10 +1461,13 @@
     font: inherit;
     text-decoration-thickness: 1px;
   }
-  /* A word to press on a line of the chat stands beside a mention or a link, so its underline is
-     cut to theirs: two pixels under the baseline and one thick. The button's own offset and the
-     face's weight both scale with the type, and the dotted line then lands a fraction of a pixel
-     off the solid one next to it. */
+  /* Words to press that wrap with a sentence of the chat keep the text's own dotted line, cut to
+     a mention's or a link's: two pixels under the baseline and one thick. The button's own
+     offset and the face's weight both scale with the type, and the dotted line then lands a
+     fraction of a pixel off the solid one next to it. Cut this way the two agree at 1x and 3x;
+     at 2x the dotted one can still sit a device pixel high, which only a line drawn as a box
+     closes, and a box holds one line: a press that shares its line with a mention is the
+     button's `word`. */
   .chat-log .btn-inline {
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;

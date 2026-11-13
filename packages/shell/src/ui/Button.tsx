@@ -15,7 +15,7 @@ import "./button.css";
  * styles/button.test.ts holds that line.
  */
 export type ButtonSize = "sm" | "md" | "lg";
-export type ButtonVariant = "ghost" | "outline" | "field" | "inline";
+export type ButtonVariant = "ghost" | "outline" | "field" | "inline" | "word";
 export type ButtonTone = "primary" | "quiet" | "danger" | "strong" | "chrome";
 
 const SIZE: Record<ButtonSize, string> = {
@@ -36,6 +36,9 @@ const VARIANT: Record<ButtonVariant, string> = {
   field: "btn-outline btn-field",
   /** a word in a sentence that can be pressed: the sentence's own face and colour, and no box */
   inline: "btn-inline",
+  /** the inline word kept whole on one line, where it stands beside a mention or a link: its
+   * dotted line is drawn on the row their underline sits on, which a line that wraps cannot be */
+  word: "btn-inline btn-word",
 };
 
 const TONE: Record<ButtonTone, string> = {
@@ -101,7 +104,9 @@ export function Button({
   return (
     <button className={cls} type={type} disabled={busy || disabled} aria-busy={busy || undefined} {...rest}>
       {busy && <Spinner />}
-      {children}
+      {/* the word's label is an element: it shares a grid cell with the line drawn under it, and
+          bare text cannot be placed in a cell that is already taken */}
+      {variant === "word" ? <span className="btn-word-label">{children}</span> : children}
     </button>
   );
 }

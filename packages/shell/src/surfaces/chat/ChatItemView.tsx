@@ -1476,6 +1476,8 @@ function PlanRow({ file, worktreeId }: { file: string; worktreeId?: string | nul
       )}
     >
       <span className="daemon-text">
+        {/* inline and not the row's `word`: a plan's title is a sentence that wraps where the
+            dock is narrow, and it is alone on its line, with no solid underline to sit level with */}
         <Button
           variant="inline"
           data-tip={file}

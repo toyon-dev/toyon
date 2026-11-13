@@ -135,6 +135,42 @@
       text-decoration: underline solid currentColor;
     }
   }
+  /* variant: word is the inline word kept whole on one line, for a press that stands beside a
+   mention or a link. Its dotted line is a box and not the text's decoration: the browser snaps
+   a dotted decoration and a solid one to the device's pixels by different rules, so at 2x the
+   two sat a device pixel apart on half the heights a line can land on, whatever the offset. A
+   box is snapped as the solid line is. The button is one grid cell holding the label and the
+   line, both on the baseline: an empty box's baseline is its foot, so the line's foot starts
+   level with the letters' feet and is let down onto the row a mention's underline is pinned to,
+   two pixels under the baseline and one thick. A cell holds one line, which is why the word
+   cannot wrap; given less room than it needs, the label ends in an ellipsis. */
+  .btn-word {
+    display: inline-grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: baseline;
+    white-space: nowrap;
+    text-decoration: none;
+    & > .btn-word-label {
+      grid-area: 1 / 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    &::after {
+      content: "";
+      grid-area: 1 / 1;
+      height: 1px;
+      position: relative;
+      top: 3px;
+      background: repeating-linear-gradient(to right, var(--border1) 0 1px, transparent 1px 2px);
+    }
+    :where([data-hover]) &:hover {
+      text-decoration: none;
+      &::after {
+        background: currentColor;
+      }
+    }
+  }
 
   /* tone: colour only, never the box. Each is the resting colour; `on` is handled below. */
   .tone-primary {

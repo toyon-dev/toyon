@@ -30,6 +30,7 @@ const PRIMITIVES = new Set([
   ".btn-outline",
   ".btn-field",
   ".btn-inline",
+  ".btn-word",
   ".btn-mono",
   ".tone-primary",
   ".tone-quiet",

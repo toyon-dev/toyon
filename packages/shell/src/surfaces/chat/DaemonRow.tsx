@@ -77,7 +77,7 @@ export function DaemonRow({ icon, word, tone, at, below, under, press, children,
             {children}
             {press && (
               <Button
-                variant="inline"
+                variant="word"
                 tone={press.act ? "strong" : undefined}
                 className="daemon-press"
                 data-tip={press.tip}

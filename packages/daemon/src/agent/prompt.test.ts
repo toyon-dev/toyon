@@ -6,6 +6,8 @@ import {
   fileCaption,
   handedPrompt,
   handoffActedPrompt,
+  handoffDeclinedContext,
+  handoffDeclinedPrompt,
   pasteCaption,
   pickCaption,
   pieceAskPrompt,
@@ -284,6 +286,32 @@ describe("handoff prompts", () => {
       ),
     ).toBe(
       'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Expiry" waits for toyon/rail to land and then starts in its own worktree. Do "Persist" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself.',
+    );
+  });
+
+  test("the note typed with go comes last, after the word on the siblings", () => {
+    expect(
+      handoffActedPrompt(
+        [{ id: "p1", title: "Expiry" }],
+        [{ pieceId: "p1", fate: "worktree" }],
+        "card",
+        "use the v2 API",
+      ),
+    ).toBe(
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Expiry" started in a sibling worktree of this project. Nothing on the list is yours here. The siblings read the list at its path in this worktree; never do their pieces yourself. The person added: use the v2 API',
+    );
+  });
+
+  test("a card that closed with nothing started: not now, with or without words, and a go that broke off", () => {
+    const pieces = [{ title: "Persist" }, { title: "Expiry" }];
+    const notNow =
+      'The person answered the handoff card with not now: nothing on the list you handed over ("Persist", "Expiry") was started, and none of it is yours to do from that list.';
+    expect(handoffDeclinedContext(pieces)).toBe(notNow);
+    expect(handoffDeclinedPrompt(pieces, "one branch")).toBe(
+      `${notNow} They added: one branch\n\nRead that as the word on what to change. Hand over a new list with the handoff tool if a split still fits, or go on without one.`,
+    );
+    expect(handoffDeclinedContext(pieces, "Toyon stopped while the worktrees were being made.")).toBe(
+      'Toyon could not finish acting on the list you handed over ("Persist", "Expiry"): Toyon stopped while the worktrees were being made. A piece may not have started; say so, and hand it over again if the split still fits.',
     );
   });
 

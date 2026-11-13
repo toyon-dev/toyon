@@ -296,7 +296,8 @@ export function handoffActedPrompt(
         ? " The siblings read the list at its path in this worktree; never do their pieces yourself."
         : "";
     const said = note ? ` The person added: ${note}` : "";
-    return `The person answered the handoff card, and Toyon acted on the pieces you handed over${acted}. ${own}${said}${siblings}`;
+    // the note goes last: it is the person's own words, with no full stop promised
+    return `The person answered the handoff card, and Toyon acted on the pieces you handed over${acted}. ${own}${siblings}${said}`;
   }
   return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
 }
@@ -305,8 +306,19 @@ export function handoffActedPrompt(
  * on the list started, and the words are what to change. Sent once its turn ends, since the card
  * goes up as the handoff call answers. */
 export function handoffDeclinedPrompt(pieces: ReadonlyArray<{ title: string }>, note: string): string {
+  return `${handoffDeclinedContext(pieces)} They added: ${note}\n\nRead that as the word on what to change. Hand over a new list with the handoff tool if a split still fits, or go on without one.`;
+}
+
+/** A card that closed with nothing started, as the agent's next prompt says it when no message of
+ * Toyon's did: not now pressed with no words, or, with `failed`, a go that broke off, where a
+ * piece reached before the break may have started. The agent ended its turn on the offer and
+ * would otherwise speak of the pieces as on their way. */
+export function handoffDeclinedContext(pieces: ReadonlyArray<{ title: string }>, failed?: string): string {
   const titles = pieces.map((p) => `"${p.title}"`).join(", ");
-  return `The person answered the handoff card with not now: nothing on the list you handed over (${titles}) was started, and none of it is yours to do from that list. They added: ${note}\n\nRead that as the word on what to change. Hand over a new list with the handoff tool if a split still fits, or go on without one.`;
+  if (failed === undefined) {
+    return `The person answered the handoff card with not now: nothing on the list you handed over (${titles}) was started, and none of it is yours to do from that list.`;
+  }
+  return `Toyon could not finish acting on the list you handed over (${titles}): ${failed.replace(/\.$/, "")}. A piece may not have started; say so, and hand it over again if the split still fits.`;
 }
 
 /** What rides behind a message sent with `toyon send` from a terminal: where the person was

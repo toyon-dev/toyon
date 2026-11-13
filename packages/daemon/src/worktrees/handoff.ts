@@ -816,8 +816,8 @@ export class HandoffService implements ToolProvider {
    * `reason` says what stopped the go. A held list has no file of its own, and the plan it sat on
    * is the agent's to rewrite now, so its pieces are written as a page the row keeps. `note` is
    * what the person typed with not now: the agent's turn ends without the answer, so the words
-   * start one, the way a plan card's no carries what to change. A bare not now tells it
-   * nothing, since a turn begun to say nothing happened is noise. */
+   * start one, the way a plan card's no carries what to change. A bare not now starts none,
+   * since a turn begun to say nothing happened is noise; the agent's next prompt says it. */
   async decline(worktreeId: string, id: string, reason?: string, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
@@ -858,7 +858,8 @@ export class HandoffService implements ToolProvider {
    * earlier in the same pass, which is why the order matters. `tell`: the list went with a plan's
    * yes, so the agent is about to build and is told what the list started elsewhere, steered into
    * that turn once the card's answer is on the wire. Toyon's own card is answered between turns,
-   * so the message starts one, and only when a piece is the agent's own to build now. */
+   * so the message starts one, and only when a piece is the agent's own to build now; any other
+   * answer rides the agent's next prompt (the session's `cardAnswered`). */
   async act(worktreeId: string, id: string, note?: string, tell = false): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;

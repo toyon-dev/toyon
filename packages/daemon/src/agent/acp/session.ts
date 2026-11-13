@@ -46,7 +46,14 @@ import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { adoptPicture, PICTURES_MAX, pictureLinks } from "../pictures.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import { ambientBlock, buildPrompt, pieceLandedContext, SYSTEM_APPEND } from "../prompt.ts";
+import {
+  ambientBlock,
+  buildPrompt,
+  handoffActedPrompt,
+  handoffDeclinedContext,
+  pieceLandedContext,
+  SYSTEM_APPEND,
+} from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
 import { isMessage, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
@@ -1277,15 +1284,16 @@ export class AcpSession implements AgentAdapter {
       this.d.preview?.(),
       this.d.tier?.(),
       this.d.pageErrors?.(),
-      ...this.landedSince(),
+      ...this.heardSince(),
     ]);
   }
 
-  /** One sentence per worktree this one handed work to that has landed since the message before
-   * this one. Derived from the transcript rather than kept: the message going out is the newest
-   * record on it, so the events between the one before and it are what this prompt is the first to
-   * carry, and the next prompt starts past them. */
-  private landedSince(): string[] {
+  /** What happened to this worktree's handed work since the message before this one, a sentence
+   * each: a worktree it handed work to landed, or the person answered its handoff card. Derived
+   * from the transcript rather than kept: the message going out is the newest record on it, so
+   * the events between the one before and it are what this prompt is the first to carry, and the
+   * next prompt starts past them. */
+  private heardSince(): string[] {
     const entries = this.log.entries;
     let i = entries.length - 1;
     while (i >= 0 && !isMessage(entries[i]!.event)) i--;
@@ -1293,11 +1301,36 @@ export class AcpSession implements AgentAdapter {
     for (i--; i >= 0; i--) {
       const e = entries[i]!.event;
       if (isMessage(e)) break;
-      if (e.type === "piece-landed") {
-        out.unshift(pieceLandedContext(e, this.d.chatOf?.(e.worktreeId)));
-      }
+      const said =
+        e.type === "piece-landed" ? pieceLandedContext(e, this.d.chatOf?.(e.worktreeId)) : this.cardAnswered(e);
+      if (said) out.unshift(said);
     }
     return out;
+  }
+
+  /** The answer to Toyon's own handoff card, where no message carried it to the agent: a go that
+   * kept nothing here to start on, a not now with no words, a go that broke off. The press starts
+   * no turn in those cases, since one begun to say "sent" repeats the row, so the agent would
+   * otherwise learn what became of its offer only by reading a sibling's files. Nothing for an
+   * answer that is its own message (a piece kept here, words typed with not now), for a list a
+   * plan card answered, which the plan's own reply and the steer after it cover, or for a list
+   * closed by anything but the person's press. */
+  private cardAnswered(e: AgentEvent): string | undefined {
+    if (e.type !== "handoff" && e.type !== "handoff-declined") return undefined;
+    const list = this.proposed(e.id);
+    // an agent without the tool handed nothing over: the list was the person's own, from the verb
+    if (!list || this.mcpTools === false) return undefined;
+    if (e.type === "handoff-declined" && e.outcome === "failed") return handoffDeclinedContext(list.pieces, e.reason);
+    const withPlan =
+      list.held && !this.log.entries.some(({ event }) => event.type === "handoff-shown" && event.id === e.id);
+    if (withPlan) return undefined;
+    if (e.type === "handoff-declined") {
+      // a reason is Toyon's own closing (handed over again, a card that went away), not an answer
+      return e.note || e.reason ? undefined : handoffDeclinedContext(list.pieces);
+    }
+    if (e.outcomes.some((o) => o.fate === "here" && !o.after)) return undefined;
+    const go = this.log.entries.findLast(({ event }) => event.type === "handoff-go" && event.id === e.id)?.event;
+    return handoffActedPrompt(list.pieces, e.outcomes, "card", go?.type === "handoff-go" ? go.note : undefined);
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn.

@@ -4199,6 +4199,121 @@ describe("AcpSession cards", () => {
     expect(texts[2]).toEqual(["three"]);
     await w.session.close();
   });
+
+  /** what Toyon attaches to the message after `events` were written since the one before it,
+   * for an agent that has Toyon's tools unless `tools` says not; the message after that one
+   * carries nothing */
+  async function heard(events: AgentEvent[], tools = true): Promise<string | undefined> {
+    const fake = tools ? fakeAgent(say("ok"), { mcpHttp: true }) : fakeAgent(say("ok"));
+    const w = world(fake, claudeSpec, 60_000, undefined, { mcp: mcpDep().mcp });
+    w.session.send("one");
+    await w.idle();
+    for (const e of events) w.session.note(e);
+    w.session.send("two");
+    await w.idle();
+    w.session.send("three");
+    await w.idle();
+    const texts = fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text));
+    expect(texts[1]![0]).toBe("two");
+    expect(texts[2]).toEqual(["three"]);
+    await w.session.close();
+    return texts[1]![1];
+  }
+  /** a two-piece list on Toyon's own card, or held for a plan card */
+  const list = (held?: true): AgentEvent => ({
+    type: "handoff-proposed",
+    id: "h1",
+    pieces: [
+      { id: "p1", title: "Fix it", plan: "do it there", attachments: [], fate: "send" },
+      { id: "p2", title: "Docs", plan: "write them", attachments: [], fate: "worktree" },
+    ],
+    mode: held ? "plan" : "auto",
+    ...(held ? { held } : {}),
+    ts: 1,
+  });
+  const went: AgentEvent = {
+    type: "handoff",
+    id: "h1",
+    outcomes: [
+      { pieceId: "p1", fate: "send", worktreeId: "b", title: "Composer" },
+      { pieceId: "p2", fate: "worktree", after: "toyon/fix" },
+    ],
+    ts: 3,
+  };
+
+  test("a go on a handoff card that kept nothing here rides on the next prompt once, with the note", async () => {
+    expect(await heard([list(), { type: "handoff-go", id: "h1", note: "use v2", ts: 2 }, went])).toBe(
+      '[Attached by Toyon:\nThe person answered the handoff card, and Toyon acted on the pieces you handed over: "Docs" waits for toyon/fix to land and then starts in its own worktree; "Fix it" went to the open worktree "Composer". Nothing on the list is yours here. The siblings read the list at its path in this worktree; never do their pieces yourself. The person added: use v2]',
+    );
+  });
+
+  test("a skipped piece and one that could not start are said the same way", async () => {
+    const said = await heard([
+      list(),
+      { type: "handoff-go", id: "h1", ts: 2 },
+      {
+        type: "handoff",
+        id: "h1",
+        outcomes: [
+          { pieceId: "p1", fate: "skip" },
+          { pieceId: "p2", fate: "worktree", error: "no port" },
+        ],
+        ts: 3,
+      },
+    ]);
+    expect(said).toBe(
+      '[Attached by Toyon:\nThe person answered the handoff card, and Toyon acted on the pieces you handed over: "Fix it" was skipped by the person; "Docs" (no port) could not start. Nothing on the list is yours here.]',
+    );
+  });
+
+  test("a bare not now and a go that broke off are said; neither starts a turn", async () => {
+    expect(await heard([list(), { type: "handoff-declined", id: "h1", ts: 2 }])).toBe(
+      '[Attached by Toyon:\nThe person answered the handoff card with not now: nothing on the list you handed over ("Fix it", "Docs") was started, and none of it is yours to do from that list.]',
+    );
+    expect(
+      await heard([
+        list(),
+        { type: "handoff-go", id: "h1", ts: 2 },
+        { type: "handoff-declined", id: "h1", outcome: "failed", reason: "the project is no longer open", ts: 3 },
+      ]),
+    ).toBe(
+      '[Attached by Toyon:\nToyon could not finish acting on the list you handed over ("Fix it", "Docs"): the project is no longer open. A piece may not have started; say so, and hand it over again if the split still fits.]',
+    );
+  });
+
+  test("an answer that is its own message, a plan card's, or no answer at all adds nothing", async () => {
+    // a piece kept here starts the agent with what the list became
+    const here: AgentEvent = {
+      type: "handoff",
+      id: "h1",
+      outcomes: [
+        { pieceId: "p1", fate: "here" },
+        { pieceId: "p2", fate: "worktree" },
+      ],
+      ts: 3,
+    };
+    expect(await heard([list(), { type: "handoff-go", id: "h1", ts: 2 }, here])).toBeUndefined();
+    // words typed with not now are sent as a message
+    expect(await heard([list(), { type: "handoff-declined", id: "h1", note: "smaller", ts: 2 }])).toBeUndefined();
+    // the agent handed over again, which closes its earlier list
+    expect(
+      await heard([list(), { type: "handoff-declined", id: "h1", reason: "handed over again", ts: 2 }]),
+    ).toBeUndefined();
+    // a held list is answered by its plan card: the plan's reply and the steer after it say it
+    expect(await heard([list(true), { type: "handoff-go", id: "h1", ts: 2 }, went])).toBeUndefined();
+    expect(await heard([list(true), { type: "handoff-declined", id: "h1", ts: 2 }])).toBeUndefined();
+    // an agent without the tool handed nothing over: the list was the person's own
+    expect(await heard([list(), { type: "handoff-go", id: "h1", ts: 2 }, went], false)).toBeUndefined();
+  });
+
+  test("a held list shown as Toyon's own card is answered there, and said", async () => {
+    const said = await heard([
+      list(true),
+      { type: "handoff-shown", id: "h1", ts: 2 },
+      { type: "handoff-declined", id: "h1", ts: 3 },
+    ]);
+    expect(said).toContain("The person answered the handoff card with not now");
+  });
 });
 
 describe("AcpSession handoff", () => {

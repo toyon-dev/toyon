@@ -270,7 +270,8 @@
     }
     /* columns: zen centers over the 40px rail (bar pad 10 + 20px box, centre 20px); with the 20px
    gap the chat toggle's centre lands at 60px = rail 40 + dock pad 10 + picker half 10. With the
-   chat on the left the changes toggle takes that seat and the columns are the tools' alone. */
+   chat on the left the changes toggle takes that seat and the columns are the tools' alone. The
+   nav cluster keeps this same gap from the first tool (NAV_TOOLS_GAP_PX in navCluster.ts). */
     & .bar-tools {
       display: flex;
       align-items: center;

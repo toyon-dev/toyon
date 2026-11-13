@@ -1,6 +1,10 @@
-/** the widest the cluster gets, and the least it keeps clear of what stands beside it in the bar */
+/** the widest the cluster gets, and the least it keeps clear of the lead and of the centre's edges */
 export const NAV_MAX_PX = 520;
 export const NAV_GAP_PX = 8;
+/** The least it keeps clear of the tools: their own gap (`.bar-tools` in topbar.css). The cluster
+ * ends in an icon the size of theirs, so held against them it is the next seat in their row, and
+ * any nearer its last icon and their first read as a pair apart from the rest. */
+export const NAV_TOOLS_GAP_PX = 20;
 
 export type NavClusterInput = {
   winW: number;
@@ -21,7 +25,7 @@ export function navCluster({ winW, centre, leadRight, toolsLeft }: NavClusterInp
   const width = Math.max(0, Math.min(NAV_MAX_PX, Math.floor(winW * 0.4), room - 2 * NAV_GAP_PX));
   const centred = centre.left + (room - width) / 2;
   const min = leadRight + NAV_GAP_PX;
-  const max = toolsLeft - NAV_GAP_PX - width;
+  const max = toolsLeft - NAV_TOOLS_GAP_PX - width;
   // the lead wins when both cannot be had: the tools are icons that read under an overlap, a name is not
   const left = Math.max(Math.min(centred, max), min);
   return { left: Math.round(left), width };

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NAV_GAP_PX, NAV_MAX_PX, navCluster } from "./navCluster.ts";
+import { NAV_GAP_PX, NAV_MAX_PX, NAV_TOOLS_GAP_PX, navCluster } from "./navCluster.ts";
 
 const bar = { winW: 1400, leadRight: 180, toolsLeft: 1300 };
 const centre = (left: number, right: number) => ({ left, right });
@@ -26,9 +26,9 @@ describe("navCluster", () => {
     const c = navCluster({ ...bar, centre: centre(0, 400) });
     expect(c.left).toBeGreaterThanOrEqual(180 + NAV_GAP_PX);
   });
-  test("the tools hold it back from the right", () => {
+  test("the tools hold it back from the right, at their own gap", () => {
     const c = navCluster({ ...bar, toolsLeft: 900, centre: centre(0, 1400) });
-    expect(c.left + c.width).toBe(900 - NAV_GAP_PX);
+    expect(c.left + c.width).toBe(900 - NAV_TOOLS_GAP_PX);
   });
   test("when the lead and the tools cannot both be had, the lead is cleared", () => {
     const c = navCluster({ ...bar, toolsLeft: 700, centre: centre(0, 1400) });

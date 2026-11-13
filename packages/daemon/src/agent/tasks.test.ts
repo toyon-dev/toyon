@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorktreeInfo } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import type { AgentSpec } from "./registry.ts";
-import { makeLander, parseName, parsePieces, taskText } from "./tasks.ts";
+import { makeLander, parseName, parsePieces, piecesPrompt, taskText } from "./tasks.ts";
 
 describe("parsePieces", () => {
   test("a JSON array of titled sections with where and after; anything else dropped, capped at six", () => {
@@ -19,6 +19,16 @@ describe("parsePieces", () => {
     expect(parsePieces(null)).toBeNull();
     const many = Array.from({ length: 8 }, (_, i) => ({ title: `t${i}`, section: `s${i}`, where: "here" }));
     expect(parsePieces(JSON.stringify(many))).toHaveLength(6);
+  });
+});
+
+describe("piecesPrompt", () => {
+  test("asks for work the plan puts off, and shows the reader the plan's last section", () => {
+    const tail = "## Not in this plan\n\nThe archive comes after, as its own plan.";
+    const prompt = piecesPrompt(`# A long plan\n\n${"A step of the build, said at length.\n".repeat(700)}\n${tail}`);
+    expect(prompt).toContain("work it puts off until after this one");
+    expect(prompt).toContain("Something the plan only rules out");
+    expect(prompt.endsWith(tail)).toBe(true);
   });
 });
 

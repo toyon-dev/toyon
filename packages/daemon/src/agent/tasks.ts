@@ -79,8 +79,14 @@ export function lacksQuickModel(
   return offered.length > 0 && !offered.some((m) => m.id === quick);
 }
 
+/** How much of a plan the reader is shown. A plan names what it leaves for later in its last
+ * section, so the cut has to clear the plans people approve, which run to 27,000 characters. */
+const PLAN_READ_CHARS = 40_000;
+
 /** The pieces of a plan, read off its text when the agent handed none over: a JSON list of the
- * sections the plan itself marks as a separate branch, a sibling worktree or a follow-up. The
+ * sections the plan itself marks as a separate branch, a sibling worktree or a follow-up, and of
+ * the work it puts off until this branch is in, which a plan says in a sentence as often as in a
+ * section; what it only rules out is no piece. The
  * section is named by its heading so the piece's plan can be cut from the plan verbatim where it stands
  * alone, and the model writes one where it does not; `after` is only
  * "this" (waits for this branch to land) or a branch that exists, since a sibling not yet made has
@@ -88,10 +94,10 @@ export function lacksQuickModel(
 export const PIECES_SYSTEM = "You read plans and reply with only the requested JSON.";
 export const piecesPrompt = (markdown: string) =>
   [
-    "Below is a plan. List the parts of it the plan itself means to build apart from the rest: a step or section it marks as its own branch, a sibling worktree, a follow-up, or independent work. Also list the part it keeps in this worktree, if it says so.",
-    `Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a name for the part, ${NAME_SHAPE}, "section": the exact heading text of that part, "plan": the plan for that part's agent in markdown, from the plan's own words: what to build, why, the files, and what done looks like, 150 to 500 words, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land}.`,
-    "Reply with an empty array when the plan is one piece of work with no part set apart.",
-    `Plan:\n${markdown.slice(0, 12_000)}`,
+    "Below is a plan. List the parts of the work the plan itself means to be built apart from the rest: a step or section it marks as its own branch, a sibling worktree, a follow-up, or independent work, and work it puts off until after this one, to a later branch or a plan of its own, even where that is one sentence or one item of a list of what the plan leaves out. Something the plan only rules out, with no word that it is built later, is not a part. When you list any part, also list what the plan builds in this worktree, as one part.",
+    `Reply with ONLY a JSON array of 0 to 6 objects, each {"title": a name for the part, ${NAME_SHAPE}, "section": the exact heading text of that part, or of the section that names it, "plan": the plan for that part's agent in markdown, from the plan's own words: what to build, why, the files, and what done looks like, 150 to 500 words, "where": "worktree" or "here", "after": optional, "this" when the plan says the part waits for this branch to land or comes after it}.`,
+    "Reply with an empty array when the plan is one piece of work with no part set apart or put off.",
+    `Plan:\n${markdown.slice(0, PLAN_READ_CHARS)}`,
   ].join("\n");
 
 export interface ReadPiece {

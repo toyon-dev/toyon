@@ -21,11 +21,12 @@ import { spawnAcp } from "./transport.ts";
 // assumed: a wording change to the handoff sentences has no eval otherwise. Each case is a plan
 // request on a throwaway repo; the agent runs in plan mode with Toyon's MCP server serving the
 // real handoff tool (its schema and shape check, handoff.ts), and the run ends at the plan card.
-// Four reads per run: did it call the tool, before the card, with pieces the daemon accepts, and
-// did a piece go to a sibling (or, for one-piece work, was the tool left alone). Rates per arm are printed at the
+// Five reads per run: did it call the tool, before the card, with pieces the daemon accepts, did a
+// piece go to a sibling (or, for one-piece work, was the tool left alone), and, where the work is
+// put off rather than parallel, does that piece wait. Rates per arm are printed at the
 // end and written as JSON when TOYON_EVAL_OUT names a file; nothing is asserted about them, since
 // a run is a sample and the report is the point. Opt-in: it spends tokens on every run; a run
-// takes ten to thirty seconds, so the default three runs over four cases is a few minutes an arm.
+// takes ten to thirty seconds, so the default three runs over six cases is a few minutes an arm.
 //
 //   TOYON_TEST_HANDOFF_EVAL=1 bun test handoff.eval
 //   TOYON_EVAL_APPEND=/path/to/candidate.txt   a second arm, the whole SYSTEM_APPEND as it would read
@@ -63,8 +64,9 @@ interface Case {
   id: string;
   prompt: string;
   /** `split`: the work holds a piece a sibling could take in parallel, and the tool should carry it;
-   * `one`: a single piece of work, where a call would be the tool over-firing */
-  want: "split" | "one";
+   * `later`: the work holds a piece put off until this branch is in, which the tool should carry
+   * with `after` set; `one`: a single piece of work, where a call would be the tool over-firing */
+  want: "split" | "later" | "one";
 }
 
 /** Plan requests that read like a person's: none names the tool or says "split", since the rules
@@ -89,10 +91,22 @@ const CASES: Case[] = [
       "Plan how to change the heading in README.md to say Hello, then ask me to approve. One more thing, which is a different job and should not hold this up: a Makefile with test and lint targets would be good to have at some point.",
   },
   {
+    id: "staged brief",
+    want: "later",
+    prompt:
+      "Read this brief and propose a plan before any code, then ask me to approve it.\n\n# Word counter\n\nA command-line tool for this empty repo. `wc-tree <path>` prints a word count for each file under the path and a total. Later it grows a watch mode that counts again when a file changes, and an HTML report of the counts with a bar per file.\n\n## Open, to settle by using it\n- How the watch mode debounces a burst of saves.\n- Whether the report is one page or one per folder.\n\n## Suggested first cut\n1. src/cli.ts in TypeScript with the walk and the counts.\n2. Tests beside it.\n\nThen the watch mode, then the HTML report.\n\n## Done looks like\n`bun src/cli.ts .` prints a count per file and a total, and `bun test` passes.",
+  },
+  {
     id: "one file",
     want: "one",
     prompt:
       "Plan how to change README.md so it contains the single word hello, then ask me to approve. Keep the plan to two short lines.",
+  },
+  {
+    id: "ruled out",
+    want: "one",
+    prompt:
+      "Plan how to add a LICENSE file with the MIT text to this repo, then ask me to approve. Keep the plan short. Do not add a CONTRIBUTING.md or a code of conduct; this repo will not have them.",
   },
 ];
 
@@ -108,6 +122,8 @@ interface Outcome {
   beforeCard: boolean | null;
   /** the last accepted list, by where its pieces go */
   pieces: { here: number; worktree: number; send: number };
+  /** how many of its sibling pieces wait for something (`after`) */
+  waits: number;
   /** a plan card went up */
   card: boolean;
   /** the turn met an agent error */
@@ -197,7 +213,9 @@ async function run(arm: Arm, c: Case): Promise<Outcome> {
   // the agent's own work need not be a piece, so one piece for a sibling beside work it keeps is
   // a split as much as a list naming both
   const split = pieces.worktree + pieces.send >= 1;
-  const pass = c.want === "split" ? called && valid && beforeCard === true && split : !called;
+  const waits = last.filter((p) => p.where === "worktree" && !!p.after?.trim()).length;
+  const handed = called && valid && beforeCard === true && split;
+  const pass = c.want === "split" ? handed : c.want === "later" ? handed && waits >= 1 : !called;
   return {
     arm: arm.name,
     case: c.id,
@@ -206,6 +224,7 @@ async function run(arm: Arm, c: Case): Promise<Outcome> {
     valid,
     beforeCard,
     pieces,
+    waits,
     card: cardAt >= 0,
     error: events.some((e) => e.type === "agent-error"),
     pass,
@@ -219,7 +238,7 @@ const pct = (rows: Outcome[], f: (o: Outcome) => boolean) =>
 /** one line per arm and case, then one per arm: rates over the runs */
 function report(): string {
   const lines: string[] = [];
-  lines.push("arm        case          n  pass  called  valid  before card  split");
+  lines.push("arm        case          n  pass  called  valid  before card  split  waits");
   for (const arm of arms) {
     for (const c of CASES) {
       const rows = results.filter((r) => r.arm === arm.name && r.case === c.id);
@@ -233,6 +252,7 @@ function report(): string {
           pct(rows, (r) => r.valid).padStart(6),
           pct(rows, (r) => r.beforeCard === true).padStart(12),
           pct(rows, (r) => r.pieces.worktree + r.pieces.send >= 1).padStart(6),
+          pct(rows, (r) => r.waits >= 1).padStart(6),
         ].join(" "),
       );
     }

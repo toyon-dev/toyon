@@ -61,6 +61,8 @@ async function land(id: string, file: string) {
 const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
+const SHOWN_AWAY =
+  "Handed to the person as a card; they decide, and none of it is yours unless Toyon says they kept it here. Do not wait for their answer: go on with the work you already have that does not depend on it, and finish your turn when that is done.";
 const SHOWN_HERE =
   "Handed to the person as a card. This worktree holds no work yet, so the card leads with doing it here; they decide. Finish your turn.";
 
@@ -247,7 +249,7 @@ describe("the tool", () => {
     // line under the box
     expect(shown.pieces[1]!.after).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
     await w.handoff.answer(other.id, shown.id, false);
-    expect(await call(other.id, piece({ where: "send", to: "rail" }))).toEqual({ text: SHOWN });
+    expect(await call(other.id, piece({ where: "send", to: "rail" }))).toEqual({ text: SHOWN_AWAY });
     expect(lastProposal(other.id).pieces[0]!.to).toEqual({ id: planning.id, branch: planning.branch, title: "Rail" });
   });
 
@@ -255,15 +257,15 @@ describe("the tool", () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task");
     agentOf(a.id).note({ type: "turn-start", ts: 1 });
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     expect(await call(a.id, piece())).toEqual({
       text: "A pieces list is already waiting for the person on this chat; finish your turn.",
       isError: true,
     });
     await w.handoff.answer(a.id, lastProposal(a.id).id, false);
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     await w.handoff.answer(a.id, lastProposal(a.id).id, false);
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     await w.handoff.answer(a.id, lastProposal(a.id).id, false);
     expect(await call(a.id, piece())).toEqual({
       text: "3 proposals were made this turn already; finish your turn and let the person answer.",
@@ -291,7 +293,7 @@ describe("the tool", () => {
   test("a title is a row's name beside the namer's, so it takes the same case", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
-    expect(await call(a.id, piece({ title: "wire bytes" }))).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece({ title: "wire bytes" }))).toEqual({ text: SHOWN_AWAY });
     expect(lastProposal(a.id).pieces[0]!.title).toBe("Wire bytes");
   });
 
@@ -308,7 +310,7 @@ describe("the tool", () => {
     const fateOf = () => lastProposal(a.id).pieces.map((p) => p.fate);
     // the numbers are the rail's last read: a tree never read is not known to be empty
     expect(w.worktrees.tree.counts(a.id)).toBeUndefined();
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     expect(fateOf()).toEqual(["worktree"]);
     await decline();
     // the shown list's briefs file is excluded without the tool waiting on it; a tree read that
@@ -321,12 +323,12 @@ describe("the tool", () => {
     await decline();
     // the piece has no here: another project, an open worktree, or a branch to wait for
     for (const p of [piece({ project: acp.path }), piece({ where: "send", to: b.branch }), piece({ after: "this" })]) {
-      expect(await call(a.id, p)).toEqual({ text: SHOWN });
+      expect(await call(a.id, p)).toEqual({ text: SHOWN_AWAY });
       expect(fateOf()).toEqual([p.where]);
       await decline();
     }
     // a list is the agent's split of its own work, not an offer
-    expect(await call(a.id, piece(), piece({ title: "Notes", plan: "Notes." }))).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece(), piece({ title: "Notes", plan: "Notes." }))).toEqual({ text: SHOWN_AWAY });
     expect(fateOf()).toEqual(["worktree", "worktree"]);
     await decline();
     // the person's own verb asks for a worktree and gets one
@@ -337,13 +339,13 @@ describe("the tool", () => {
     // a tree with work on it, uncommitted or committed, is the branch's: the sibling is right
     writeFileSync(join(a.path, "rail.txt"), "x\n");
     await w.worktrees.tree.refresh(a.id);
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     expect(fateOf()).toEqual(["worktree"]);
     await decline();
     expect((await w.worktrees.commit(a.id, "add rail")).ok).toBe(true);
     await w.worktrees.tree.refresh(a.id);
     expect(w.worktrees.tree.counts(a.id)).toMatchObject({ dirty: 0, ahead: 1 });
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     expect(fateOf()).toEqual(["worktree"]);
     // in plan mode the list rides the plan card and is not an offer, empty tree or not
     const planning = await w.worktrees.create(repoId, "task", { title: "Later", mode: "plan" });
@@ -426,7 +428,7 @@ describe("fates", () => {
   test("not now on Toyon's own card is an answer: the next list starts from the agent's word", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
-    expect(await call(a.id, piece())).toEqual({ text: SHOWN });
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
     const first = lastProposal(a.id);
     w.handoff.fate(a.id, first.id, "p1", "skip");
     const before = agentOf(a.id).sent.length;
@@ -767,7 +769,7 @@ describe("go", () => {
       expect(r.text).not.toContain("is called");
       // a turn running there is work, whatever the tree holds
       agentOf(wt.id).status = "working";
-      expect(await call(a.id, send)).toEqual({ text: SHOWN });
+      expect(await call(a.id, send)).toEqual({ text: SHOWN_AWAY });
       expect(lastProposal(a.id).pieces[0]!.to).toEqual(named);
       await decline();
       agentOf(wt.id).status = "idle";
@@ -775,7 +777,7 @@ describe("go", () => {
       writeFileSync(join(wt.path, "more.txt"), "x\n");
       await w.worktrees.tree.refresh(wt.id);
       expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
-      expect(await call(a.id, send)).toEqual({ text: SHOWN });
+      expect(await call(a.id, send)).toEqual({ text: SHOWN_AWAY });
       expect(lastProposal(a.id).pieces[0]!.to).toEqual(named);
       await decline();
     }
@@ -1049,6 +1051,30 @@ describe("read off the plan", () => {
     expect(outcomesOf(c.id)[1]).toEqual({ pieceId: "p2", fate: "here" });
     expect(w.state.worktree(c.id)!.awaits).toBeUndefined();
     expect(agentOf(c.id).sent.at(-1)?.text).toContain('Do "Mine later" here, and only that.');
+  });
+
+  test("a list with nothing here leaves the agent on its own work: no stop in the reply, no turn on the go, and a piece moved here is told once its turn ends", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    // the go on such a list starts no turn, so a reply that stopped the agent would strand the
+    // work it already had
+    expect(await call(a.id, piece())).toEqual({ text: SHOWN_AWAY });
+    const before = agentOf(a.id).sent.length;
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    // the person kept the piece here while the agent was still on its own work
+    expect(await call(a.id, piece({ title: "Badge" }))).toEqual({ text: SHOWN_AWAY });
+    const moved = lastProposal(a.id).id;
+    agentOf(a.id).status = "working";
+    w.handoff.fate(a.id, moved, "p1", "here");
+    await w.handoff.answer(a.id, moved, true);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    agentOf(a.id).status = "idle";
+    w.hub.emit("agentStatus", a.id, "idle");
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    expect(agentOf(a.id).sent.at(-1)?.text).toContain('Do "Badge" here, and only that.');
   });
 
   test("siblings landing during a turn make one wake once it ends, unless a prompt carried the news or the origin landed", async () => {

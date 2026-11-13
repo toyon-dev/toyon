@@ -241,7 +241,14 @@ export function parsePieces(args: unknown): { pieces: RawPiece[] } | { refused: 
 /** the tool's reply in plan mode; exported for the eval, which answers a real agent with it */
 export const HELD =
   "Handed to the person; the list shows beside your plan and they decide where each piece goes. Ask for plan approval now.";
+/** The reply outside plan mode when a piece is the agent's own: the person may move any piece, so
+ * the agent waits for the answer, and the go starts the turn that builds it (act). */
 const SHOWN = "Handed to the person as a card; they decide. Finish your turn.";
+/** The reply when nothing on the list is the agent's: a go on such a list starts no turn here, so
+ * an agent told to stop would leave the work it already had until the person wrote again. A piece
+ * the person moves here reaches it as a message once its turn ends (act). */
+const SHOWN_AWAY =
+  "Handed to the person as a card; they decide, and none of it is yours unless Toyon says they kept it here. Do not wait for their answer: go on with the work you already have that does not depend on it, and finish your turn when that is done.";
 const SHOWN_HERE =
   "Handed to the person as a card. This worktree holds no work yet, so the card leads with doing it here; they decide. Finish your turn.";
 
@@ -689,7 +696,8 @@ export class HandoffService implements ToolProvider {
       }
     }
     const shown = cut.length ? `${sentenceCase(cut.join("; "))}. ` : "";
-    return { text: shown + (held ? HELD : here ? SHOWN_HERE : SHOWN) };
+    const own = pieces.some((p) => p.fate === "here");
+    return { text: shown + (held ? HELD : here ? SHOWN_HERE : own ? SHOWN : SHOWN_AWAY) };
   }
 
   /** Whether the agent's one offer should open on "do it here". The agent offers what it comes
@@ -807,8 +815,8 @@ export class HandoffService implements ToolProvider {
   /** the list closes with nothing done: the plan was sent back, the card was pressed not go, or
    * `reason` says what stopped the go. A held list has no file of its own, and the plan it sat on
    * is the agent's to rewrite now, so its pieces are written as a page the row keeps. `note` is
-   * what the person typed with not now: the agent handed off and was told to finish its turn, so
-   * the words start one, the way a plan card's no carries what to change. A bare not now tells it
+   * what the person typed with not now: the agent's turn ends without the answer, so the words
+   * start one, the way a plan card's no carries what to change. A bare not now tells it
    * nothing, since a turn begun to say nothing happened is noise. */
   async decline(worktreeId: string, id: string, reason?: string, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);

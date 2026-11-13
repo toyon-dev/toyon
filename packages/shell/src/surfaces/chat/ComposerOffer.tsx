@@ -34,7 +34,7 @@ export function ComposerOffer({
       <span className={cx("composer-offer-line", busy && "live-text")}>
         {verb && (
           <>
-            <Button variant="inline" tone="strong" data-tip={tip} onClick={onPress}>
+            <Button variant="word" tone="strong" data-tip={tip} onClick={onPress}>
               {verb}
             </Button>{" "}
           </>

@@ -1268,6 +1268,17 @@
     & .composer-plan-path {
       min-width: 0;
     }
+    /* the count of remarks is the press and keeps its words: what follows it on the line is what
+       wraps where the box is narrow */
+    & .composer-plan-count {
+      flex: none;
+    }
+    /* what follows the count is a box of its own on the line, and a box drops the space its
+       words lead with: kept, so the count is set off by a space of the face, and still wrapping */
+    & .composer-plan-rest {
+      min-width: 0;
+      white-space: pre-wrap;
+    }
     /* the row it was born from keeps its words whole however short the line: the plan's title is
        what gives, since the mark is the way back and the title is restated in the pane. "from" is
        the separator, a word with the face's space either side (pre keeps the leading one); a dot

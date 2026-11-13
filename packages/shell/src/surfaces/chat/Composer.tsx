@@ -1474,14 +1474,15 @@ export function Composer({
         <div className="composer-plan">
           <Icon name="pr" className="icon-inline" />
           <Button
-            variant="inline"
+            variant="word"
             tone="strong"
+            className="composer-plan-count"
             data-tip="Read them beside the chat"
             onClick={() => openPrComments({ dispatch }, active.worktree.id, prOpen.number)}
           >
             {remarksLine.count}
           </Button>
-          <span className="row-dim">
+          <span className="row-dim composer-plan-rest">
             {" on PR #"}
             {prOpen.number}
             {remarksLine.rest}

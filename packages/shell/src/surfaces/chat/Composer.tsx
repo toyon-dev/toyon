@@ -1459,7 +1459,7 @@ export function Composer({
                 openFile({ sock, dispatch }, { worktreeId: active.worktree.id, path: plan, view: "preview" })
               }
             >
-              {planLabel}
+              <span className="composer-plan-title">{planLabel}</span>
             </Button>
           )}
           {born && (

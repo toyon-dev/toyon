@@ -1266,7 +1266,33 @@
       flex: none;
       margin-right: 6px;
     }
+    /* The title's dotted line is a box and not the text's decoration. A mention stands beside it
+       on this line under a solid underline, and the browser snaps a dotted decoration and a
+       solid one to the device's pixels by different rules, so at 2x the two sat a device pixel
+       apart on half the heights the line can land on, whatever the offset. A box is snapped as
+       the solid line is. The button is one grid cell holding the title and the line, both on
+       the baseline: an empty box's baseline is its foot, so the line's foot starts level with
+       the letters' feet and is let down onto the mention's row, two pixels under and one thick. */
     & .composer-plan-path {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: baseline;
+      min-width: 0;
+      text-decoration: none;
+      &::after {
+        content: "";
+        grid-area: 1 / 1;
+        height: 1px;
+        position: relative;
+        top: 3px;
+        background: repeating-linear-gradient(to right, var(--border1) 0 1px, transparent 1px 2px);
+      }
+      :where([data-hover]) &:hover::after {
+        background: currentColor;
+      }
+    }
+    & .composer-plan-title {
+      grid-area: 1 / 1;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;

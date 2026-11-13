@@ -5,7 +5,7 @@
 import { spawn } from "node:child_process";
 import type { Stats } from "node:fs";
 import { lstat, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   type ElementTraits,
   FILE_MAX_CHARS,
@@ -17,7 +17,7 @@ import {
 import { UserError } from "../core/errors.ts";
 import type { StateStore } from "../core/state.ts";
 import { blameFile } from "../git/blame.ts";
-import { GIT, git, gitRaw, nulSplit, runRows } from "../git/exec.ts";
+import { GIT, git, gitRaw, nulSplit, run, runRows } from "../git/exec.ts";
 import { fileLockKey, withLock } from "../git/lock.ts";
 import { fileAtCommit } from "../git/log.ts";
 import { changedRanges, fileAt, fileBefore, statusFiles } from "../git/status.ts";
@@ -430,4 +430,26 @@ export class FileService {
     child.on("error", () => {});
     child.unref();
   }
+
+  /** A worktree's file onto the system clipboard as the file itself. One that has gone since the
+   * message naming it was written is refused here, before the clipboard is asked. */
+  async clip(worktreeId: string, path: string): Promise<void> {
+    const target = resolveInside(this.require(worktreeId).path, path);
+    if (!(await stat(target).catch(() => null))) throw new UserError(`${path} is no longer there`);
+    await this.clipPath(target);
+  }
+
+  /** Put what is at an absolute path on the system clipboard the way Finder's Copy does, so a
+   * paste into a mail, a chat or a folder gets the file and not its path. The clipboard is the
+   * daemon machine's, and a page can put text and pictures on one but never a file (macOS only,
+   * as the reveal is). The caller has established the path is there and the person may see it. */
+  async clipPath(target: string): Promise<void> {
+    if (process.platform !== "darwin") throw new UserError("copying a file is only available on macOS");
+    const r = await run("osascript", [...CLIP_FILE.flatMap((line) => ["-e", line]), target], dirname(target));
+    if (!r.ok) throw new UserError(`the file was not copied: ${r.err.trim() || `osascript exited ${r.exit}`}`);
+  }
 }
+
+// The path arrives as an argument rather than spliced into the source, so a quote in a file name
+// is data and not script.
+const CLIP_FILE = ["on run argv", "set the clipboard to (POSIX file (item 1 of argv))", "end run"];

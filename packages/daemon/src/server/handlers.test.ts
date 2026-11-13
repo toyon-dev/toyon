@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -1121,6 +1121,35 @@ describe("handlers", () => {
       dispatch({ t: "reveal-attachment", worktreeId: task.id, file: "2-gone.csv" }, ctx, services),
     ).rejects.toThrow("no longer on this machine");
     expect(revealed).toHaveLength(1);
+  });
+
+  test("copy-file puts a worktree's file or one outside it on the clipboard, and refuses one that is gone", async () => {
+    const { services, ctx, repo } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const task = await services.worktrees.create(r.id, "a task");
+    // the clipboard is not written in a test: only that the right path reaches it
+    const clipped: string[] = [];
+    services.files.clipPath = async (path) => {
+      clipped.push(path);
+    };
+    writeFileSync(join(task.path, "repro.json"), "{}");
+    await dispatch({ t: "copy-file", worktreeId: task.id, path: "repro.json" }, ctx, services);
+    await expect(dispatch({ t: "copy-file", worktreeId: task.id, path: "gone.json" }, ctx, services)).rejects.toThrow(
+      "gone.json is no longer there",
+    );
+    await expect(
+      dispatch({ t: "copy-file", worktreeId: task.id, path: "../../etc/hosts" }, ctx, services),
+    ).rejects.toBeInstanceOf(UserError);
+    const outside = join(mkdtempSync(join(tmpdir(), "toyon-clip-")), "out.csv");
+    writeFileSync(outside, "a,b\n");
+    await dispatch({ t: "copy-file-path", path: outside }, ctx, services);
+    await expect(dispatch({ t: "copy-file-path", path: `${outside}.gone` }, ctx, services)).rejects.toThrow(
+      "does not exist",
+    );
+    // both arrive as the disk names them, past the temp folder's symlink
+    expect(clipped).toEqual([realpathSync(join(task.path, "repro.json")), realpathSync(outside)]);
+    rmSync(dirname(outside), { recursive: true, force: true });
   });
 
   test("reveal-transcript shows the chat's file once something is written to it", async () => {

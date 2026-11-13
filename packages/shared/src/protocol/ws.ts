@@ -803,6 +803,12 @@ export const clientMsgSchema = z.discriminatedUnion("t", [
   /** reveal in Finder a path outside this worktree, by its absolute path on the daemon's disk, as
    * `open-by-path` names one; a path that is not there is an error frame */
   z.object({ t: z.literal("reveal-path"), path: relPath }),
+  /** put a file of this worktree on the clipboard of the daemon's machine as the file itself, to
+   * paste where a file is taken; one that is gone is an error frame */
+  z.object({ t: z.literal("copy-file"), worktreeId: id, path: relPath }),
+  /** the same for a path outside this worktree, by its absolute path on the daemon's disk, as
+   * `reveal-path` names one */
+  z.object({ t: z.literal("copy-file-path"), path: relPath }),
   /** reveal in Finder the daemon's copy of an attachment a sent message carries, by the worktree
    * and stored name the chat fetches it by; one that is gone is an error frame */
   z.object({ t: z.literal("reveal-attachment"), worktreeId: id, file: z.string().min(1).max(120) }),

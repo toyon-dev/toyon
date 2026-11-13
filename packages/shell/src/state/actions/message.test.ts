@@ -84,6 +84,27 @@ describe("message menus", () => {
     expect(ids(messageItems({ kind: "assistant", text: "see" }, null, deps, { link }))).toEqual(["copy-path", "copy"]);
   });
 
+  test("a link to a file can be copied as the file, through the daemon whose clipboard it is", () => {
+    onThisMachine();
+    const sent: unknown[] = [];
+    const d = { sock: sockTo("localhost", sent), dispatch: () => {} };
+    const message = { kind: "assistant", text: "see" } as const;
+    const inside = { kind: "file", file: { path: "repro/control.json", line: 4 } } as const;
+    const items = messageItems(message, "w", d, { link: inside });
+    expect(ids(items)).toEqual(["open", "reveal", "copy-path", "copy-file", "copy"]);
+    press(items, "copy-file");
+    const outside = { kind: "outside", href: "/Users/me/out.csv:3", path: "/Users/me/out.csv", line: 3 } as const;
+    press(messageItems(message, "w", d, { link: outside }), "copy-file");
+    press(messageItems(message, "w", d, { link: { kind: "path", path: "~/out.csv" } }), "copy-file");
+    expect(sent).toEqual([
+      { t: "copy-file", worktreeId: "w", path: "repro/control.json" },
+      { t: "copy-file-path", path: "/Users/me/out.csv" },
+      { t: "copy-file-path", path: "~/out.csv" },
+    ]);
+    // a worktree's file is asked for by its row, so with no worktree there is none to ask through
+    expect(ids(messageItems(message, null, d, { link: inside }))).toEqual(["copy-path", "copy"]);
+  });
+
   test("a link to a file outside the worktree opens by its absolute path, and is revealed by it", () => {
     onThisMachine();
     const sent: unknown[] = [];
@@ -95,7 +116,7 @@ describe("message menus", () => {
       line: 3,
     } as const;
     const items = messageItems({ kind: "assistant", text: "see" }, "w", { sock, dispatch: () => {} }, { link });
-    expect(ids(items)).toEqual(["open", "reveal", "copy-path", "copy"]);
+    expect(ids(items)).toEqual(["open", "reveal", "copy-path", "copy-file", "copy"]);
     press(items, "open");
     press(items, "reveal");
     expect(sent).toEqual([
@@ -132,12 +153,12 @@ describe("message menus", () => {
     const sock = sockTo("localhost", sent);
     const link = { kind: "path", path: "/Users/me/.cache/driver.mjs" } as const;
     const items = messageItems({ kind: "assistant", text: "see" }, "w", { sock, dispatch: () => {} }, { link });
-    expect(ids(items)).toEqual(["open", "reveal", "copy-path", "copy"]);
+    expect(ids(items)).toEqual(["open", "reveal", "copy-path", "copy-file", "copy"]);
     press(items, "open");
     expect(sent).toEqual([{ t: "open-by-path", path: "/Users/me/.cache/driver.mjs", seq: expect.any(Number) }]);
   });
 
-  test("from another device the open stays, since Toyon makes it, and Finder goes", () => {
+  test("from another device the open stays, since Toyon makes it, and Finder and the file copy go", () => {
     const sock = sockTo("toyon.example.com", []);
     const link = { kind: "outside", href: "/Users/me/a.md", path: "/Users/me/a.md" } as const;
     const items = messageItems({ kind: "assistant", text: "see" }, "w", { sock, dispatch: () => {} }, { link });

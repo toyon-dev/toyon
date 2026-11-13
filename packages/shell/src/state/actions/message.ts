@@ -2,7 +2,7 @@ import type { PickMeta } from "@toyon/shared";
 import { grouped, type MenuEntry, type MenuFrom, type MenuItem } from "../../ui/menu.ts";
 import { openByPath } from "../openOutside.ts";
 import { copyImage, copyText, copyTextFrom, type Deps, openOutItem } from "./deps.ts";
-import { daemonHost, openedOnDaemonMachine, revealItems } from "./editor.ts";
+import { copyFileItems, daemonHost, openedOnDaemonMachine, revealItems } from "./editor.ts";
 import { openFile, openFolder } from "./file.ts";
 
 /** what a chip can do besides what it is: opened at full size when the menu is on the chip and
@@ -107,10 +107,11 @@ function revealPathOpener(path: string, { sock }: Deps): (() => void) | null {
   return () => sock.send({ t: "reveal-path", path });
 }
 
-/** a link to a file: the open the press makes, where it sits in Finder, then the path as text.
- * A file of this worktree is revealed through its row; any other path is revealed by where it is
- * on the daemon's disk. A folder outside the worktree has no open of its own: the reveal is what
- * its press does, so it leads alone. */
+/** a link to a file: the open the press makes, where it sits in Finder, then the path as text
+ * and the file as a file. A file of this worktree is revealed and copied through its row; any
+ * other path by where it is on the daemon's disk. A folder outside the worktree has no open of
+ * its own: the reveal is what its press does, so it leads alone. A link that says it is a folder
+ * is not offered as a file. */
 function fileLinkGroups(
   link: Exclude<ChatLink, { kind: "out" | "worktree" }>,
   worktreeId: string | null,
@@ -125,9 +126,20 @@ function fileLinkGroups(
         : undefined
       : () => sock?.send({ t: "reveal-path", path: link.path });
   const path = link.kind === "file" ? link.file.path : link.path;
+  const folder = link.kind === "file" ? link.file.folder : link.kind === "outside" && link.folder;
+  const copyFile = folder
+    ? undefined
+    : link.kind === "file"
+      ? worktreeId
+        ? () => sock?.send({ t: "copy-file", worktreeId, path })
+        : undefined
+      : () => sock?.send({ t: "copy-file-path", path });
   return [
     [...(open ? [{ id: "open", label: "open", onClick: open }] : []), ...revealItems(reveal, daemonHost(sock))],
-    [{ id: "copy-path", label: "copy path", onClick: () => copyText(path) }],
+    [
+      { id: "copy-path", label: "copy path", onClick: () => copyText(path) },
+      ...copyFileItems(copyFile, daemonHost(sock)),
+    ],
   ];
 }
 

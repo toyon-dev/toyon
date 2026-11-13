@@ -27,3 +27,11 @@ export function revealItems(
   if (!onReveal || !openedOnDaemonMachine(hostname)) return [];
   return [{ id: "reveal", label, onClick: onReveal }];
 }
+
+/** the file itself onto the clipboard, to paste where a file is taken: a mail, a chat, a folder.
+ * A page can put text and a picture there and never a file, so the daemon is asked, and the
+ * clipboard it writes is its own machine's. None when the page was opened from another device. */
+export function copyFileItems(onCopy: (() => void) | undefined, hostname: string): MenuItem[] {
+  if (!onCopy || !openedOnDaemonMachine(hostname)) return [];
+  return [{ id: "copy-file", label: "copy file", onClick: onCopy }];
+}

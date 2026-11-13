@@ -604,6 +604,16 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     s.files.revealPath(await s.opens.where(msg.path));
   },
 
+  async "copy-file"(msg, _ctx, s) {
+    await s.files.clip(msg.worktreeId, msg.path);
+  },
+
+  // a link in the chat to a file outside this worktree, onto the clipboard of the daemon's
+  // machine, which is the person's since the shell offers the copy on loopback alone
+  async "copy-file-path"(msg, _ctx, s) {
+    await s.files.clipPath(await s.opens.where(msg.path));
+  },
+
   // a chip on a sent message: the daemon's copy of what was attached, which is the file the agent
   // read, shown where it sits; an archived chat's copy moved out of the store with it
   async "reveal-attachment"(msg, _ctx, s) {

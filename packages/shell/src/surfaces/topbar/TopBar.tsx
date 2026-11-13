@@ -82,7 +82,6 @@ export function TopBar({
   const changesOpen = useStore((s) => s.layout.changes);
   const chatOpen = useStore((s) => s.layout.chat);
   const bare = useBare();
-  const designOpen = useStore((s) => s.layout.design);
   const keysOpen = useStore((s) => s.overlay?.kind === "keys");
   const installEvt = useInstallPrompt();
   const id = active?.worktree.id ?? null;
@@ -170,9 +169,10 @@ export function TopBar({
           <span className="bar-grow" />
         </>
       )}
-      {/* right cluster: phone · settings · design · the panel toggles this edge holds · zen (zen last:
-          it hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
-          shell per worktree, not app chrome. */}
+      {/* right cluster: phone · settings · the panel toggles this edge holds · zen (zen last: it
+          hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
+          shell per worktree, not app chrome. The design pane has no toggle here: it is a reference
+          opened now and then, so its chord and its command row are the way in. */}
       <span className="bar-tools" ref={toolsRef}>
         <PhoneButton />
         <IconButton
@@ -189,17 +189,6 @@ export function TopBar({
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
-        {!bare && !chatCentred && (
-          <IconButton
-            icon="palette"
-            label="Design system"
-            hint={chord("design")}
-            tone="chrome"
-            on={designOpen}
-            {...fromEnd}
-            onClick={() => dispatch({ a: "toggle-design" })}
-          />
-        )}
         {chatLeft ? changesToggle : chatToggle}
         {!chatLeft && railToggle}
         {/* the one tool the installed app's zen strip keeps: the strip is the window's title bar

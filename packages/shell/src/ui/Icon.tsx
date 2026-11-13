@@ -48,7 +48,6 @@ export type IconName =
   | "handoff"
   | "globe"
   | "swap"
-  | "palette"
   | "worktrees"
   | "lock"
   | "pr"
@@ -172,11 +171,6 @@ const ICON_PATHS: Record<IconName, string> = {
     "M3.15 4a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 4h5.4 M3.15 8a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 8h5.4 M3.15 12a.65 .65 0 1 0 1.3 0a.65 .65 0 1 0-1.3 0z M7.4 12h5.4",
   // two arrows passing: swapping one mode for another
   swap: "M3 6.2h9.2 M9.7 3.7 12.2 6.2 9.7 8.7 M13 10.2H3.8 M6.3 7.7 3.8 10.2l2.5 2.5",
-  // A painter's palette: the blob with its thumb notch, and three wells. The wells are small and
-  // spread on purpose; at r .75 they were wider than the gap between them and merged into one
-  // smear at 16px, which is the only size this is ever drawn at.
-  palette:
-    "M2.3 8.4C2.3 4.7 5 2.2 8.5 2.2c3.4 0 5.2 2.2 5.2 4.6 0 1.9-1.4 2.6-2.7 2.8-.9.15-1.3.7-1.1 1.4.2.9-.5 2.2-2.1 2.2-3.2 0-5.5-2-5.5-4.8z M5 6.2a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M7.8 4.9a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z M11 5.8a.5.5 0 1 0 0 1 .5.5 0 1 0 0-1z",
   // another tool holds this worktree. The shackle is drawn closed: a lock that reads as open says
   // the opposite of what the row means.
   lock: "M4.4 7.3h7.2v6.1H4.4z M6.2 7.3V5.5a1.8 1.8 0 0 1 3.6 0v1.8",

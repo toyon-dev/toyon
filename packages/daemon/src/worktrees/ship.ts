@@ -184,12 +184,17 @@ export class Ship {
     if (f) this.setLanded(wt, landedNow(wt, f));
   }
 
-  /** The record after a landing, in one frame: the verdict goes and the landed mark comes
-   * together. Sent one frame apart, the row between them carried work with no verdict, which the
-   * box reads as a check to run, so its word flashed through "check" on the way to "archive". */
-  private async settleLanded(wt: WorktreeInfo): Promise<string | undefined> {
+  /** The record after a landing, in one step: the landing goes on, the verdict goes and the
+   * landed mark comes together, with nothing awaited between them. Any row's frame carries this
+   * one as the record stands, so two of them apart are a row that reads wrong for as long as the
+   * git between them takes. A landing on the record ahead of its mark is a PR taken on a row not
+   * landed, which reads as new work over it: the box offers to create a PR for the merge it is
+   * still landing. A verdict gone ahead of the mark is work with no verdict, which the box reads
+   * as a check to run. */
+  private async settleLanded(wt: WorktreeInfo, noted: LandMark | undefined): Promise<string | undefined> {
     const repo = this.d.state.repo(wt.repoId);
     const f = wt.kind === "main" || !repo ? null : await this.landedFacts(wt);
+    if (noted) wt.lands = [...(wt.lands ?? []), noted];
     delete wt.landing;
     // the work is on the base by now, so a mark held back is news: the landed row says what held
     // it, and the log keeps it for a landing with no row (one git did by hand)
@@ -774,31 +779,31 @@ export class Ship {
     return { result: { ok: true, message: `${did}; ${here}` }, landed: true, ...settled };
   }
 
-  /** The work is on the base: the one tail every route ends in. The range goes on the record
-   * under its ref; the branch restarts from the base, unless it holds commits the landing did not
-   * take (`stay`); every row is counted again, since the base moved under all of them and the
-   * frame the landed mark pushes must not carry the old ahead; and the verdict goes as the mark
-   * comes, in one frame. The caller holds the repo lock where its route has one. */
+  /** The work is on the base: the one tail every route ends in. The range is kept under its ref;
+   * the branch restarts from the base, unless it holds commits the landing did not take (`stay`);
+   * every row is counted again, since the base moved under all of them and the frame the landed
+   * mark pushes must not carry the old ahead; and the landing goes on the record as the verdict
+   * goes and the mark comes, in one frame. The caller holds the repo lock where its route has one. */
   private async settle(
     wt: WorktreeInfo,
     repo: RepoInfo,
     mark: LandingRange | null,
     opts: { pr?: PrState | undefined; squash?: string | undefined; stay?: boolean } = {},
   ): Promise<Pick<Landed, "mark" | "held">> {
-    const noted = await this.noteLand(repo, wt, mark, opts);
+    const noted = await this.landMark(repo, wt, mark, opts);
     if (!opts.stay) await this.restartFromMain(wt, baseOf(repo));
     this.d.tree.invalidateAll();
-    return { mark: noted, held: await this.settleLanded(wt) };
+    return { mark: noted, held: await this.settleLanded(wt, noted) };
   }
 
-  /** A landing onto the record, oldest first, with its tip kept under a ref: the branch restarts from
-   * main after it, and a squash never puts these commits on main, yet an archived worktree's page
-   * still lists them. The mark says what landed in one line each: a merged PR's title, since
-   * GitHub lands the PR by its own method and under that name; the squash message's subject for
-   * a squash (the range names the originals, which main never got); the range's own subjects
-   * otherwise. Returns the mark it wrote, so the row's word carries it; nothing when the ref
-   * could not be kept. */
-  private async noteLand(
+  /** A landing for the record, with its tip kept under a ref: the branch restarts from main after
+   * it, and a squash never puts these commits on main, yet an archived worktree's page still
+   * lists them. The mark says what landed in one line each: a merged PR's title, since GitHub
+   * lands the PR by its own method and under that name; the squash message's subject for a
+   * squash (the range names the originals, which main never got); the range's own subjects
+   * otherwise. Returns the mark for the settle to put on the record with the landed mark, and
+   * for the row's word to carry; nothing when the ref could not be kept. */
+  private async landMark(
     repo: RepoInfo,
     wt: WorktreeInfo,
     mark: LandingRange | null,
@@ -811,15 +816,12 @@ export class Ship {
       log.warn(wt.id, `could not keep the commits it landed: ${pinned.err}`);
       return undefined;
     }
-    const noted: LandMark = {
+    return {
       ...mark,
       at: Date.now(),
       ...(opts.pr ? { pr: opts.pr.number } : {}),
       subjects: await this.landedWhat(repo, wt, mark, opts),
     };
-    wt.lands = [...(wt.lands ?? []), noted];
-    this.d.state.save();
-    return noted;
   }
 
   private async landedWhat(
@@ -857,9 +859,9 @@ export class Ship {
     this.d.tree.invalidate(wt.id);
     const r = await git(wt.path, "reset", "--keep", base);
     if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
-    // the counts for the moved head, said in the settle's frame with the landed mark: a frame of
-    // its own here carried the landing on the record without the mark, which a row reads as new
-    // work over a landed PR
+    // the counts for the moved head, said in the settle's frame with the landing and its mark: a
+    // frame of its own here would carry a branch level with the base and nothing on the record
+    // to say why
     await this.d.tree.refresh(wt.id);
   }
 

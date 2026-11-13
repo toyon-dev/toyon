@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PrState } from "@toyon/shared";
+import { landWord, type PrState } from "@toyon/shared";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import { registered, setRoute, until, useWorld, w } from "../../test/helpers/world.ts";
 import { git } from "../git/exec.ts";
@@ -354,6 +354,38 @@ describe("landing", () => {
     rmSync(join(wt.path, "scratch.log"));
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [] });
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
+  test("a merged PR's landing goes on the record with the landed mark, never ahead of it", async () => {
+    const repoId = await registered();
+    const { origin, other } = await withOrigin(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-q", "-m", "add feature");
+    sh(wt.path, "git", "push", "-q", "-u", "origin", wt.branch);
+    const pr7 = { number: 7, url: "https://x/pull/7" };
+    w.worktrees.setPr(wt.id, { ...pr7, state: "open", at: 1 });
+    squashedOnOrigin(other, origin, wt.branch);
+    w.worktrees.setPr(wt.id, { ...pr7, state: "merged", at: 2 });
+    // Another row's frame can go out at any point of the landing, and it carries this row as the
+    // record stands: the branch's restart and the read after it are git calls, and the read waits
+    // its turn behind every other row's. So the record is looked at on every turn of the loop, for
+    // the word the box would put on its press.
+    const words = new Set<string>();
+    const look = setInterval(() => {
+      const now = w.state.worktree(wt.id);
+      if (now) words.add(landWord({ land: "pr" }, now));
+    }, 0);
+    try {
+      expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
+    } finally {
+      clearInterval(look);
+    }
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, lands: [{ pr: 7 }] });
+    // a landing recorded before its mark reads as new work over a PR already taken, and the box
+    // offered to create a PR for the merge it was still landing
+    expect([...words]).toEqual(["land"]);
   });
 
   test("an adopted branch squashed on GitHub stays landed, PR and all, until a new commit", async () => {

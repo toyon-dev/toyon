@@ -991,14 +991,18 @@
     }
     /* an address a command printed is pressable, but it is still what the command printed: it
        keeps the output's tier and says it is a link with a quiet underline, the way a file link
-       does, so a push log full of remote URLs is not a column of blue. The pointer lifts it. */
-    & .tool-block a {
+       does, so a push log full of remote URLs is not a column of blue. The pointer lifts it. The
+       note takes the rule too: a command's output arrives as plain text and is fenced only at its
+       end, so the same address is in a note while the command runs and in a block once it is over. */
+    & .tool-block a,
+    & .tool-note a {
       color: inherit;
       text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
       text-underline-offset: 2px;
       border-radius: var(--radius);
     }
-    :where([data-hover]) & .tool-block a:hover {
+    :where([data-hover]) & .tool-block a:hover,
+    :where([data-hover]) & .tool-note a:hover {
       color: var(--text0);
       text-decoration-color: currentColor;
     }

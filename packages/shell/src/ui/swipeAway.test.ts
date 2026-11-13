@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { flung, leaveMs, releaseSpeed, swipeAxis } from "./swipeAway.ts";
+import { flung, leaveMs, NO_ROLL, releaseSpeed, rolled, swipeAxis } from "./swipeAway.ts";
 
 describe("whose a touch is", () => {
   test("nobody's until it has travelled", () => {
@@ -60,6 +60,54 @@ describe("the speed a finger let go at", () => {
         50,
       ),
     ).toBe(-2);
+  });
+});
+
+/** runs wheel events through one gesture, `gap` ms apart, and says where it ended and whether any
+ * of them was the throw */
+function roll(events: Array<[number, number]>, gap: number) {
+  let r = NO_ROLL;
+  let thrown = 0;
+  let now = 1000;
+  for (const [deltaX, deltaY] of events) {
+    const next = rolled(r, { deltaX, deltaY }, now);
+    r = next.next;
+    thrown ||= next.thrown;
+    now += gap;
+  }
+  return { ...r, thrown };
+}
+const times = (n: number, e: [number, number]) => Array.from({ length: n }, () => e);
+
+describe("a wheel carrying the thing", () => {
+  test("goes against the delta, the way the page under the fingers would", () => {
+    const r = roll(times(10, [0, 4]), 16);
+    expect(r.axis).toBe("away");
+    expect(r.dy).toBe(-40);
+    expect(r.thrown).toBe(0);
+  });
+  test("is nobody's until it has travelled", () => {
+    expect(roll([[0, 3]], 16).axis).toBe(null);
+  });
+  test("a slow roll follows however far it goes, and is never a throw", () => {
+    expect(roll(times(60, [0, 5]), 16).thrown).toBe(0);
+  });
+  test("a flick is a throw while the fingers are still on it, signed the way it went", () => {
+    expect(roll(times(4, [0, 40]), 16).thrown).toBeCloseTo(-2.5);
+    expect(roll(times(4, [0, -40]), 16).thrown).toBeCloseTo(2.5);
+  });
+  test("a mouse wheel's one notch is a nudge; notches in a spin are a throw", () => {
+    expect(roll([[0, 100]], 60).thrown).toBe(0);
+    expect(roll(times(2, [0, 100]), 60).thrown).not.toBe(0);
+  });
+  test("sideways is somebody else's for the rest of the gesture, whatever it does next", () => {
+    const r = roll([[30, 2], ...times(6, [0, 40])], 16);
+    expect(r.axis).toBe("other");
+    expect(r.thrown).toBe(0);
+  });
+  test("a drag let go slowly keeps its momentum and still is not thrown", () => {
+    const momentum: Array<[number, number]> = [8, 7, 6, 5, 4, 3, 2, 1].map((d) => [0, d]);
+    expect(roll([...times(20, [0, 6]), ...momentum], 16).thrown).toBe(0);
   });
 });
 

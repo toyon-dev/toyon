@@ -50,9 +50,16 @@
       & img {
         transition: transform var(--swipe-ms) linear;
       }
+      /* gone with the scrim: a wheel's throw holds the box past the flight, to take what the wheel
+         still sends, and a head left standing over nothing reads as a box that did not close */
+      & .attach-head {
+        opacity: 0;
+        transition: opacity var(--swipe-ms) linear;
+      }
       @media (prefers-reduced-motion: reduce) {
         &,
-        & img {
+        & img,
+        & .attach-head {
           transition: none;
         }
       }

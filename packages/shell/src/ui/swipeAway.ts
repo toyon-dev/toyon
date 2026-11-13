@@ -12,8 +12,17 @@ const TAIL_MS = 100;
 const LEAVE_MIN_MS = 80;
 const LEAVE_MAX_MS = 220;
 
+/** how long a wheel may say nothing before its gesture is over: it has no letting go, and its
+ * events come a frame apart from a trackpad and a notch apart from a mouse */
+export const ROLL_IDLE_MS = 140;
+/** as many samples as a tail can hold at a trackpad's rate */
+const SAMPLES = 16;
+
 export type Touch1 = { dx: number; dy: number };
 export type Sample = { y: number; t: number };
+/** a wheel gesture so far: how far it has carried the thing, and whose it turned out to be */
+export type Roll = { dx: number; dy: number; axis: "away" | "other" | null; samples: Sample[] };
+export const NO_ROLL: Roll = { dx: 0, dy: 0, axis: null, samples: [] };
 
 /** What a touch that has travelled this far is: the swipe that takes the thing away, somebody
  * else's (the edge swipe back runs sideways), or nothing yet. */
@@ -34,6 +43,24 @@ export function releaseSpeed(samples: Sample[], now: number): number {
 
 /** Whether a drag let go at this speed is a throw. */
 export const flung = (speed: number): boolean => Math.abs(speed) >= FLING;
+
+/**
+ * A wheel event added to its gesture: two fingers on a trackpad, or a mouse wheel. The thing goes
+ * the way the page under the fingers would, which is against the delta.
+ *
+ * A wheel never says it was let go, so the throw is called in flight: `thrown` is the speed, the
+ * moment the travel reaches a throw's. Slower than that the thing follows, and the caller drops it
+ * back once the wheel has been quiet for `ROLL_IDLE_MS`. A trackpad's momentum arrives as more of
+ * the same events, so a drag let go slowly carries on a little and still drops back.
+ */
+export function rolled(r: Roll, e: { deltaX: number; deltaY: number }, now: number): { next: Roll; thrown: number } {
+  const dx = r.dx - e.deltaX;
+  const dy = r.dy - e.deltaY;
+  const axis = r.axis ?? swipeAxis({ dx, dy });
+  const samples = [...r.samples, { y: dy, t: now }].slice(-SAMPLES);
+  const speed = axis === "away" ? releaseSpeed(samples, now) : 0;
+  return { next: { dx, dy, axis, samples }, thrown: flung(speed) ? speed : 0 };
+}
 
 /** How long the throw takes to carry the thing the rest of the way off, at the speed it was let go. */
 export function leaveMs(remaining: number, speed: number): number {

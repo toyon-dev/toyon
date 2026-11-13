@@ -17,8 +17,8 @@ export type FullNav = { at: number; of: number; step: (dir: -1 | 1) => void };
  * navigated to the daemon's copy has no address bar, no back and no Escape, and nothing left on the
  * page leads to the shell. Escape, the close button, or a press beside the thing takes it down. A
  * picture goes under a finger as well, tapped or swiped up or down: on a phone it fills the window
- * and leaves nothing beside it to press. Pinched or double-tapped it zooms, and zoomed it pans
- * (fullGestures.ts).
+ * and leaves nothing beside it to press. Two fingers on a trackpad, or a wheel, throw it the same
+ * way. Pinched or double-tapped it zooms, and zoomed it pans (fullGestures.ts).
  *
  * Opened from a list (a message's attachments), the left and right arrows step to the neighbours
  * and the head says where in the list this is. One of one says nothing: there is nowhere to go.

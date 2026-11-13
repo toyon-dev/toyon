@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useRef } from "react";
-import { flung, leaveMs, releaseSpeed, type Sample, swipeAxis } from "./swipeAway.ts";
+import { flung, leaveMs, NO_ROLL, ROLL_IDLE_MS, releaseSpeed, rolled, type Sample, swipeAxis } from "./swipeAway.ts";
 import {
   about,
   type Bounds,
@@ -49,6 +49,12 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * the close button and Escape still do. A double click, and a trackpad pinch or ctrl and the
  * wheel, are the same gestures from a desk; the wheel alone pans a zoomed picture.
  *
+ * The wheel alone on a picture at rest is the throw from a desk: two fingers on a trackpad carry
+ * it up or down, and it drops back once they are still. A wheel never says it was let go, so the
+ * throw is called while it is still turning (`rolled`), and the box then stays, drawn empty, for
+ * as long as the wheel keeps sending: a trackpad's momentum outlasts the flight, and with the box
+ * gone it would scroll whatever was under the picture.
+ *
  * Only a touch that starts on something `grip` matches, or on the box's own scrim, is taken: text
  * in the box scrolls and selects under a finger. And only at the window's own scale, since on a
  * pinch-zoomed window one finger pans the view.
@@ -76,6 +82,11 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
     let tap: { p: Pt; t: number } | null = null;
     let tapTimer = 0;
     let zoomTimer = 0;
+    /** the wheel's gesture so far, and the quiet that ends it */
+    let roll = NO_ROLL;
+    let rollTimer = 0;
+    /** when a thrown picture is clear of the window */
+    let landsAt = 0;
 
     // the picture's layout box is the resting one, whatever transform it wears; the float is
     // position: fixed, so its offsets are from the box
@@ -139,14 +150,23 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       put(0, "settle");
       timer = window.setTimeout(rest, SETTLE_MS);
     };
+    const ours = (on: Element | null) => on === el || !!on?.closest(grip);
+    // off the edge it was heading for, at the speed it was thrown; the picture is at most the
+    // window tall, so a window's height past where it started clears it
+    const leave = (y: number, speed: number, now: number) => {
+      const to = Math.sign(speed) * window.innerHeight;
+      const wait = leaveMs(Math.abs(to - y), speed);
+      put(to, "leave", wait);
+      landsAt = now + wait;
+      timer = window.setTimeout(() => close.current(), wait);
+    };
     const onStart = (e: TouchEvent) => {
-      const on = e.target as Element | null;
-      const ours = on === el || !!on?.closest(grip);
+      const mine = ours(e.target as Element | null);
       if ((window.visualViewport?.scale ?? 1) > 1.01) return drop();
       if (el.dataset.swipe === "leave") return;
       const a = e.touches[0];
       const b = e.touches[1];
-      if (a && b && e.touches.length === 2 && ours) {
+      if (a && b && e.touches.length === 2 && mine) {
         // a second finger is a pinch, and it ends whatever the first had begun
         drop();
         window.clearTimeout(tapTimer);
@@ -154,7 +174,7 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
         pinch = { d: dist(a, b), m: mid(a, b), z: zoom };
         return;
       }
-      if (e.touches.length !== 1 || !a || !ours) return drop();
+      if (e.touches.length !== 1 || !a || !mine) return drop();
       window.clearTimeout(timer);
       from = { x: a.clientX, y: a.clientY, at: e.timeStamp };
       samples = [{ y: a.clientY, t: e.timeStamp }];
@@ -241,12 +261,15 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       from = null;
       dragging = false;
       samples = [];
-      // off the edge the finger was heading for, at the finger's speed; the picture is at most the
-      // window tall, so a window's height past where it started clears it
-      const to = Math.sign(speed) * window.innerHeight;
-      const wait = leaveMs(Math.abs(to - dy), speed);
-      put(to, "leave", wait);
-      timer = window.setTimeout(() => close.current(), wait);
+      leave(dy, speed, e.timeStamp);
+    };
+    // the wheel went quiet: what it was carrying is put down
+    const still = () => {
+      const carried = roll.axis === "away";
+      roll = NO_ROLL;
+      if (!carried) return;
+      put(0, "settle");
+      timer = window.setTimeout(rest, SETTLE_MS);
     };
     const onDouble = (e: MouseEvent) => {
       if (!(e.target as Element | null)?.closest(grip)) return;
@@ -254,6 +277,14 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       if (f) putZoom(tapZoom(zoom, rel({ x: e.clientX, y: e.clientY }, f.centre), f.bounds), "settle");
     };
     const onWheel = (e: WheelEvent) => {
+      // thrown: what the wheel still sends is the throw's own momentum, and it is taken here until
+      // it runs out, so the box closes over a wheel that has stopped
+      if (el.dataset.swipe === "leave") {
+        e.preventDefault();
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => close.current(), Math.max(ROLL_IDLE_MS, landsAt - e.timeStamp));
+        return;
+      }
       const f = frame();
       if (!f) return;
       // a trackpad pinch arrives as a wheel with ctrl held (Chromium, Gecko), and ctrl with the
@@ -266,6 +297,21 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       } else if (!resting(zoom)) {
         e.preventDefault();
         putZoom(clampTo({ s: zoom.s, x: zoom.x - e.deltaX, y: zoom.y - e.deltaY }, f.bounds));
+      } else if (ours(e.target as Element | null)) {
+        // from the gesture's first event: a wheel the page let go once is not its to cancel later
+        e.preventDefault();
+        window.clearTimeout(rollTimer);
+        const r = rolled(roll, e, e.timeStamp);
+        roll = r.next;
+        if (roll.axis === "away") {
+          window.clearTimeout(timer);
+          if (r.thrown) {
+            roll = NO_ROLL;
+            return leave(r.next.dy, r.thrown, e.timeStamp);
+          }
+          put(roll.dy, "drag");
+        }
+        rollTimer = window.setTimeout(still, ROLL_IDLE_MS);
       }
     };
     // WebKit reports a trackpad pinch as its own gesture events, with the scale since the gesture
@@ -307,6 +353,7 @@ export function useFullGestures(box: RefObject<HTMLElement | null>, grip: string
       window.clearTimeout(timer);
       window.clearTimeout(tapTimer);
       window.clearTimeout(zoomTimer);
+      window.clearTimeout(rollTimer);
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchmove", onMove);
       el.removeEventListener("touchend", onEnd);

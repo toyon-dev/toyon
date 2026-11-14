@@ -86,7 +86,8 @@ type Landed = Pick<WorktreeInfo, "lands" | "pr">;
 
 /** A row is landed when the base has its work: a recorded landing and no commit since that
  * landing's tip. HEAD is the tip itself (an adopted branch after a squash on GitHub keeps its
- * commits and reads as ahead for good; a branch whose restart from the base git refused stays on
+ * commits, and several squashed into one match no patch on the base, so they read as ahead for
+ * good; a branch whose restart from the base git refused stays on
  * it) or sits on the base (a branch toyon owns, restarted from it). Uncommitted files do not
  * count: the work is on the base whatever is left in the tree, and what is left is either new work
  * (the counts say so, and the box offers to land it) or something to discard; neither takes the

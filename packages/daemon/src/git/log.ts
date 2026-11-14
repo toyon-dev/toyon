@@ -3,7 +3,7 @@
 
 import { type CommitEntry, type GitFileStatus, LAND_SUBJECTS_MAX } from "@toyon/shared";
 import { git, gitRaw } from "./exec.ts";
-import { parseNameStatus, parseNumstat } from "./status.ts";
+import { ownCommits, parseNameStatus, parseNumstat } from "./status.ts";
 
 /** How far back the history tab reads. Deep enough to cover a worktree's own work and the main
  * history around it; short enough that the list stays one frame's worth of rows to build. */
@@ -64,7 +64,7 @@ function parseLog(out: string, ahead: (sha: string) => boolean): CommitEntry[] {
 /** The commits on this branch that the default branch does not have. Empty on the main worktree,
  * where HEAD is the default branch. */
 async function aheadShas(worktreePath: string, defaultBr: string): Promise<Set<string>> {
-  const r = await git(worktreePath, "rev-list", `${defaultBr}..HEAD`);
+  const r = await git(worktreePath, "rev-list", ...ownCommits(defaultBr));
   if (!r.ok || !r.out) return new Set();
   return new Set(r.out.split("\n").filter(Boolean));
 }

@@ -346,9 +346,18 @@ export async function aheadOf(worktreePath: string, base: string): Promise<numbe
   return Number.isInteger(n) ? n : null;
 }
 
+/** rev-list's arguments for the commits HEAD holds whose change `base` lacks. By patch and not by
+ * sha: a commit that reached the base under another sha (a rebase, a cherry-pick, a history
+ * re-dated or reworded) is not work the branch still holds, and a count that says it is keeps a
+ * finished row open for good. git skips the comparison when either side is empty, so a branch
+ * level with its base or not behind it pays nothing. A merge has no patch and always counts. */
+export const ownCommits = (base: string): string[] => ["--cherry-pick", "--right-only", `${base}...HEAD`];
+
+/** `ahead` is the branch's own work (`ownCommits`); `behind` is every commit the base has that
+ * HEAD does not reach, by sha, since that is what a rebase has to walk. */
 export async function aheadBehind(worktreePath: string, defaultBr: string): Promise<{ ahead: number; behind: number }> {
   const [a, b] = await Promise.all([
-    git(worktreePath, "rev-list", "--count", `${defaultBr}..HEAD`),
+    git(worktreePath, "rev-list", "--count", ...ownCommits(defaultBr)),
     git(worktreePath, "rev-list", "--count", `HEAD..${defaultBr}`),
   ]);
   return { ahead: Number(a.out) || 0, behind: Number(b.out) || 0 };

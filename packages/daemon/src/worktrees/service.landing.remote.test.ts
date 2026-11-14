@@ -406,11 +406,11 @@ describe("landing", () => {
     expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
     // the poll's landing reaches the hub as a press's does
     expect(landedIds).toEqual([wt.id]);
-    // the branch keeps its own commit, so it reads as ahead of origin's main for good; the
-    // landed tip is what says the work is there
+    // the branch keeps its own commit under its own sha, and it is not ahead: the squash on
+    // origin's main is the same change
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe(tip);
     expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip, pr: 7 }]);
-    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 1, behind: 1 });
+    expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 0, behind: 1 });
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true, pr: { number: 7, state: "merged" } });
     // a second poll records nothing more
     expect((await w.worktrees.prMerged(wt.id)).ok).toBe(true);
@@ -646,8 +646,9 @@ describe("landing", () => {
       expect(w.state.worktree(wt.id)?.lands).toMatchObject([{ tip: pushed, pr: 7 }]);
       expect(w.state.worktree(wt.id)?.landed).toBeUndefined();
       expect(w.agents.get(wt.id)!.recorded.at(-1)).toMatchObject({ type: "landed", held: expect.any(String) });
-      // the next read takes the merged PR off the row: what is here is new work to land
-      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 2 });
+      // the next read takes the merged PR off the row: what is here is new work to land, the
+      // one commit the squash did not carry
+      expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ ahead: 1 });
       expect(w.state.worktree(wt.id)?.pr).toBeUndefined();
     });
   }

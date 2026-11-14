@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
 import {
+  aheadBehind,
   aheadUpstream,
   changedRanges,
   countEntries,
@@ -224,6 +225,33 @@ describe("countEntries", () => {
     expect(counts.get("empty.txt")).toEqual({ add: 0, del: 0 });
     // the tracked edit is counted by git, not from the budget
     expect(counts.get("README.md")).toEqual({ add: 1, del: 0 });
+  });
+});
+
+describe("aheadBehind", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+  const commit = (file: string, subject: string) => {
+    writeFileSync(join(repo, file), `${subject}\n`);
+    sh(repo, GIT, "add", "-A");
+    sh(repo, GIT, "commit", "-q", "-m", subject);
+  };
+
+  test("a commit main holds under another sha is not ahead; one main lacks is", async () => {
+    sh(repo, GIT, "checkout", "-q", "-b", "feat");
+    commit("a.txt", "one");
+    commit("b.txt", "two");
+    expect(await aheadBehind(repo, "main")).toEqual({ ahead: 2, behind: 0 });
+    // main moves on its own, then takes both changes as new commits: the branch's shas are
+    // nowhere on main, and its work is
+    sh(repo, GIT, "checkout", "-q", "main");
+    commit("c.txt", "elsewhere");
+    sh(repo, GIT, "cherry-pick", "feat~1", "feat");
+    sh(repo, GIT, "checkout", "-q", "feat");
+    expect(sh(repo, GIT, "rev-list", "--count", "main..HEAD")).toBe("2");
+    expect(await aheadBehind(repo, "main")).toEqual({ ahead: 0, behind: 3 });
+    commit("d.txt", "three");
+    expect(await aheadBehind(repo, "main")).toEqual({ ahead: 1, behind: 3 });
   });
 });
 

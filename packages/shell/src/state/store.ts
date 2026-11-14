@@ -100,6 +100,7 @@ import {
   toyonDark,
 } from "@toyon/shared";
 import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
+import { type PathKinds, pathKindsWith } from "../surfaces/chat/pathComplete.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
@@ -973,6 +974,9 @@ export interface State {
    * itself is. `target` is what separates "no such folder" from "nothing matches yet": both arrive
    * as an empty `entries`, and only one of them is somewhere a project can be made. */
   paths: { query: string; entries: PathEntry[]; target: PathTarget | null };
+  /** what every answer so far has said the disk holds, by absolute path: a message that names a
+   * path outside the checkout is marked from this */
+  pathKinds: PathKinds;
   /** the daemon's home directory, for writing `~` paths the way a person would type them */
   home: string;
   /** hello's `folderDialog`: whether the view's folder buttons open Finder where the person is */
@@ -1189,6 +1193,7 @@ export function initialState(opts: InitialOpts): State {
     systemDark: opts.systemDark ?? true,
     daylight: opts.daylight ?? null,
     paths: { query: "", entries: [], target: null },
+    pathKinds: {},
     home: "",
     folderDialog: false,
     keepAwake: null,
@@ -3280,7 +3285,11 @@ function onServer(s: State, msg: StoreServerMsg): State {
       };
     }
     case "path-entries":
-      return { ...s, paths: { query: msg.query, entries: msg.entries, target: msg.target } };
+      return {
+        ...s,
+        paths: { query: msg.query, entries: msg.entries, target: msg.target },
+        pathKinds: pathKindsWith(s.pathKinds, msg, s.home),
+      };
     case "folder-chosen":
       return { ...s, chosenFolder: { seq: (s.chosenFolder?.seq ?? 0) + 1, folder: msg.folder } };
     case "refs":

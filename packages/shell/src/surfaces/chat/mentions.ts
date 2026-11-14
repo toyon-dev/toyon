@@ -7,6 +7,7 @@ import { commandScore } from "../overlays/commands.ts";
 import { when } from "../recap.ts";
 import { ago, type DotState, folderList } from "../util.ts";
 import { githubIssueUrl, githubRefRanges } from "./markdownGithub.ts";
+import { diskPath, type PathKinds, unescapePath } from "./pathComplete.ts";
 import { linkRanges } from "./syntax.ts";
 
 export interface Trigger {
@@ -14,6 +15,8 @@ export interface Trigger {
    * path alone, without a sigil or a quote ahead of it */
   kind: "file" | "command" | "path";
   query: string;
+  /** a path that names no root, read from the worktree a command runs in */
+  relative?: true;
   /** the span a pick replaces, sigil included */
   from: number;
   to: number;
@@ -37,18 +40,33 @@ const PATH_OPENS = /^[@("'`]*(?=~\/|\/[^/\s])/;
  * written that way by the completion (pathComplete.ts) */
 const held = (text: string, i: number) => text[i] === " " && text[i - 1] === "\\";
 
+/** A word of a command that may be a path from where the command runs: past a quote, anything
+ * but a flag, a variable, a sigil or an address. Most such words name nothing on the disk, and
+ * the list stays shut on those. */
+const RELATIVE_OPENS = /^["']*(?=[^\s"'\-~$@/])/;
+/** the command's own name is a program, and a path only when it says so */
+const RUNS_A_PATH = /^["']*\.\.?\//;
+
 /** the path the caret is typing, in a message or in a command for the shell */
 function pathAt(text: string, caret: number): Trigger | null {
+  const shell = text.startsWith("!");
   let start = caret;
   while (start > 0 && (!/\s/.test(text[start - 1] ?? "") || held(text, start - 1))) start--;
   // the shell's sigil is not part of its first word
-  if (start === 0 && text.startsWith("!")) start = 1;
-  const lead = PATH_OPENS.exec(text.slice(start, caret));
+  if (start === 0 && shell) start = 1;
+  const word = text.slice(start, caret);
+  let lead = PATH_OPENS.exec(word);
+  // a command runs in the worktree, so its other words are paths from there
+  const relative = !lead && shell;
+  if (relative) {
+    const names = text.slice(1, start).trim() === "" ? RUNS_A_PATH.test(word) : !word.includes("://");
+    lead = names ? RELATIVE_OPENS.exec(word) : null;
+  }
   if (!lead) return null;
   const from = start + lead[0].length;
   let to = caret;
   while (to < text.length && (!/\s/.test(text[to] ?? "") || held(text, to))) to++;
-  return { kind: "path", query: text.slice(from, caret), from, to };
+  return { kind: "path", query: text.slice(from, caret), from, to, ...(relative ? { relative: true as const } : {}) };
 }
 
 /** `continues` says whether a query with spaces in it still names something, which only a
@@ -95,6 +113,14 @@ export interface MentionIndex {
   /** the same rows with their branch, longest title first, so the longer of two titles that open
    * alike ("Code review", "Code review again") is the one a reference reads as */
   titled: readonly (WorktreeMention & { branch: string })[];
+  /** what is known of the machine's disk, for a path a message names outside the checkout */
+  paths?: PathIndex;
+}
+
+/** the disk as the answers so far describe it, and the home a `~` stands for */
+export interface PathIndex {
+  home: string;
+  kinds: PathKinds;
 }
 
 /** a worktree a message can name: its row, and the title the mark says; one in the archive opens
@@ -121,6 +147,15 @@ const indexes = new WeakMap<readonly string[], MentionIndex>();
 export function mentionIndex(
   files: readonly string[] | undefined,
   worktrees: ReadonlyMap<string, WorktreeMention> = NO_WORKTREES,
+  paths?: PathIndex,
+): MentionIndex {
+  const index = listedIndex(files, worktrees);
+  return paths ? { ...index, paths } : index;
+}
+
+function listedIndex(
+  files: readonly string[] | undefined,
+  worktrees: ReadonlyMap<string, WorktreeMention>,
 ): MentionIndex {
   let index: MentionIndex | undefined;
   if (!files) index = NO_INDEX;
@@ -158,6 +193,9 @@ export type MentionSpan =
   | { kind: "file"; text: string; path: string }
   | { kind: "folder"; text: string; path: string }
   | { kind: "changes"; text: string }
+  /** a place on the machine's disk, named from its root or from home: `path` is the disk's own
+   * spelling of it, `text` the word as written */
+  | { kind: "path"; text: string; path: string; folder: boolean }
   /** `text` is the reference as written, the branch or the title; `branch` is what the agent is sent */
   | ({ kind: "worktree"; text: string; branch: string } & WorktreeMention)
   /** an address, or an issue by `owner/repo#123`: the link out it reads as in the agent's prose */
@@ -270,6 +308,43 @@ function resolveTitle(rest: string, index: MentionIndex): MentionSpan | null {
   return null;
 }
 
+/** a word that opens as a typed path does (`triggerAt`), and runs through a space a backslash holds */
+const PATH_WORD = /(^|\s)([@("'`]*)((?:~\/|\/(?=[^/\s]))(?:\\.|[^\s\\])*)/g;
+
+/** the path-shaped words of a message, each with what it reads as once the sentence's punctuation
+ * is taken off its end: the spellings one of which may be on the disk */
+function pathWords(text: string, opens: boolean): { start: number; spellings: string[] }[] {
+  const out: { start: number; spellings: string[] }[] = [];
+  for (const m of text.matchAll(PATH_WORD)) {
+    if (m.index === 0 && !m[1] && !opens) continue;
+    let word = m[3] ?? "";
+    const spellings = [word];
+    while (TRAILING.test(word)) {
+      word = word.slice(0, -1);
+      if (word.length > 1) spellings.push(word);
+    }
+    out.push({ start: m.index + (m[1] ?? "").length + (m[2] ?? "").length, spellings });
+  }
+  return out;
+}
+
+/** Every path a message may be naming, as the disk spells it: what its marks are read from, and
+ * so what to ask the daemon about while nothing has been said of one. Backticked text names
+ * nothing. */
+export function namedPaths(text: string, home: string): string[] {
+  const out = new Set<string>();
+  for (const seg of codeSegments(text)) {
+    if (seg.kind !== "prose") continue;
+    for (const { spellings } of pathWords(seg.text, true)) {
+      for (const s of spellings) {
+        const at = diskPath(unescapePath(s), home);
+        if (at) out.add(at);
+      }
+    }
+  }
+  return [...out];
+}
+
 /** the dot a worktree mark wears: the rail's for a live row, the hollow one for the archive */
 export type MentionDot = DotState | "archived";
 
@@ -339,6 +414,20 @@ function proseSpans(text: string, opens: boolean, index: MentionIndex, out: Ment
     }
     hit ??= titled;
     if (hit) hits.push({ start, span: hit });
+  }
+  // a path on the machine's disk is a mark once the disk is known to hold it, so a route or a
+  // ratio that only reads like one stays prose
+  if (index.paths) {
+    const { home, kinds } = index.paths;
+    for (const { start, spellings } of pathWords(text, opens)) {
+      for (const word of spellings) {
+        const path = diskPath(unescapePath(word), home);
+        const kind = path ? kinds[path] : undefined;
+        if (!path || !kind || kind === "none") continue;
+        hits.push({ start, span: { kind: "path", text: word, path, folder: kind === "folder" } });
+        break;
+      }
+    }
   }
   // an address ends where it does in a fenced block: before the sentence's punctuation, and
   // before a bracket that opened ahead of it

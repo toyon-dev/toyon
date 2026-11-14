@@ -4,10 +4,12 @@ import { listFiles } from "../../state/actions/file.ts";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { chatRepoOf, rowById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
+import { collapseHome } from "../overlays/projectPicker.ts";
 import { openChatLink } from "./chatLink.ts";
 import { codeLink } from "./markdownGithub.ts";
-import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip } from "./mentions.ts";
+import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip, namedPaths } from "./mentions.ts";
 import { Painted } from "./Painted.tsx";
+import type { PathKind } from "./pathComplete.ts";
 import { siblingWorktrees } from "./siblings.ts";
 import { languageOf, linkLines, paintCode, paintPlain } from "./syntax.ts";
 
@@ -35,6 +37,17 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
 
 /** a `@` opening a word: the shape a reference has before the file list says whether it is one */
 const HAS_MENTION = /(^|\s)@\S/;
+
+/** the paths already asked about, by socket: an answer may be a while coming, and every bubble
+ * that names the path would otherwise ask again in the meantime */
+const askedPaths = new WeakMap<object, Set<string>>();
+const NO_PATHS: string[] = [];
+/** how long a draft sits still before the paths it names are asked about */
+const ASK_IN_FIELD_MS = 300;
+/** what is known of one path, as a letter: a message's paths are read as a word of these, so
+ * the bubble is drawn again only when what is known of its own paths changes */
+const KNOWN: Record<PathKind | "unknown", string> = { file: "f", folder: "d", none: "n", unknown: "?" };
+const KIND_OF: Record<string, PathKind> = { f: "file", d: "folder", n: "none" };
 
 /** A message's text with its `@` references drawn as links: a file or folder as the link the
  * agent's prose gives one, the uncommitted set as a mark that opens the changes tab. A reference
@@ -67,8 +80,42 @@ export function MentionText({
     () => mentionableWorktrees(siblingWorktrees(rows, repoId, worktreeId, shipping), archived),
     [rows, shipping, archived, repoId, worktreeId],
   );
-  const index = useMemo(() => mentionIndex(files, worktrees), [files, worktrees]);
+  // A path the message names on the machine's disk is a mark once the disk is known to hold it.
+  const home = useStore((s) => s.home);
+  const named = useMemo(() => (text.includes("/") ? namedPaths(text, home) : NO_PATHS), [text, home]);
+  const known = useStore((s) => named.map((p) => KNOWN[s.pathKinds[p] ?? "unknown"]).join(""));
+  const paths = useMemo(() => {
+    if (named.length === 0) return undefined;
+    const kinds: Record<string, PathKind> = {};
+    named.forEach((p, i) => {
+      const kind = KIND_OF[known[i] ?? ""];
+      if (kind) kinds[p] = kind;
+    });
+    return { home, kinds };
+  }, [named, known, home]);
+  const index = useMemo(() => mentionIndex(files, worktrees, paths), [files, worktrees, paths]);
   const spans = useMemo(() => mentionSpans(text, index), [text, index]);
+  // One nothing has spoken of is asked about, once. Over the field the ask waits for the draft
+  // to sit still: the completion asks about the word under the caret as it is typed, and its
+  // answers land in the same record, so what is left is a path typed past or pasted whole.
+  useEffect(() => {
+    if (!sock || !known.includes("?")) return;
+    const ask = () => {
+      let asked = askedPaths.get(sock);
+      if (!asked) {
+        asked = new Set();
+        askedPaths.set(sock, asked);
+      }
+      named.forEach((path, i) => {
+        if (known[i] !== "?" || asked.has(path)) return;
+        asked.add(path);
+        sock.send({ t: "browse-path", path });
+      });
+    };
+    if (!inField) return ask();
+    const timer = setTimeout(ask, ASK_IN_FIELD_MS);
+    return () => clearTimeout(timer);
+  }, [named, known, inField, sock]);
   // a reference with no list to check it against is prose until the list arrives, so the list is
   // asked for: the one cached list the @ menu and the files tab read, refreshed by whichever asks
   // first and left alone by the rest. An archived chat has no checkout to list, so nothing is
@@ -159,6 +206,23 @@ export function MentionText({
                 </>
               )}
             </span>
+          );
+        }
+        // a path on the machine's disk: the link the agent's prose gives one, which the row's
+        // router opens here when it is in this checkout and asks the daemon for when it is not
+        if (s.kind === "path") {
+          const named = `${collapseHome(s.path, home)}${s.folder ? "/" : ""}`;
+          return (
+            <a
+              // biome-ignore lint/suspicious/noArrayIndexKey: same
+              key={i}
+              className="chat-mention"
+              href={s.folder ? `${s.path}/` : s.path}
+              tabIndex={inField ? -1 : undefined}
+              {...tip(named, undefined, { placement: "follow" })}
+            >
+              {s.text}
+            </a>
           );
         }
         if (!root || !worktreeId) return s.text;

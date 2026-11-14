@@ -8,6 +8,7 @@ import {
   mentionIndex,
   mentionSpans,
   mentionTip,
+  namedPaths,
   settled,
   triggerAt,
 } from "./mentions.ts";
@@ -105,6 +106,31 @@ describe("triggerAt: shell commands", () => {
     expect(at("!/review")?.kind).toBe("path");
   });
 
+  test("a word past the command's name is a path from the worktree it runs in", () => {
+    expect(at("!cat pa")).toEqual({ kind: "path", query: "pa", from: 5, to: 7, relative: true });
+    expect(at("!cat src/App")).toEqual({ kind: "path", query: "src/App", from: 5, to: 12, relative: true });
+    expect(at("!cat ../sib")).toEqual({ kind: "path", query: "../sib", from: 5, to: 11, relative: true });
+    expect(at('!cat "src/')).toEqual({ kind: "path", query: "src/", from: 6, to: 10, relative: true });
+    // nothing typed yet, a flag, a variable, a sigil and an address name no path
+    expect(at("!cat ")).toBeNull();
+    expect(at("!ls -la")).toBeNull();
+    expect(at("!echo $HOME")).toBeNull();
+    expect(at("!npm i @types/node")).toBeNull();
+    expect(at("!curl https://toyon.dev/docs")).toBeNull();
+  });
+
+  test("the command's own name is a program, and a path only when it says so", () => {
+    expect(at("!gi")).toBeNull();
+    expect(at("! gi")).toBeNull();
+    expect(at("!./scr")).toEqual({ kind: "path", query: "./scr", from: 1, to: 6, relative: true });
+    expect(at("!../bin/x")).toEqual({ kind: "path", query: "../bin/x", from: 1, to: 9, relative: true });
+  });
+
+  test("a message's words are never read from the worktree: that is the `@`", () => {
+    expect(at("read src/App")).toBeNull();
+    expect(at("run ./scr")).toBeNull();
+  });
+
   test("a path in one completes, the sigil left out of its first word", () => {
     expect(at("!ls ~/Pro")).toEqual({ kind: "path", query: "~/Pro", from: 4, to: 9 });
     expect(at("!/usr/bin/env")).toEqual({ kind: "path", query: "/usr/bin/env", from: 1, to: 13 });
@@ -154,6 +180,71 @@ describe("triggerAt: paths on disk", () => {
   test("one slash at the head of the draft is a command until a second says otherwise", () => {
     expect(at("/Us")).toEqual({ kind: "command", query: "Us", from: 0, to: 3 });
     expect(at("/Users/")).toEqual({ kind: "path", query: "/Users/", from: 0, to: 7 });
+  });
+});
+
+describe("mentionSpans: paths on disk", () => {
+  const home = "/Users/k";
+  const index = mentionIndex(["src/App.tsx"], undefined, {
+    home,
+    kinds: {
+      "/Users/k/notes.md": "file",
+      "/Users/k/Projects": "folder",
+      "/Users/k/Library/Application Support": "folder",
+      "/etc/hosts": "file",
+      "/api/users": "none",
+    },
+  });
+  const marks = (text: string) => mentionSpans(text, index).filter((s) => s.kind !== "text");
+
+  test("a path the disk is known to hold is a mark, spelt as written", () => {
+    expect(marks("read ~/notes.md and /etc/hosts")).toEqual([
+      { kind: "path", text: "~/notes.md", path: "/Users/k/notes.md", folder: false },
+      { kind: "path", text: "/etc/hosts", path: "/etc/hosts", folder: false },
+    ]);
+    expect(marks("in ~/Projects/ somewhere")).toEqual([
+      { kind: "path", text: "~/Projects/", path: "/Users/k/Projects", folder: true },
+    ]);
+  });
+
+  test("a route, and a path nothing has spoken of, stay prose", () => {
+    expect(marks("fix the /api/users route")).toEqual([]);
+    expect(marks("read ~/other.md")).toEqual([]);
+    expect(mentionSpans("read ~/notes.md", mentionIndex(["src/App.tsx"]))).toEqual([
+      { kind: "text", text: "read ~/notes.md" },
+    ]);
+  });
+
+  test("the sentence's punctuation and what stands ahead of the path are not the path", () => {
+    expect(marks("see ~/notes.md.")[0]?.text).toBe("~/notes.md");
+    expect(marks("(see ~/notes.md)")[0]?.text).toBe("~/notes.md");
+    expect(marks("see (~/notes.md)")[0]?.text).toBe("~/notes.md");
+    expect(marks("@~/notes.md")[0]).toEqual({
+      kind: "path",
+      text: "~/notes.md",
+      path: "/Users/k/notes.md",
+      folder: false,
+    });
+  });
+
+  test("a space a backslash holds is part of the path; backticked text names nothing", () => {
+    expect(marks("in ~/Library/Application\\ Support/ now")[0]).toEqual({
+      kind: "path",
+      text: "~/Library/Application\\ Support/",
+      path: "/Users/k/Library/Application Support",
+      folder: true,
+    });
+    expect(marks("run `cat ~/notes.md`").map((s) => s.kind)).toEqual(["code"]);
+  });
+
+  test("namedPaths lists every spelling a word could be on the disk as", () => {
+    expect(namedPaths("see ~/notes.md. and /etc/hosts, or `~/x`", home)).toEqual([
+      "/Users/k/notes.md.",
+      "/Users/k/notes.md",
+      "/etc/hosts,",
+      "/etc/hosts",
+    ]);
+    expect(namedPaths("no paths here: and/or, 1/2", home)).toEqual([]);
   });
 });
 

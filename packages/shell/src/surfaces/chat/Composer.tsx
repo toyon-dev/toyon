@@ -654,9 +654,13 @@ export function Composer({
   const pathAnswer = useStore((s) => s.paths);
   // a command is the shell's to read, so a name in one is escaped as a shell wants it
   const shellDraft = text.startsWith("!");
+  // a command's word that names no root is a path from the worktree the command runs in; with no
+  // worktree in hand there is nowhere to read it from
+  const worktreePath = active?.worktree.path;
+  const pathBase = !pathTrigger?.relative ? "" : worktreePath ? `${worktreePath}/` : null;
   const pathsFound = useMemo(
-    () => (pathQuery === undefined ? [] : pathRows(pathQuery, pathAnswer, shellDraft)),
-    [pathQuery, pathAnswer, shellDraft],
+    () => (pathQuery === undefined || pathBase === null ? [] : pathRows(pathQuery, pathAnswer, shellDraft, pathBase)),
+    [pathQuery, pathAnswer, shellDraft, pathBase],
   );
   const pathing = pathTrigger !== null && pathsFound.length > 0;
   const trigger = pathing ? pathTrigger : typed;
@@ -684,7 +688,10 @@ export function Composer({
       : 0;
   // asked once the path stops changing, and not for one the menu was closed on or a message
   // walked back to, which was sent and not typed
-  const lookup = pathQuery !== undefined && pathTrigger?.from !== dismissed && !walk ? unescapePath(pathQuery) : null;
+  const lookup =
+    pathQuery !== undefined && pathBase !== null && pathTrigger?.from !== dismissed && !walk
+      ? pathBase + unescapePath(pathQuery)
+      : null;
   useEffect(() => {
     if (lookup === null) return;
     const timer = setTimeout(() => sock?.send({ t: "browse-path", path: lookup }), BROWSE_AFTER_MS);
@@ -1898,7 +1905,7 @@ export function Composer({
               file list decides which words are references, so a sigil that names nothing shows
               nothing. Not in `!` mode, where a `@` is the shell's. Hidden from readers: the field
               already reads the text, and the links are the pointer's. */}
-          {(id || outside) && shellCmd === null && text.includes("@") && (
+          {(id || outside) && shellCmd === null && (text.includes("@") || text.includes("/")) && (
             <div
               ref={marksRef}
               className="composer-ghost composer-marks"

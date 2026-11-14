@@ -63,6 +63,7 @@ import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.t
 import {
   callPath,
   composing,
+  composingOnLine,
   diffLines,
   guardianHint,
   isGuardian,
@@ -793,6 +794,9 @@ export const ToolRow = memo(
     // a spawn's description lands ahead of its brief (composing): it names the row meanwhile,
     // and the mark takes the count's slot, where the calls will tick once the subagent starts
     const briefed = writing && head.subagent ? text.hint : "";
+    // the words the line carries while the call is written, where it carries any: a spawn's
+    // description, or the phrase itself for a call that is a long time in the writing
+    const said = briefed || (writing && composingOnLine(head) ? writing : "");
     const hint = briefed || writing || (guardian ? guardianHint(head.output ?? "") : text.hint);
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
@@ -883,7 +887,7 @@ export const ToolRow = memo(
                 event, but an edit sits here for the whole replacement, and a mark alone for ten
                 seconds read as a stalled tool, so the phrase is there for whoever comes to ask.
                 It still names the row for the fold's label. */}
-            {writing && !briefed ? (
+            {writing && !said ? (
               <span className="tool-writing" data-tip={hint}>
                 <Spinner />
               </span>
@@ -899,8 +903,9 @@ export const ToolRow = memo(
               <span className={cx("tool-age", inner >= 0 && "tool-age-folded")}>{elapsed(age)}</span>
             )}
             {count && <span className="tool-count">{count}</span>}
-            {briefed && (
-              <span className="tool-writing" data-tip={writing}>
+            {/* the tip is the phrase the line does not already say */}
+            {said && (
+              <span className="tool-writing" data-tip={briefed ? writing : undefined}>
                 <Spinner />
               </span>
             )}

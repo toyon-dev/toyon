@@ -520,6 +520,15 @@ export function composing(call: ToolCall): string {
   return isWrittenKind(kind) ? WRITING[kind] : "writing the question";
 }
 
+/** Whether the row prints its composing phrase on the line, beside the mark, or keeps it as the
+ * mark's tip. A tip is right where the input is a line: the command or path takes the slot a beat
+ * later, and a phrase printed ahead of it is two lines of text for one event. A handoff's list
+ * takes a minute to write and nothing takes the slot until it closes, so a mark alone for that
+ * long is a row that says nothing about what it is. */
+export function composingOnLine(call: ToolCall): boolean {
+  return call.name === HANDOFF_TOOL;
+}
+
 /** the blocks to show under the row: the adapter repeats the description as the first line of the
  * output, and the summary already carries it */
 export function toolBlocks(call: ToolCall, output: string): OutputBlock[] {

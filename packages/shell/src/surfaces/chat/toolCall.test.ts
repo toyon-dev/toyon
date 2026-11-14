@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@toyon/shared";
 import {
   composing,
+  composingOnLine,
   diffLineKind,
   diffLines,
   guardianHint,
@@ -420,6 +421,10 @@ describe("toolLabel", () => {
     const handoff = { name: "handoff", title: "handoff", input: {} };
     expect(composing(handoff)).toBe("splitting off work");
     expect(composing({ ...handoff, input: { locations: [] } })).toBe("splitting off work");
+    // a minute of writing with nothing to take the slot: the phrase is on the line, where a
+    // command's is the mark's tip because the command replaces it a beat later
+    expect(composingOnLine(handoff)).toBe(true);
+    expect(composingOnLine({ name: "Bash", title: "Terminal", toolKind: "execute" as const, input: {} })).toBe(false);
     // the list landing ends it: the row has titles to print
     const offered = { ...handoff, input: { pieces: [{ title: "sticky header", plan: "...", where: "worktree" }] } };
     expect(composing(offered)).toBe("");

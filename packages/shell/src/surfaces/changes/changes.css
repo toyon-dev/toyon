@@ -13,8 +13,9 @@
     --tabs-ground: var(--surface1);
     --tabs-strip: var(--sunken);
     /* the strip heads the whole panel under the bar, so it takes the full row rather than the
-     pane head's dense one */
+     pane head's dense one, and the label tier of the rows that share that height */
     --tabs-height: var(--row-height);
+    --tabs-type: var(--type-ui);
     /* the seam faces the centre, whichever edge the dock stands at (the app root's data-chat-side) */
     border-right: 1px solid var(--border0);
     display: flex;

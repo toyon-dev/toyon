@@ -39,7 +39,9 @@
     align-items: stretch;
     flex-shrink: 0;
     color: var(--text1);
-    font: var(--type-ui-sm);
+    /* the small tier suits the dense strip; a parent that names the taller height names the type
+       with it (`--tabs-type`), since a small label in a full row reads as a caption */
+    font: var(--tabs-type, var(--type-ui-sm));
     /* a hovered closed tab is a hovered row: the element seat, and the ladder up with it so the
      count rides. It lands brighter than the open tab, and that is fine, because the open tab's mark
      is that it joins the list under it, not its brightness; painting the hover in the ground

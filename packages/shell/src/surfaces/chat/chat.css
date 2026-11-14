@@ -1639,9 +1639,10 @@
     color: var(--text1);
   }
   /* the chips wrap rather than clip: a dock is 380px and a long model name plus five chips is more */
-  /* Spaced by what shows, not by the boxes: the top bar's tools put 24px between glyphs (a 20px gap
-   plus each box's 2px), and a text chip already carries 8px of padding a side where an icon box
-   carries 2px. So chips sit 8px apart and an icon among them takes the missing 6px as margin. */
+  /* Spaced by what shows, not by the boxes: the tools at this row's end put 24px between glyphs (a
+   20px gap plus each box's 2px), and a text chip already carries 8px of padding a side where an
+   icon box carries 2px. So chips sit 8px apart and an icon among them takes the missing 6px as
+   margin. */
   .spawn-left {
     display: flex;
     align-items: center;

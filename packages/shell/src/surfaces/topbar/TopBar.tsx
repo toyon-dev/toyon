@@ -169,12 +169,16 @@ export function TopBar({
           <span className="bar-grow" />
         </>
       )}
-      {/* right cluster: phone · settings · the panel toggles this edge holds · zen (zen last: it
-          hides everything, so it sits at the edge). The terminal toggle lives in the composer: one
-          shell per worktree, not app chrome. The design pane has no toggle here: it is a reference
-          opened now and then, so its chord and its command row are the way in. */}
+      {/* right cluster: phone · the panel toggles this edge holds · settings · zen. Settings and zen
+          are about the whole window, so the pair holds the corner whichever side the chat is on and
+          the toggles trade places inside it (zen last: it hides everything, so it sits at the
+          edge). The terminal toggle lives in the composer: one shell per worktree, not app chrome.
+          The design pane has no toggle here: it is a reference opened now and then, so its chord
+          and its command row are the way in. */}
       <span className="bar-tools" ref={toolsRef}>
         <PhoneButton />
+        {chatLeft ? changesToggle : chatToggle}
+        {!chatLeft && railToggle}
         <IconButton
           icon="settings"
           label="Settings & shortcuts"
@@ -189,8 +193,6 @@ export function TopBar({
           onClick={() => dispatch({ a: "toggle", overlay: { kind: "keys" } })}
           {...cm.contextMenu(() => settingsItems(store.getState(), { sock, dispatch }))}
         />
-        {chatLeft ? changesToggle : chatToggle}
-        {!chatLeft && railToggle}
         {/* the one tool the installed app's zen strip keeps: the strip is the window's title bar
             and stays anyway, and with no browser chrome around it, a lit toggle at the edge is the
             standing sign that this is a mode with a way out */}

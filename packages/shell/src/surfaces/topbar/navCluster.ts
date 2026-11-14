@@ -4,7 +4,7 @@ export const NAV_GAP_PX = 8;
 /** The least it keeps clear of the tools: their own gap (`.bar-tools` in topbar.css). The cluster
  * ends in an icon the size of theirs, so held against them it is the next seat in their row, and
  * any nearer its last icon and their first read as a pair apart from the rest. */
-export const NAV_TOOLS_GAP_PX = 20;
+export const NAV_TOOLS_GAP_PX = 8;
 
 export type NavClusterInput = {
   winW: number;

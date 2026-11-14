@@ -132,7 +132,7 @@ import {
 import { ownsNotice } from "./ownsNotice.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
-import { commandAsPath, type PathRow, pathRows, unescapePath } from "./pathComplete.ts";
+import { commandAsPath, type PathRow, pathRows, pathWritten, unescapePath } from "./pathComplete.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
@@ -664,6 +664,7 @@ export function Composer({
   );
   const pathing = pathTrigger !== null && pathsFound.length > 0;
   const trigger = pathing ? pathTrigger : typed;
+  const pathNamed = pathing && pathWritten(pathTrigger?.query ?? "", pathAnswer, pathBase ?? "");
   const rows = useMemo(
     (): Row[] => (pathing ? pathsFound.slice(0, PATHS_LISTED).map((r): Row => ({ kind: "path", ...r })) : named),
     [pathing, pathsFound, named],
@@ -675,12 +676,15 @@ export function Composer({
   // return for a pick of the same words where the hand meant the send.
   // A path's list is the one that stays shut with nothing in it: most words that open with a
   // slash name nothing on the disk, and a note saying so would answer a question nobody asked.
+  // It is shut as well over a path written out in full, for the reason a settled `@` is: an open
+  // list takes return for its cursor row, and the rows left there are longer names (`notes.md.bak`
+  // under `notes.md`) or the folder's own slash, where the hand meant the send.
   const menuOpen =
     trigger !== null &&
     trigger.from !== dismissed &&
     !walk &&
     !(trigger.kind === "file" && settled(text, trigger.from, mentions)) &&
-    !(trigger.kind === "path" && !pathing);
+    !(trigger.kind === "path" && (!pathing || pathNamed));
   // the agent's rows a bare `/` leaves out, said under the menu's rows so they are not lost
   const more =
     !pathing && triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
@@ -1820,9 +1824,7 @@ export function Composer({
                   setDismissed(trigger?.from ?? null);
                   return;
                 }
-                // a path's list completes and never picks: tab takes the row, and return is the
-                // send, or a message that ends in a folder would send its first file instead
-                if (!(trigger?.kind === "path" && e.key === "Enter") && nav.onKeyDown(e)) return;
+                if (nav.onKeyDown(e)) return;
               }
               // ⌥↑/↓ and ⌥⇧↑/↓ walk the rail (app/keys.ts hears them after this handler), and an ⌥
               // or ⌃ arrow is never a recall: with the box otherwise empty the walk would load the

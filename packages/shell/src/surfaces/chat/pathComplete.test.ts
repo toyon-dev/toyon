@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { PathEntry, PathTarget } from "@toyon/shared";
-import { commandAsPath, diskPath, escapeName, pathKindsWith, pathRows, unescapePath } from "./pathComplete.ts";
+import {
+  commandAsPath,
+  diskPath,
+  escapeName,
+  pathKindsWith,
+  pathRows,
+  pathWritten,
+  unescapePath,
+} from "./pathComplete.ts";
 
 const dir = (name: string, isRepo = false): PathEntry => ({ path: `~/${name}`, name, isRepo, isFile: false });
 const file = (name: string): PathEntry => ({ path: `~/${name}`, name, isRepo: false, isFile: true });
@@ -76,6 +84,44 @@ describe("pathRows: from the worktree", () => {
   test("an answer about the same word read from the disk's root is not this one", () => {
     expect(pathRows("pa", { query: "/pa", entries: [dir("patches")] }, true, base)).toEqual([]);
     expect(pathRows("pa", root, true)).toEqual([]);
+  });
+});
+
+describe("pathWritten", () => {
+  const home = { query: "~/", entries: [dir("Projects"), dir("Music"), file("notes.md"), file("notes.md.bak")] };
+
+  test("a name still half typed is not written, whatever it would complete to", () => {
+    expect(pathWritten("~/Pro", home)).toBe(false);
+    expect(pathWritten("~/note", home)).toBe(false);
+    // the disk's spelling is the one that counts: the row is there to mend the case
+    expect(pathWritten("~/music", home)).toBe(false);
+  });
+
+  test("a word that ends in a folder's slash asks what is in it, and is not written", () => {
+    expect(pathWritten("~/", home)).toBe(false);
+    expect(pathWritten("~/Projects/", { query: "~/Projects/", entries: [dir("toyon")] })).toBe(false);
+    expect(pathWritten("~/Projects/", null)).toBe(false);
+  });
+
+  test("a name the answer lists as typed is written, though longer names start with it", () => {
+    expect(pathWritten("~/notes.md", home)).toBe(true);
+    expect(pathWritten("~/Music", home)).toBe(true);
+  });
+
+  test("a held space is read before the name is compared", () => {
+    expect(pathWritten("~/My\\ Notes", { query: "~/", entries: [dir("My Notes")] })).toBe(true);
+  });
+
+  test("an answer about another folder, or none, says nothing of the name", () => {
+    expect(pathWritten("~/Projects/notes.md", home)).toBe(false);
+    expect(pathWritten("~/notes.md", null)).toBe(false);
+  });
+
+  test("a word that names no root is read from the base", () => {
+    const root = { query: "/w/app/pa", entries: [dir("packages"), file("package.json")] };
+    expect(pathWritten("pa", root, "/w/app/")).toBe(false);
+    expect(pathWritten("package.json", root, "/w/app/")).toBe(true);
+    expect(pathWritten("package.json", root)).toBe(false);
   });
 });
 

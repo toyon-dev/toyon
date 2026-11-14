@@ -64,6 +64,14 @@ export function pathRows(query: string, answer: PathAnswer | null, shell: boolea
     .filter((r) => r.completion !== query);
 }
 
+/** Whether the word is a path written out in full: the answer lists its last name as typed. A
+ * word that ends in a slash is not one, since a folder's slash asks what is in it; neither is a
+ * name in another case, which the row is there to mend. */
+export function pathWritten(query: string, answer: PathAnswer | null, base = ""): boolean {
+  const [dir, name] = split(base + unescapePath(query));
+  return !!name && !!answer && split(answer.query)[0] === dir && answer.entries.some((e) => e.name === name);
+}
+
 /** A draft that opens with one slash is a command until a second slash says otherwise, so `/Us`
  * is asked of the commands first. This is the same word read as the path it also spells, for the
  * host to fall back on when no command answers to it. */

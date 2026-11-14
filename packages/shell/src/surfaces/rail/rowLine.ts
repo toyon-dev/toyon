@@ -197,7 +197,7 @@ export function archivedLines(a: ArchivedWorktree): string[] {
  * row the card belongs to, and a tip of its own there swapped with the card as the pointer
  * crossed the row; under the first message the reason read as more of the message, and beside the
  * state it wrapped under itself. The state says the row archived itself, so the reason does not
- * say it again. Only the wait on a merged row, whose state already says how the
+ * say it again. Only the wait on a landed row, whose state already says how the
  * work went; any other leads with the rest of the reason, since its state does not say there was
  * nothing to keep.
  */

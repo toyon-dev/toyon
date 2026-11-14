@@ -43,7 +43,7 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
     >
       <span className="daemon-text">
         {ago}
-        {item.landed ? ", after it was merged into main" : ""}
+        {item.landed ? ", after it landed on main" : ""}
       </span>
     </DaemonRow>
   );

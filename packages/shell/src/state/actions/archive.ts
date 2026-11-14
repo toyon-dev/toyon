@@ -10,19 +10,19 @@ import { daemonHost, revealItems } from "./editor.ts";
  * ended, what came with it, what its agent cost, and how long ago. The spend alone, no context
  * figure: the context it filled is gone with the session, the money is not. */
 /** The archived row's state, the way a live row's dot is one in words: how it went, then what the
- * archive holds of it. Merged outranks uncommitted, since the changes were kept beside a branch
+ * archive holds of it. Landed outranks uncommitted, since the changes were kept beside a branch
  * that already landed; the count column says how many. A row that archived itself says so here,
  * and the card's foot is left with the reason alone. The time is the row's gutter, and the cost
  * is a figure, so neither is in the phrase. */
 export function archivedState(a: ArchivedWorktree): string {
   const archived = a.auto ? "Auto archived" : "Archived";
-  const merged = a.auto ? "Merged, auto archived" : "Merged";
-  const what = a.landed ? merged : a.uncommitted ? `${archived} with uncommitted changes` : archived;
+  const landed = a.auto ? "Landed, auto archived" : "Landed";
+  const what = a.landed ? landed : a.uncommitted ? `${archived} with uncommitted changes` : archived;
   return a.restorable ? what : `${what}, commits not kept`;
 }
 
 export function archivedHint(a: ArchivedWorktree): string {
-  const parts = [a.landed ? "merged" : a.uncommitted ? "uncommitted changes" : null];
+  const parts = [a.landed ? "landed" : a.uncommitted ? "uncommitted changes" : null];
   if (!a.restorable) parts.push("commits not kept");
   if (a.cost !== undefined) parts.push(dollars(a.cost));
   parts.push(ago(a.archivedAt));

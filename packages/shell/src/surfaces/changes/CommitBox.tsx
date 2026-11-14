@@ -284,7 +284,7 @@ export function CommitBox({
             </span>
           )}
           {hasLanded && (
-            <span className="badge-landed" data-tip={`Merged into ${base}`}>
+            <span className="badge-landed" data-tip={`Landed on ${base}`}>
               <Icon name="check" className="icon-inline" /> landed
             </span>
           )}

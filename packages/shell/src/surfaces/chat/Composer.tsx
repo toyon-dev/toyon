@@ -62,7 +62,7 @@ import { STEP_HOLD_MS, useHeld, useOnChange, useSecondsSince } from "../../ui/ho
 import { Icon } from "../../ui/Icon.tsx";
 import { InlinePicker } from "../../ui/InlinePicker.tsx";
 import { openOut } from "../../ui/links.ts";
-import { useListNav } from "../../ui/listNav.ts";
+import { ghostOf, useListNav } from "../../ui/listNav.ts";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
 import { Ring } from "../../ui/Ring.tsx";
 import { tip } from "../../ui/Tooltip.tsx";
@@ -132,6 +132,7 @@ import {
 import { ownsNotice } from "./ownsNotice.ts";
 import { PermissionCard } from "./PermissionCard.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { commandAsPath, type PathRow, pathRows, unescapePath } from "./pathComplete.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
 import { shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
@@ -182,7 +183,13 @@ type Row =
   | { kind: "folder"; path: string }
   | { kind: "changes"; n: number }
   | ({ kind: "worktree" } & Sibling)
-  | { kind: "cmd"; c: AgentCommand };
+  | { kind: "cmd"; c: AgentCommand }
+  | ({ kind: "path" } & PathRow);
+
+/** how many ways on a typed path lists; the rest are a letter away */
+const PATHS_LISTED = 8;
+/** how long a typed path sits still before the daemon is asked what could finish it */
+const BROWSE_AFTER_MS = 60;
 
 /** how many of the project's other worktrees a bare `@` offers above the files, newest first;
  * a letter searches them all (siblings.ts `matchesSibling`) */
@@ -237,6 +244,8 @@ function emptyMenu(
  * reads it with its own tools, at the range it wants and with line numbers attached. */
 function insertionFor(r: Row): string {
   if (r.kind === "cmd") return `/${r.c.name} `; // verbatim: the adapter re-expands mcp: names
+  // a folder is a step on the way, so the caret stays on its slash; a file is where the path ends
+  if (r.kind === "path") return r.folder ? r.completion : `${r.completion} `;
   if (r.kind === "folder") return `@${r.path}/ `;
   // a worktree goes in by its title, the name the rail and the sent message read it by; the mark
   // over the field underlines the whole of it, spaces and all, and the send writes the branch in
@@ -613,12 +622,12 @@ export function Composer({
   // from, so its menu is the `@` alone, over the project's other worktrees. None on a project
   // with no files yet.
   const opened = boxId && !project ? triggerAt(text, caret, (q) => siblings.some((w) => matchesSibling(q, w))) : null;
-  const trigger = outside && opened?.kind === "command" ? null : opened;
+  const typed = outside && opened?.kind === "command" ? null : opened;
   // keyed on the query and the kind, not the trigger: triggerAt rebuilds that object on every keystroke
-  const triggerKind = trigger?.kind;
-  const triggerQuery = trigger?.query;
-  const rows = useMemo((): Row[] => {
-    if (triggerQuery === undefined) return [];
+  const triggerKind = typed?.kind;
+  const triggerQuery = typed?.query;
+  const named = useMemo((): Row[] => {
+    if (triggerQuery === undefined || triggerKind === "path") return [];
     if (triggerKind === "command") {
       // a bare `/` browses what was made for this project; a letter searches everything the agent has
       if (!triggerQuery.trim()) return browseCommands(ownRows, commands).rows.map(cmdRow);
@@ -637,21 +646,50 @@ export function Composer({
     out.push(...rankMentions(files ?? [], folders, git?.files ?? [], triggerQuery, 8));
     return out;
   }, [triggerKind, triggerQuery, files, folders, git, commands, ownRows, siblings]);
+  // A path on the machine's disk, completed from the listing the project picker reads. A draft
+  // that opens with one slash is a command first, and the path it also spells (`/Us`) only where
+  // no command answers to it.
+  const pathTrigger = typed?.kind === "path" ? typed : named.length === 0 ? commandAsPath(typed) : null;
+  const pathQuery = pathTrigger?.query;
+  const pathAnswer = useStore((s) => s.paths);
+  // a command is the shell's to read, so a name in one is escaped as a shell wants it
+  const shellDraft = text.startsWith("!");
+  const pathsFound = useMemo(
+    () => (pathQuery === undefined ? [] : pathRows(pathQuery, pathAnswer, shellDraft)),
+    [pathQuery, pathAnswer, shellDraft],
+  );
+  const pathing = pathTrigger !== null && pathsFound.length > 0;
+  const trigger = pathing ? pathTrigger : typed;
+  const rows = useMemo(
+    (): Row[] => (pathing ? pathsFound.slice(0, PATHS_LISTED).map((r): Row => ({ kind: "path", ...r })) : named),
+    [pathing, pathsFound, named],
+  );
   // Opens even with nothing to show: an empty menu that says why beats a `/` that does nothing. Not
   // over a walked-back message: a recalled `/compact` was sent, not typed, and the menu would take
   // the arrows the walk is using. Not over a `@` that already opens a mark (settled), with the
   // caret anywhere in it: the mark says it resolved, and the menu's live first row would take
   // return for a pick of the same words where the hand meant the send.
+  // A path's list is the one that stays shut with nothing in it: most words that open with a
+  // slash name nothing on the disk, and a note saying so would answer a question nobody asked.
   const menuOpen =
     trigger !== null &&
     trigger.from !== dismissed &&
     !walk &&
-    !(trigger.kind === "file" && settled(text, trigger.from, mentions));
+    !(trigger.kind === "file" && settled(text, trigger.from, mentions)) &&
+    !(trigger.kind === "path" && !pathing);
   // the agent's rows a bare `/` leaves out, said under the menu's rows so they are not lost
   const more =
-    triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
+    !pathing && triggerKind === "command" && triggerQuery !== undefined && !triggerQuery.trim()
       ? browseCommands(ownRows, commands).more
       : 0;
+  // asked once the path stops changing, and not for one the menu was closed on or a message
+  // walked back to, which was sent and not typed
+  const lookup = pathQuery !== undefined && pathTrigger?.from !== dismissed && !walk ? unescapePath(pathQuery) : null;
+  useEffect(() => {
+    if (lookup === null) return;
+    const timer = setTimeout(() => sock?.send({ t: "browse-path", path: lookup }), BROWSE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [lookup, sock]);
 
   const composerRef = useRef<HTMLTextAreaElement>(null);
   // the composer's own box, which stays while the field gives way to a card
@@ -755,7 +793,9 @@ export function Composer({
           ? "changes"
           : r.kind === "worktree"
             ? `w:${r.id}`
-            : `f:${r.path}`,
+            : r.kind === "path"
+              ? `p:${r.completion}`
+              : `f:${r.path}`,
     q: trigger?.query ?? "",
     listRef,
     tabPicks: true,
@@ -763,7 +803,9 @@ export function Composer({
       if (!trigger) return;
       const { text: next, caret: at } = insertAt(text, trigger, insertionFor(r));
       setText(next);
-      setDismissed(trigger.from);
+      // a folder taken is a path still being walked: its list is the next thing wanted
+      if (r.kind === "path" && r.folder) nav.setIndex(0);
+      else setDismissed(trigger.from);
       // the draft round-trips through the store, so the caret has to be placed after that render
       requestAnimationFrame(() => {
         const el = composerRef.current;
@@ -795,7 +837,13 @@ export function Composer({
             : `a command to run in ${active.worktree.title}; the agent sees its output with your next message`,
         )
       : null;
-  const ghost = argGhost ?? shellGhost;
+  // the rest of the path the list's cursor is on, where the draft ends at the caret: the ghost is
+  // drawn after the whole draft, so a path being mended mid-sentence has the list alone
+  const pathGhost =
+    menuOpen && trigger && nav.active?.kind === "path" && caret === text.length
+      ? ghostOf(nav.active.completion, trigger.query)
+      : null;
+  const ghost = pathGhost ?? argGhost ?? shellGhost;
   // the placeholder, and the quieter line under it while the box is empty.
   // The standing line takes the placeholder outright. As a line of its own above the box it was a
   // second block of grey text saying something the box already said.
@@ -1644,10 +1692,12 @@ export function Composer({
                   ? `w:${r.id}`
                   : r.kind === "folder"
                     ? `d:${r.path}`
-                    : `f:${r.path}`
+                    : r.kind === "path"
+                      ? `p:${r.completion}`
+                      : `f:${r.path}`
           }
           rowClass={(r) =>
-            r.kind === "file" || r.kind === "folder"
+            r.kind === "file" || r.kind === "folder" || r.kind === "path"
               ? "qo-file"
               : r.kind === "changes" || r.kind === "worktree"
                 ? "picker-row"
@@ -1656,13 +1706,24 @@ export function Composer({
           nav={nav}
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null, outside)}
-          note={more > 0 ? `type to find ${more} more` : undefined}
+          note={
+            more > 0
+              ? `type to find ${more} more`
+              : pathing && pathsFound.length > PATHS_LISTED
+                ? "type to find more"
+                : undefined
+          }
           groupOf={(r) => (r.kind === "worktree" ? "worktrees" : r.kind === "cmd" ? "commands" : "files")}
           row={(r) => {
             // the letter column only while the live status has a letter to put in it
             const gutter = (git?.files.length ?? 0) > 0;
             if (r.kind === "file") return fileRow(r.path, r.status, trigger.query, { gutter });
             if (r.kind === "folder") return fileRow(r.path, undefined, trigger.query, { folder: true, gutter });
+            // the name alone, lit where it was typed: the folder it is in is the word in the draft
+            if (r.kind === "path") {
+              const leaf = unescapePath(trigger.query).split("/").at(-1) ?? "";
+              return fileRow(r.name, undefined, leaf, { folder: r.folder, gutter: false });
+            }
             if (r.kind === "changes")
               return <PaletteRow label="@changes" hint={`${r.n} uncommitted ${r.n === 1 ? "file" : "files"}`} />;
             // the rail's row in short: its dot, its title, and when it was last sent to. The
@@ -1752,7 +1813,9 @@ export function Composer({
                   setDismissed(trigger?.from ?? null);
                   return;
                 }
-                if (nav.onKeyDown(e)) return;
+                // a path's list completes and never picks: tab takes the row, and return is the
+                // send, or a message that ends in a folder would send its first file instead
+                if (!(trigger?.kind === "path" && e.key === "Enter") && nav.onKeyDown(e)) return;
               }
               // ⌥↑/↓ and ⌥⇧↑/↓ walk the rail (app/keys.ts hears them after this handler), and an ⌥
               // or ⌃ arrow is never a recall: with the box otherwise empty the walk would load the

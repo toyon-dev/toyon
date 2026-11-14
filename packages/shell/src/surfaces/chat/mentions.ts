@@ -10,7 +10,9 @@ import { githubIssueUrl, githubRefRanges } from "./markdownGithub.ts";
 import { linkRanges } from "./syntax.ts";
 
 export interface Trigger {
-  kind: "file" | "command";
+  /** `path` is a word that spells a place on the machine's disk, `~/` or `/` on: its span is the
+   * path alone, without a sigil or a quote ahead of it */
+  kind: "file" | "command" | "path";
   query: string;
   /** the span a pick replaces, sigil included */
   from: number;
@@ -27,13 +29,35 @@ const namesOn = (query: string) =>
     .slice(1)
     .every((w) => !w || /[a-z0-9]/i.test(w));
 
+/** what may stand between a word's start and the path in it (the mention's sigil, a quote, a
+ * bracket), then the path's opening: `~/`, or a slash with a name after it. A slash alone is the
+ * word "or", and two are a comment. */
+const PATH_OPENS = /^[@("'`]*(?=~\/|\/[^/\s])/;
+/** a space a backslash holds is part of the word, as a shell reads it: a folder named with one is
+ * written that way by the completion (pathComplete.ts) */
+const held = (text: string, i: number) => text[i] === " " && text[i - 1] === "\\";
+
+/** the path the caret is typing, in a message or in a command for the shell */
+function pathAt(text: string, caret: number): Trigger | null {
+  let start = caret;
+  while (start > 0 && (!/\s/.test(text[start - 1] ?? "") || held(text, start - 1))) start--;
+  // the shell's sigil is not part of its first word
+  if (start === 0 && text.startsWith("!")) start = 1;
+  const lead = PATH_OPENS.exec(text.slice(start, caret));
+  if (!lead) return null;
+  const from = start + lead[0].length;
+  let to = caret;
+  while (to < text.length && (!/\s/.test(text[to] ?? "") || held(text, to))) to++;
+  return { kind: "path", query: text.slice(from, caret), from, to };
+}
+
 /** `continues` says whether a query with spaces in it still names something, which only a
  * worktree title can: the menu stays open past a space while it does, so a title is typed as it
  * reads, and closes at the space where the words stop naming one, as they do for a path. */
 export function triggerAt(text: string, caret: number, continues?: (query: string) => boolean): Trigger | null {
-  // a `!` draft is a command for the shell (shellMode.ts): no menu, since an `@path` picked into
-  // one would hand the shell a literal `@`, and a slash in a command is a path
-  if (text.startsWith("!")) return null;
+  // a `!` draft is a command for the shell (shellMode.ts): a path is all it completes, since an
+  // `@path` picked into one would hand the shell a literal `@`, and a slash in a command is a path
+  if (text.startsWith("!")) return pathAt(text, caret);
   // A slash command only counts at the very start of the draft, because that is the only place an
   // agent will dispatch one: offering it mid-text would insert something that silently runs as
   // prose. Everything up to the first space is the command name.
@@ -44,6 +68,9 @@ export function triggerAt(text: string, caret: number, continues?: (query: strin
     const isPath = text.indexOf("/", 1) !== -1 && text.indexOf("/", 1) < nameEnd;
     if (!isPath && caret <= nameEnd) return { kind: "command", query: text.slice(1, caret), from: 0, to: nameEnd };
   }
+  // ahead of the `@`: `@~/notes` is a path with the sigil in front of it, which no file here is
+  const path = pathAt(text, caret);
+  if (path) return path;
   const at = text.lastIndexOf("@", Math.max(0, caret - 1));
   if (at === -1 || at >= caret) return null;
   // an address or a decorator is not a mention: the sigil has to open a word

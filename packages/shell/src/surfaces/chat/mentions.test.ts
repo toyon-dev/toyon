@@ -77,7 +77,8 @@ describe("triggerAt: @ mentions", () => {
 describe("triggerAt: slash commands", () => {
   test("only at the very start, because that is the only place an agent dispatches one", () => {
     expect(at("/rev")).toEqual({ kind: "command", query: "rev", from: 0, to: 4 });
-    expect(at("hi /rev")).toBeNull();
+    // past the start the same word is only a path, which the disk may or may not hold
+    expect(at("hi /rev")?.kind).toBe("path");
   });
 
   test("a space ends the name; the rest is the command's arguments", () => {
@@ -90,18 +91,69 @@ describe("triggerAt: slash commands", () => {
   });
 
   test("a second slash in the name is a path, not a command", () => {
-    expect(at("/Users/me/app.ts")).toBeNull();
-    expect(at("/src/")).toBeNull();
-    expect(triggerAt("/src/app.ts is slow", 4)).toBeNull();
+    expect(at("/Users/me/app.ts")?.kind).toBe("path");
+    expect(at("/src/")?.kind).toBe("path");
+    expect(triggerAt("/src/app.ts is slow", 4)).toEqual({ kind: "path", query: "/src", from: 0, to: 11 });
     // the slash has to fall inside the name: one in the arguments changes nothing
     expect(triggerAt("/review src/app.ts", 4)).toEqual({ kind: "command", query: "rev", from: 0, to: 7 });
   });
 });
 
 describe("triggerAt: shell commands", () => {
-  test("a `!` draft offers no menu: a path or a slash inside it belongs to the shell", () => {
+  test("a `!` draft names no file and no command: a sigil or a slash inside it is the shell's", () => {
     expect(at("!ls @src")).toBeNull();
-    expect(at("!/usr/bin/env")).toBeNull();
+    expect(at("!/review")?.kind).toBe("path");
+  });
+
+  test("a path in one completes, the sigil left out of its first word", () => {
+    expect(at("!ls ~/Pro")).toEqual({ kind: "path", query: "~/Pro", from: 4, to: 9 });
+    expect(at("!/usr/bin/env")).toEqual({ kind: "path", query: "/usr/bin/env", from: 1, to: 13 });
+    expect(at("!~/bin/run")).toEqual({ kind: "path", query: "~/bin/run", from: 1, to: 10 });
+  });
+});
+
+describe("triggerAt: paths on disk", () => {
+  test("a word that opens with ~/ or a slash and a name", () => {
+    expect(at("~/")).toEqual({ kind: "path", query: "~/", from: 0, to: 2 });
+    expect(at("read ~/Pro")).toEqual({ kind: "path", query: "~/Pro", from: 5, to: 10 });
+    expect(at("read /etc/ho")).toEqual({ kind: "path", query: "/etc/ho", from: 5, to: 12 });
+    expect(at("/review ~/Pro")).toEqual({ kind: "path", query: "~/Pro", from: 8, to: 13 });
+  });
+
+  test("a slash alone, a comment and a tilde alone are prose", () => {
+    expect(at("this / ")).toBeNull();
+    expect(at("this /")).toBeNull();
+    expect(at("see // here")).toBeNull();
+    expect(at("//")).toBeNull();
+    expect(at("about ~")).toBeNull();
+    expect(at("~5 minutes")).toBeNull();
+  });
+
+  test("a slash inside a word is that word's", () => {
+    expect(at("and/or")).toBeNull();
+    expect(at("https://toyon.dev/docs")).toBeNull();
+    expect(at("@src/App")).toEqual({ kind: "file", query: "src/App", from: 0, to: 8 });
+  });
+
+  test("the sigil, a quote or a bracket ahead of it stays out of the span", () => {
+    expect(at("@~/notes")).toEqual({ kind: "path", query: "~/notes", from: 1, to: 8 });
+    expect(at("see `~/notes")).toEqual({ kind: "path", query: "~/notes", from: 5, to: 12 });
+    expect(at('("/etc/ho')).toEqual({ kind: "path", query: "/etc/ho", from: 2, to: 9 });
+  });
+
+  test("a space a backslash holds is part of the path", () => {
+    const text = "read ~/Library/Application\\ Su";
+    expect(at(text)).toEqual({ kind: "path", query: "~/Library/Application\\ Su", from: 5, to: text.length });
+    expect(at("read ~/Library/Application Su")).toBeNull();
+  });
+
+  test("the span runs to the end of the word the caret is in", () => {
+    expect(triggerAt("read ~/Projects/toyon now", 10)).toEqual({ kind: "path", query: "~/Pro", from: 5, to: 21 });
+  });
+
+  test("one slash at the head of the draft is a command until a second says otherwise", () => {
+    expect(at("/Us")).toEqual({ kind: "command", query: "Us", from: 0, to: 3 });
+    expect(at("/Users/")).toEqual({ kind: "path", query: "/Users/", from: 0, to: 7 });
   });
 });
 

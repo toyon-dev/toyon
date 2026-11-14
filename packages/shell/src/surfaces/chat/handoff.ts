@@ -2,7 +2,7 @@
 // pieces list is the agent's hand-over of its work: what the plan page draws at its head, what the
 // plan card's byline and Toyon's own card say about it, and what a press on a row sends.
 
-import type { ClientMsg, Piece, PieceFate, WorktreeInfo } from "@toyon/shared";
+import type { ClientMsg, Piece, PieceFate, PieceOutcome, WorktreeInfo } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 
 export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
@@ -43,6 +43,80 @@ export function startingPieces(
       },
     ];
   });
+}
+
+/** what the answered list's row says happened, as its one word */
+export type HandoffWord = "started" | "queued" | "sent";
+
+/** The word the answered list's row carries: the most that became of any piece. "started" is a
+ * worktree made, the verb the card asks with; "queued" is one that waits for a branch to land;
+ * "sent" is a piece put into a chat already open, which starts none, and is the other end of the
+ * "message" row that chat shows. A piece kept here is this plan starting here, as the card's
+ * byline has it, so a list of only those is "started". A piece that failed went nowhere and is
+ * left out, unless every piece did: then the word is what the list was for, which the row
+ * negates. Read off the outcomes, which are what a stored chat holds; while go acts they are
+ * still arriving, so off the fates it acts on. */
+export function handoffWord(item: Pick<HandoffItem, "state" | "pieces" | "fates" | "outcomes">): HandoffWord {
+  type Kind = PieceFate | "queued";
+  const word = (kinds: Kind[]): HandoffWord =>
+    kinds.includes("worktree")
+      ? "started"
+      : kinds.includes("queued")
+        ? "queued"
+        : kinds.includes("send")
+          ? "sent"
+          : "started";
+  if (item.state === "going") {
+    return word(
+      item.pieces.map((p) => {
+        const fate = effectiveFate(item, p);
+        return fate === "worktree" && p.after ? "queued" : fate;
+      }),
+    );
+  }
+  const kind = (o: PieceOutcome): Kind => (o.fate === "worktree" && !o.worktreeId && o.after ? "queued" : o.fate);
+  const went = item.outcomes.filter((o) => !o.error);
+  return word((went.length ? went : item.outcomes).map(kind));
+}
+
+/** The pieces sent into open chats, as the row names them: the piece by its title, since the
+ * worktree it went to is a chat about something else, then that worktree. A send that failed is
+ * not one; its error is the line under the row. While go acts, a piece it has not reached is
+ * named from the list, by where the agent aimed it, so the row already reads the sentence it
+ * ends on. */
+export function sentPieces(
+  item: Pick<HandoffItem, "state" | "pieces" | "fates" | "outcomes">,
+): Array<{ pieceId: string; title: string; worktreeId: string; to?: string; repoName?: string }> {
+  const titled = (pieceId: string) => item.pieces.find((p) => p.id === pieceId)?.title ?? pieceId;
+  const reached = item.outcomes.flatMap((o) =>
+    o.fate === "send" && o.worktreeId
+      ? [
+          {
+            pieceId: o.pieceId,
+            title: titled(o.pieceId),
+            worktreeId: o.worktreeId,
+            ...(o.title ? { to: o.title } : {}),
+            ...(o.repoName ? { repoName: o.repoName } : {}),
+          },
+        ]
+      : [],
+  );
+  if (item.state !== "going") return reached;
+  // go acts in list order, so the pieces it has not reached follow the ones it has
+  const coming = item.pieces.flatMap((p) =>
+    p.to && effectiveFate(item, p) === "send" && !item.outcomes.some((o) => o.pieceId === p.id)
+      ? [
+          {
+            pieceId: p.id,
+            title: p.title,
+            worktreeId: p.to.id,
+            to: p.to.title,
+            ...(p.project ? { repoName: p.project.name } : {}),
+          },
+        ]
+      : [],
+  );
+  return [...reached, ...coming];
 }
 
 /** Whether the file the list sits on is the page Toyon wrote for it (each piece's text under its

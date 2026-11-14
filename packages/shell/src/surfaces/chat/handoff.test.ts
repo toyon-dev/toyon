@@ -15,6 +15,7 @@ import {
   handoffPage,
   handoffQuestion,
   handoffSaid,
+  handoffWord,
   hereWaits,
   LIST_ROWS,
   listPage,
@@ -27,6 +28,7 @@ import {
   pieceMark,
   pieceOrder,
   pieceStanding,
+  sentPieces,
   startingPieces,
   waitOf,
   waitsOnSelf,
@@ -313,6 +315,80 @@ describe("startingPieces", () => {
       { pieceId: "p3", title: "B work", worktreeId: "h", repoName: "acp" },
       { pieceId: "p5", title: "Piece p5" },
     ]);
+  });
+});
+
+describe("the row's word", () => {
+  const made = { pieceId: "p1", fate: "worktree" as const, worktreeId: "w1", title: "Piece p1" };
+  const sentTo = { pieceId: "p2", fate: "send" as const, worktreeId: "c", title: "C" };
+  const kept = { pieceId: "p3", fate: "here" as const };
+  const pieces = [piece("p1"), piece("p2", { fate: "send", to }), piece("p3", { fate: "here" })];
+  const done = (outcomes: HandoffItem["outcomes"]) => list(pieces, {}, { state: "done", outcomes });
+
+  const waits = { pieceId: "p1", fate: "worktree" as const, after: "toyon/b" };
+  const lost = { pieceId: "p2", fate: "send" as const, error: '"C" is no longer open' };
+
+  test("the most that became of any piece: a worktree started, one queued, a piece sent", () => {
+    expect(handoffWord(done([made]))).toBe("started");
+    expect(handoffWord(done([made, sentTo, kept]))).toBe("started");
+    expect(handoffWord(done([made, { ...waits, pieceId: "p4" }]))).toBe("started");
+    expect(handoffWord(done([waits]))).toBe("queued");
+    expect(handoffWord(done([waits, sentTo, kept]))).toBe("queued");
+    expect(handoffWord(done([sentTo]))).toBe("sent");
+    // a piece kept here is this plan starting here: it moves no other word, and is one alone
+    expect(handoffWord(done([sentTo, kept]))).toBe("sent");
+    expect(handoffWord(done([kept]))).toBe("started");
+    expect(handoffWord(done([]))).toBe("started");
+  });
+
+  test("a piece that failed went nowhere; when every piece did, the word is what the list was for", () => {
+    const unmade = { pieceId: "p1", fate: "worktree" as const, error: "no room" };
+    expect(handoffWord(done([unmade, sentTo]))).toBe("sent");
+    expect(handoffWord(done([lost, kept]))).toBe("started");
+    expect(handoffWord(done([lost]))).toBe("sent");
+    expect(handoffWord(done([unmade, lost]))).toBe("started");
+  });
+
+  test("a stored list with no pieces is worded by its outcomes alone", () => {
+    const torn = list([], {}, { state: "done", outcomes: [sentTo] });
+    expect(handoffWord(torn)).toBe("sent");
+    expect(sentPieces(torn)).toEqual([{ pieceId: "p2", title: "p2", worktreeId: "c", to: "C" }]);
+  });
+
+  test("while go acts the word is read off the fates, the person's press over the agent's", () => {
+    const only = [piece("p2", { fate: "send", to }), piece("p3", { fate: "here" })];
+    expect(handoffWord(list(only, {}, { state: "going" }))).toBe("sent");
+    expect(handoffWord(list(pieces, {}, { state: "going" }))).toBe("started");
+    expect(handoffWord(list(pieces, { p1: "skip" }, { state: "going" }))).toBe("sent");
+    expect(handoffWord(list(only, { p3: "worktree" }, { state: "going" }))).toBe("started");
+    const behind = [piece("p1", { after }), piece("p2", { fate: "send", to })];
+    expect(handoffWord(list(behind, {}, { state: "going" }))).toBe("queued");
+  });
+
+  test("sentPieces: the piece by its title and where it went; a failed send is not one", () => {
+    const failed = { pieceId: "p4", fate: "send" as const, error: '"C" is no longer open' };
+    const there = { ...sentTo, repoName: "acp" };
+    expect(sentPieces(done([made, there, kept, failed]))).toEqual([
+      { pieceId: "p2", title: "Piece p2", worktreeId: "c", to: "C", repoName: "acp" },
+    ]);
+  });
+
+  test("sentPieces while go acts: a piece not reached yet is named from where the agent aimed it", () => {
+    const first = piece("p1", { fate: "send", to });
+    const second = piece("p2", { fate: "send", to: after, project });
+    const skipped = piece("p3", { fate: "send", to });
+    const going = list([first, second, skipped], { p3: "skip" }, { state: "going" });
+    expect(sentPieces(going)).toEqual([
+      { pieceId: "p1", title: "Piece p1", worktreeId: "c", to: "C" },
+      { pieceId: "p2", title: "Piece p2", worktreeId: "b", to: "B", repoName: "acp" },
+    ]);
+    // the outcome stands over the list once it comes: the title the row has now, or the failure
+    const reached = { ...going, outcomes: [{ pieceId: "p1", fate: "send" as const, error: "gone" }] };
+    expect(sentPieces(reached)).toEqual([
+      { pieceId: "p2", title: "Piece p2", worktreeId: "b", to: "B", repoName: "acp" },
+    ]);
+    // nothing is named ahead of time once the list is done
+    expect(sentPieces({ ...going, state: "done" })).toEqual([]);
   });
 });
 

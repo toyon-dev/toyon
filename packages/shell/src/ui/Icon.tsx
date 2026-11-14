@@ -46,6 +46,7 @@ export type IconName =
   | "bulb"
   | "spawn"
   | "handoff"
+  | "relay"
   | "globe"
   | "swap"
   | "worktrees"
@@ -160,6 +161,11 @@ const ICON_PATHS: Record<IconName, string> = {
   // differs for `pr`; pr's arrow comes in, this one goes out
   handoff:
     "M1.7 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M4.9 4.5h4.6 M9.4 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M4.9 4.5c2.6 0 1.6 7 4.3 7h4 M12.1 9.7l1.8 1.8-1.8 1.8",
+  // a message put into a chat that is already open: `handoff` without its second ring. That ring
+  // and the rail to it are the branch going on beside a new one, and a message makes no branch;
+  // what is left is this chat's ring and the piece leaving it. Not an arrow up or down: in a
+  // transcript one reads as pointing at the row above or below
+  relay: "M1.7 4.5a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0z M4.9 4.5c2.6 0 1.6 7 4.3 7h4 M12.1 9.7l1.8 1.8-1.8 1.8",
   // one equator and one meridian: a second latitude line filled the circle in at 13px
   globe: "M8 2.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 1 0 0-11.6z M2.2 8h11.6 M8 2.2c-3 3.4-3 8.2 0 11.6 3-3.4 3-8.2 0-11.6z",
   // the rail's own rows: a status dot and a name, three deep. The dots are solid like the rail's,

@@ -1197,6 +1197,9 @@
        its width while the sentence wraps beside it. */
     & .daemon-press {
       flex: none;
+      /* a row whose word is the whole news has no sentence to fill the line and push the press
+         to its end */
+      margin-left: auto;
     }
     /* the rows a card in the transcript offers (the flip's), under the sentence: at the row's own
        face, since a card's rows at the card's size stood a tier above the sentence they answer,

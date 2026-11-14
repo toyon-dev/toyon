@@ -101,10 +101,11 @@ export function toMonacoTheme(t: Theme): monaco.editor.IStandaloneThemeData {
       "editorInfo.foreground": c.blue,
       "editorLink.activeForeground": c.blue,
 
-      // monaco paints .line-insert and .char-insert as separate elements, and on a wholly new line
-      // the word-level range covers the whole line, so the two tints composite. wordTint is the
-      // fraction that keeps that composite where the chat log's own word blocks sit, and both read
-      // it from the same place, so the pane and the log cannot drift apart.
+      // monaco paints .line-insert and .char-insert as separate elements, so inside a changed line
+      // the two tints composite. wordTint is the fraction that keeps that composite where the chat
+      // log's own word blocks sit, and both read it from the same place, so the pane and the log
+      // cannot drift apart. A line new or gone entire is marked whole by Monaco as well; editor.css
+      // takes that mark back off, since the theme has one colour for both.
       "diffEditor.insertedTextBackground": wordTint(c.diffAdd),
       "diffEditor.removedTextBackground": wordTint(c.diffDel),
       "diffEditor.insertedLineBackground": c.diffAdd,

@@ -28,6 +28,17 @@
       color: var(--text2);
       background-image: linear-gradient(var(--diff-del), var(--diff-del));
     }
+    /* a line that is new or gone entire: monaco lays the word tint across all of it on top of the
+     line's band, and the pair costs every token on the line a third of its contrast to mark what
+     the band has said. The chat log leaves such a line unmarked, and this is the same line. Monaco
+     gives the whole-line mark the class of a word mark, so the width it prints inline is the only
+     thing that tells them apart. A removed line drawn in place in the inline view keeps its block:
+     there the mark is on the tokens, from the first word of the run on, and nothing in the markup
+     tells that from a line edited from its second word to its end. */
+    & .monaco-editor .cdr:is(.char-insert, .char-delete)[style*="width:100%"] {
+      /* biome-ignore lint/complexity/noImportantStyles: Monaco's unlayered tint is above every layer here */
+      background-color: transparent !important;
+    }
     /* who last touched the caret's line, drawn after it in the code's own face and a tier under it:
      the colour alone says it is a note and not code, and the mono keeps it on the line's grid. The
      second tier, not the quiet one: this is read, not skimmed, and the quiet tier sits under the

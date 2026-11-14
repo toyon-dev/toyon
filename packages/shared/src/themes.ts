@@ -68,8 +68,12 @@ export const toyonDark: Theme = {
   // colour on half its words, and at C78 the keyword orange and a lone C38 blue on the attributes
   // made JSX shout. The keyword drops to a terracotta at L*60, darker than the words it leads, the
   // way Gruvbox's red recedes; the attribute blue becomes a sage at C16, a name rather than a hue.
+  // The comment is its own value, two thirds of the way from the hint tier to the label tier: a
+  // comment is skipped in a file and read in a diff, where it is often the change itself, and the
+  // hint tier is 2.1:1 on the ground and 1.6:1 on an added line's band. Here it is 3.4:1 and
+  // 2.6:1, and the italic is what keeps it apart from the punctuation a tier above.
   syntax: {
-    comment: "#6a6055",
+    comment: "#8c8170",
     keyword: "#df714e",
     string: "#a5bd4d",
     number: "#ca94ca",
@@ -114,8 +118,9 @@ export const toyonLight: Theme = {
     diffAdd: "#4f7a3d2e",
     diffDel: "#9c5a452e",
   },
+  // the comment sits where the dark half's does, 3.4:1 on the paper
   syntax: {
-    comment: "#b4aa9f",
+    comment: "#8d8074",
     keyword: "#b54d2d",
     string: "#697f1e",
     number: "#865889",
@@ -939,7 +944,9 @@ export function blackGroundOf(theme: Theme): Theme {
  * that show a diff paint this over the line tint, so it is a fraction of that tint rather than a
  * colour of its own: at full strength the two composite to nearly twice the wash and a block of
  * added lines becomes the loudest thing in the window (see the editor pane's Monaco diff, which draws its line and
- * character ranges as separate elements). A theme moves the tint and both weights follow. */
+ * character ranges as separate elements). A line that is new or gone entire carries the band alone
+ * on both surfaces: every character of it changed, so the block places nothing, and the composite
+ * costs the code on it a third of its contrast. A theme moves the tint and both weights follow. */
 export function wordTint(lineTint: string): string {
   return scaleAlpha(lineTint, 0.55);
 }
@@ -949,8 +956,8 @@ export function wordTint(lineTint: string): string {
  * colour code have to draw the same thing anyway, so the completion belongs here rather than in
  * either of them: the pane would otherwise fall back to Monaco's built-in scheme for a token the
  * theme skipped, and the chat log to plain text, which is two different files in two colours.
- * The defaults are the ones every built-in already uses: comments in the tier you skip, and the
- * warm-to-cool run of the palette for the rest. */
+ * The defaults are the theme's own palette: comments in the tier you skip, and the warm-to-cool
+ * run of the accents for the rest. */
 export function syntaxOf(theme: Theme): Record<ThemeSyntaxToken, string> {
   const c = theme.colors;
   const s = theme.syntax ?? {};

@@ -78,7 +78,7 @@
     --diff-add-overview: #6fae5fb3;
     --diff-del-overview: #c07f6ab3;
     /* The text ladder: text0 is what you read, text1 what you scan (labels, filenames, controls at
-     rest), text2 what you skip (hints, comments, the tool log, anything switched off).
+     rest), text2 what you skip (hints, the tool log, anything switched off).
 
      --text0/1/2 are the tier where you are standing, not a fixed colour: a seat that lifts
      redeclares them one rung up for everything inside it (base.css, the lifted seat), so a child
@@ -134,7 +134,7 @@
     --code: color-mix(in srgb, var(--text0) 6%, transparent);
     /* the seven a theme names for code (themes.ts, syntaxOf, which fills in any it left out); both
      the chat log and the diff pane colour from these, so a file reads the same in either */
-    --syntax-comment: #6a6055;
+    --syntax-comment: #8c8170;
     --syntax-keyword: #df714e;
     --syntax-string: #a5bd4d;
     --syntax-number: #ca94ca;

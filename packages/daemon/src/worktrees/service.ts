@@ -69,7 +69,7 @@ import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
-import type { StateStore } from "../core/state.ts";
+import { moveToWatches, type StateStore } from "../core/state.ts";
 import type { DraftStore } from "../drafts/store.ts";
 import { archiveRef, checkOutKept, commitOf, dropLandRefs, type KeptState, keepState, keptAt } from "../git/archive.ts";
 import { excludeBlock } from "../git/exclude.ts";
@@ -621,7 +621,7 @@ export class WorktreeService {
    * the branch create returns is the one the worktree keeps: a handoff copies it into the `after`
    * of the siblings queued behind it, and a copy made before the move would name a branch that is
    * gone. A provisional title is the namer's to move later, off this call, so a record that has to
-   * hold through that keeps the id alone (`awaits`). */
+   * hold through that keeps the id alone (a watch). */
   private async nameOrAsk(wt: WorktreeInfo, task: string, given: string | undefined) {
     if (given === undefined) {
       this.scheduleNaming(wt, task);
@@ -1705,6 +1705,9 @@ export class WorktreeService {
     }
     if (rec.sessionId && path === old.path) this.d.state.setSession(wt.id, rec.sessionId);
     this.arriving.add(wt.id);
+    // the archive keeps a record as it was written, so one from before watches is moved as the
+    // loader moves an open one. Listing the row saves it, and the senders' records with it.
+    moveToWatches(wt, (id) => this.d.state.worktree(id));
     const { rt, release } = this.listAhead(wt, message);
     // on the row as a setup stage, like the cache restore and the deps copy that follow it: the
     // wait is the person's to read through, with the row saying what it is on

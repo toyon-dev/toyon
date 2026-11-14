@@ -166,23 +166,51 @@ describe("state", () => {
     expect("brief" in loaded).toBe(false);
   });
 
-  test("a wait stored with the branch and title it copied reads back by id alone: awaits, a queued after, from.after", () => {
+  test("a queued piece's wait stored with the branch and title it copied reads back by id alone", () => {
     const named = { id: "b", branch: "toyon/wt-b", title: "B" };
     const queued = { proposalId: "l1", pieceId: "p1", title: "Rail", plan: "Fix.", attachments: [], queuedAt: 1 };
     const a = {
       ...wt("a"),
-      awaits: [{ ...named, pieces: ["Mine"] }],
       queued: [
         { ...queued, after: named },
         { ...queued, pieceId: "p2", after: { piece: "p1" } },
       ],
-      from: { kind: "worktree", ref: "toyon/o", origin: { id: "o", repoId: "r" }, after: named },
     };
     writeFileSync(paths.stateFile, JSON.stringify({ repos: [], worktrees: [a], sessions: {} }));
     const loaded = loadState(paths).worktrees[0]!;
-    expect(loaded.awaits).toEqual([{ id: "b", pieces: ["Mine"] }]);
     expect(loaded.queued!.map((q) => q.after)).toEqual([{ id: "b" }, { piece: "p1" }]);
-    expect(loaded.from).toMatchObject({ after: { id: "b" } });
+  });
+
+  test("who hears of a landing, stored as awaits, senders and from.after, reads back as watches on the one who hears", () => {
+    const named = { id: "b", branch: "toyon/wt-b", title: "B" };
+    const a = {
+      ...wt("a"),
+      awaits: [{ ...named, pieces: ["Mine"] }, { id: "c" }],
+      from: { kind: "worktree", ref: "toyon/o", origin: { id: "o", repoId: "r" }, plan: "p.md", after: named },
+    };
+    // a and a worktree since removed sent a piece into b; c names a twice, as an older record could
+    const b = { ...wt("b"), senders: ["a", "gone"] };
+    const c = { ...wt("c"), senders: ["a", "a"], awaits: [{ id: "b", pieces: ["Theirs"] }] };
+    writeFileSync(paths.stateFile, JSON.stringify({ repos: [], worktrees: [a, b, c], sessions: {} }));
+    const [la, lb, lc] = loadState(paths).worktrees;
+    expect(la!.watches).toEqual([
+      { id: "b", as: "await", pieces: ["Mine"] },
+      { id: "c", as: "await" },
+      { id: "b", as: "after" },
+      { id: "b", as: "sent" },
+      { id: "c", as: "sent" },
+    ]);
+    expect(la!.from).toEqual({ kind: "worktree", ref: "toyon/o", origin: { id: "o", repoId: "r" }, plan: "p.md" });
+    expect(lb!.watches).toBeUndefined();
+    expect(lc!.watches).toEqual([{ id: "b", as: "await", pieces: ["Theirs"] }]);
+    for (const l of [la, lb, lc]) {
+      expect(l).not.toHaveProperty("awaits");
+      expect(l).not.toHaveProperty("senders");
+    }
+    // moved once: what a save writes loads as it stands
+    const store = new StateStore(paths);
+    store.save();
+    expect(loadState(paths).worktrees.map((x) => x.watches)).toEqual([la!.watches, undefined, lc!.watches]);
   });
 
   test("a profile on a record goes, an owns list reads as presses, and the repo's profile pick goes with it", () => {

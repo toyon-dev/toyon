@@ -247,6 +247,8 @@ export type ChatItem =
       again?: true;
       /** a branch the work here waited for, named by a here piece of its list */
       awaited?: true;
+      /** an open worktree a piece from here was sent into, which made the landing its own */
+      sent?: true;
       ts: number;
     }
   /** the pieces of the agent's plan, handed to Toyon. `held` while it waits for the plan card it
@@ -3908,6 +3910,7 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.same ? { same: true } : {}),
           ...(event.again ? { again: true } : {}),
           ...(event.awaited ? { awaited: true } : {}),
+          ...(event.sent ? { sent: true } : {}),
           ts: event.ts,
         },
       ];

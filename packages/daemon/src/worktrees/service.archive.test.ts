@@ -108,6 +108,35 @@ describe("archive", () => {
     });
   });
 
+  test("a record archived with its waits as awaits, senders and from.after comes back with watches", async () => {
+    const repoId = await registered();
+    const { wt } = await workedOn(repoId);
+    const other = await w.worktrees.create(repoId, "the other one");
+    // the record as an older daemon wrote it
+    Object.assign(w.state.worktree(wt.id)!, {
+      awaits: [{ id: other.id, pieces: ["Mine"] }],
+      senders: [other.id, "gone"],
+      from: { kind: "worktree", ref: other.branch, origin: { id: other.id, repoId }, after: { id: other.id } },
+    });
+    await w.worktrees.archiveWorktree(wt.id);
+    const back = await w.worktrees.restore(wt.id);
+    await settle();
+    expect(back.watches).toEqual([
+      { id: other.id, as: "await", pieces: ["Mine"] },
+      { id: other.id, as: "after" },
+    ]);
+    expect(back.from).toEqual({ kind: "worktree", ref: other.branch, origin: { id: other.id, repoId } });
+    expect(back).not.toHaveProperty("awaits");
+    expect(back).not.toHaveProperty("senders");
+    // the sender still open hears the restored row's next landing; the one gone is nobody to tell
+    expect(w.state.worktree(other.id)!.watches).toEqual([{ id: wt.id, as: "sent" }]);
+    // on disk too, so a restart reads the same
+    const onDisk = JSON.parse(readFileSync(w.paths.stateFile, "utf8")).worktrees as Array<Record<string, unknown>>;
+    expect(onDisk.find((x) => x.id === wt.id)).toMatchObject({ watches: back.watches });
+    expect(onDisk.find((x) => x.id === wt.id)).not.toHaveProperty("awaits");
+    expect(onDisk.find((x) => x.id === other.id)).toMatchObject({ watches: [{ id: wt.id, as: "sent" }] });
+  });
+
   test("a restored worktree comes back parked: nothing that wakes one starts its procs", async () => {
     const repoId = await registered();
     const { wt } = await workedOn(repoId);

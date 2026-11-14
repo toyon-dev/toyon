@@ -473,12 +473,15 @@ export type AgentEvent =
    * the origin's transcript, where its wait stood under the box. `subjects` is what the landing
    * put on that main, as its mark says it (`LandMark.subjects`); absent when there is nothing to
    * say. `sent`: this worktree sent a piece into the landed one and did not make it, so the
-   * landing is that worktree's own and may not hold the piece. */
+   * landing is that worktree's own and may not hold the piece. `branch` is the landed branch as
+   * it stood at the landing, and `pieces` the here pieces that waited, with `awaited`. */
   | {
       type: "piece-landed";
       worktreeId: string;
       repoName: string;
       title: string;
+      branch?: string;
+      pieces?: string[];
       url?: string;
       subjects?: string[];
       same?: true;

@@ -160,7 +160,8 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
 /** a worktree made from a piece of this one's work landed, with its pull request when the landing
  * was one: the record of the piece closing, read where it was opened. On the worktree that waited
  * for that branch before it started, the same row says it landed again; on the origin whose own
- * work waited for it, that the wait is over. What that main received is the line under it: the
+ * work waited for it, that the wait is over; on one that sent a piece into it, that the landing
+ * was that worktree's own. What that main received is the line under it: the
  * sentence names whose work it was, which is the news here, and the subjects are what came back. */
 export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piece-landed" }> }) {
   const url = item.url;
@@ -179,6 +180,7 @@ export function PieceLandedRow({ item }: { item: Extract<ChatItem, { kind: "piec
         <WorktreeChip id={item.worktreeId} title={item.title} />
         {item.same ? "" : ` in ${item.repoName}`}
         {item.awaited && ", which the work here waited for"}
+        {item.sent && ", which a piece from here was sent to"}
       </span>
     </DaemonRow>
   );

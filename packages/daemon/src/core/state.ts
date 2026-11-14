@@ -11,6 +11,7 @@ import type {
   RepoInfo,
   RepoPicks,
   ThemePrefs,
+  Watch,
   WorktreeInfo,
 } from "@toyon/shared";
 import { isShellOrigin, PERMISSION_MODES, relistChoice, sentAt } from "@toyon/shared";
@@ -138,6 +139,51 @@ export interface PrCommentsRecord {
 /** worktrees whose page records are kept: a found worktree removed outside toyon never says so */
 const SEEN_WORKTREES = 50;
 
+/** One landing to tell `w` of, onto its record; says whether the record changed. An `await`
+ * already there takes the new pieces; a `sent` or `after` already there stands as it is, since
+ * either says all it has to once. */
+export function addWatch(w: WorktreeInfo, edge: Watch): boolean {
+  const had = w.watches?.find((x) => x.id === edge.id && x.as === edge.as);
+  if (!had) {
+    w.watches = [
+      ...(w.watches ?? []),
+      { id: edge.id, as: edge.as, ...(edge.pieces?.length ? { pieces: edge.pieces } : {}) },
+    ];
+    return true;
+  }
+  const pieces = [...new Set([...(had.pieces ?? []), ...(edge.pieces ?? [])])];
+  if (pieces.length === (had.pieces?.length ?? 0)) return false;
+  had.pieces = pieces;
+  return true;
+}
+
+/** A record written before watches said who hears of a landing in three fields: its own `awaits`,
+ * the `senders` that sent a piece into it, and the `from.after` it was made behind. Each is a
+ * watch on the worktree that hears, moved once here and the fields dropped. `find` is the open
+ * record of a sender, which is where a `sent` watch lives; a sender gone by now is nobody to tell.
+ * Run on every record as the state loads and on one coming back from the archive, which is kept
+ * as it was written. */
+export function moveToWatches(w: WorktreeInfo, find: (id: string) => WorktreeInfo | undefined): void {
+  const old = w as WorktreeInfo & {
+    awaits?: Array<{ id: string; pieces?: string[] }>;
+    senders?: string[];
+    from?: { after?: { id: string } };
+  };
+  for (const a of old.awaits ?? []) addWatch(w, { id: a.id, as: "await", pieces: a.pieces });
+  delete old.awaits;
+  for (const id of old.senders ?? []) {
+    const sender = find(id);
+    if (sender) addWatch(sender, { id: w.id, as: "sent" });
+  }
+  delete old.senders;
+  if (old.from?.kind === "worktree" && old.from.after) {
+    // a new `from`, not a delete on this one: an archived record shares the object
+    const { after, ...from } = old.from;
+    addWatch(w, { id: after.id, as: "after" });
+    w.from = from;
+  }
+}
+
 const empty: PersistedState = { repos: [], worktrees: [], sessions: {} };
 
 export function loadState(paths: Paths): PersistedState {
@@ -174,17 +220,16 @@ export function loadState(paths: Paths): PersistedState {
         delete old.brief;
       }
     }
-    // an `awaits` entry, a queued piece's `after` and a sibling's `from.after` copied the worktree's
-    // branch and title until 0.20, and the copies went stale when the branch moved to its title:
-    // each names the worktree by id alone now, the rest dropped once here
-    const idOnly = (named: { id: string }) => {
-      const old = named as { branch?: string; title?: string };
-      delete old.branch;
-      delete old.title;
-    };
-    for (const a of w.awaits ?? []) idOnly(a);
-    for (const q of w.queued ?? []) if (!("piece" in q.after)) idOnly(q.after);
-    if (w.from?.kind === "worktree" && w.from.after) idOnly(w.from.after);
+    // a queued piece's `after` copied the worktree's branch and title until 0.20, and the copies
+    // went stale when the branch moved to its title: it names the worktree by id alone now, the
+    // rest dropped once here
+    for (const q of w.queued ?? []) {
+      if ("piece" in q.after) continue;
+      const named = q.after as { branch?: string; title?: string };
+      delete named.branch;
+      delete named.title;
+    }
+    moveToWatches(w, (id) => state.worktrees.find((x) => x.id === id));
     // run profiles went in 0.23: the field is dropped once here. A take-over was a list of names
     // in `owns` until then; it lives on `sources` with why since, and one from before reads as a press
     const old = w as { profile?: unknown; owns?: unknown; sources?: Record<string, unknown> };

@@ -398,8 +398,8 @@ export interface QueuedPiece {
   attachments: AttachmentRef[];
   /** what the person added when they approved */
   note?: string;
-  /** the origin's own here pieces that wait for this one, by title: they go onto the origin's
-   * `awaits` once this is made into a worktree, since until then there is nothing to name */
+  /** the origin's own here pieces that wait for this one, by title: they become an `await` watch
+   * of the origin once this is made into a worktree, since until then there is nothing to name */
   heres?: string[];
   queuedAt: number;
 }
@@ -410,6 +410,18 @@ export const LAND_SUBJECTS_MAX = 8;
 
 /** the model and effort a new worktree of an agent is asked to run, where the create names none */
 export type AgentPicks = Partial<Pick<WorktreeInfo, "model" | "effort">>;
+
+/** a landing this worktree's chat is told of, and why. `sent`: a piece of this one's work went into
+ * that worktree while it was open; told at its next landing, once. `await`: this one's own here
+ * pieces (`pieces`, by title) wait for it; told at its landing, once, and its agent started on
+ * them. `after`: this worktree was made when that one landed, and hears each time it lands again.
+ * By id alone: a row's branch and title move. The worktree a piece became is not listed: its
+ * `from.origin` names who made it. */
+export interface Watch {
+  id: string;
+  as: "sent" | "await" | "after";
+  pieces?: string[];
+}
 
 export interface WorktreeInfo {
   id: string;
@@ -446,12 +458,8 @@ export interface WorktreeInfo {
   lands?: LandMark[];
   /** pieces of a plan waiting for a sibling to land before their worktree is made */
   queued?: QueuedPiece[];
-  /** the worktrees this one's own work waits for, named by the here pieces of its list; each is
-   * told on this chat when it lands, and goes from here with that. `pieces` are those here
-   * pieces by title, what the agent is started on; a wait without them still releases. By id
-   * alone: a worktree born on a provisional title takes its title's branch a moment after it is
-   * made, so a branch copied here would be the one it was born with. Its record has the live one. */
-  awaits?: Array<{ id: string; pieces?: string[] }>;
+  /** the landings this worktree's chat is told of, each with why */
+  watches?: Watch[];
   /** the pull request this worktree opened, and what GitHub last said about it; absent until the
    * PR route has run here. Gone with new work after it merged. */
   pr?: PrState;
@@ -463,20 +471,9 @@ export interface WorktreeInfo {
     /** made from a piece of another worktree's work, in this project or another: `ref` is that
      * worktree's branch and `origin` the row it came from. Kept as history once the origin is
      * gone; while the origin is listed, this row shows on its rail too. `plan` is the origin's
-     * file the piece came from, for the whole picture; `after` the worktree this one waited for
-     * before it was made, by id, so a later landing of it can be said here. */
-    | {
-        kind: "worktree";
-        ref: string;
-        origin: { id: string; repoId: string };
-        plan?: string;
-        after?: { id: string };
-      };
-  /** the worktrees that sent a piece of their work into this one since it last landed, by id. A
-   * send makes no worktree to carry a `from`, so this is how the landing finds who to tell: each
-   * is told on its own chat when this one lands and its agent started, and the list goes with
-   * that landing, since a piece sent after it rides the next one. */
-  senders?: string[];
+     * file the piece came from, for the whole picture. The origin hears each landing of this
+     * row by this alone, with no watch of its own. */
+    | { kind: "worktree"; ref: string; origin: { id: string; repoId: string }; plan?: string };
   /** the shell tab that asked for it (client nonce); that tab focuses it, others don't */
   createdBy?: string;
   /** registry id of the agent working here (stamped at creation, or on first use for older rows) */

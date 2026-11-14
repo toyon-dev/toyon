@@ -4181,7 +4181,7 @@ describe("a sibling's landing, and a guest from another project", () => {
   const both = (...extra: WorktreeStatus[]) => helloIn([repo("r1"), repo("r2")], ...rows(), ...extra);
   const ids = (s: State) => s.visible.map((w) => w.worktree.id);
 
-  test("a landing elsewhere is a row, and the branch a sibling waited for landing again is one too", () => {
+  test("a landing elsewhere is a row, and so is one that landed again, one a piece was sent to and one the work waited for", () => {
     const landed: AgentEvent = {
       type: "piece-landed",
       worktreeId: "g",
@@ -4195,6 +4195,9 @@ describe("a sibling's landing, and a guest from another project", () => {
       hello(wt("a")),
       agent("a", landed),
       agent("a", { ...landed, subjects, same: true, again: true, ts: 4 }),
+      // the branch and the pieces are the daemon's, for the wake; the row says only why
+      agent("a", { ...landed, branch: "toyon/bump", same: true, sent: true, ts: 5 }),
+      agent("a", { ...landed, branch: "toyon/bump", same: true, awaited: true, pieces: ["Mine"], ts: 6 }),
     ]);
     expect(s.local.a?.chat).toEqual([
       { kind: "piece-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },
@@ -4208,6 +4211,26 @@ describe("a sibling's landing, and a guest from another project", () => {
         same: true,
         again: true,
         ts: 4,
+      },
+      {
+        kind: "piece-landed",
+        worktreeId: "g",
+        repoName: "r2",
+        title: "Bump the pin",
+        url: "https://x/1",
+        same: true,
+        sent: true,
+        ts: 5,
+      },
+      {
+        kind: "piece-landed",
+        worktreeId: "g",
+        repoName: "r2",
+        title: "Bump the pin",
+        url: "https://x/1",
+        same: true,
+        awaited: true,
+        ts: 6,
       },
     ]);
   });

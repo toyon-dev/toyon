@@ -692,8 +692,15 @@ export class AcpSession implements AgentAdapter {
     if (this.stopped || this.asks.size > 0 || ownCards(this.log.entries).length > 0) return null;
     const news = newsToSend(this.log.entries, { rest: this.d.atRest?.() ?? false });
     if (!news) return null;
-    const seq = this.emit({ type: "fix-asked", text: news.text, ts: Date.now(), kind: "handoff", why: news.why });
-    return { text: news.text, asked: "handoff", recorded: { attachments: [], seq }, news: true };
+    const seq = this.emit({
+      type: "fix-asked",
+      text: news.text,
+      ts: Date.now(),
+      kind: "news",
+      why: news.why,
+      ...(news.from ? { from: news.from } : {}),
+    });
+    return { text: news.text, asked: "news", recorded: { attachments: [], seq }, news: true };
   }
 
   /** News for a session with no turn running: written while the agent is at rest, or still

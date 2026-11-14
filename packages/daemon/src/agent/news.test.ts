@@ -190,11 +190,40 @@ describe("newsToSend", () => {
     );
     expect(msg.text).toContain('Do "Mine" here now, and only that.');
     expect(msg.text).not.toContain('"D"');
-    expect(msg.why).toBe('"A", "B", "C" landed, so the agent starts the piece that waited');
-    // nothing here waited: the agent takes up what it handed off
-    expect(newsToSend(log(landed("B", { wake: true })))!.why).toBe(
-      '"B" landed, so the agent takes up what it handed off',
+    // the row's sentence, after the worktrees it is from: what the agent does about each kind of
+    // landing, each clause naming its own since they differ. With a piece to start, the work
+    // handed off is only mentioned to it, so the row leaves it out
+    expect(msg.why).toBe('to start "Mine", which waited for "A", and to check that "C" holds the piece');
+    // every landing that starts it is who the message is from; one in another project says where
+    expect(msg.from).toEqual([
+      { id: "a", title: "A" },
+      { id: "b", title: "B" },
+      { id: "c", title: "C", project: "other" },
+    ]);
+  });
+
+  test("the reason says what the agent does about the landing, by what the landing is to it", () => {
+    const why = (...events: AgentEvent[]) => newsToSend(log(...events))!.why;
+    // nothing here waited for work handed off: the agent brings in line what depends on it
+    // the row names the landed worktrees first, so a clause about all of them says "it" or "them"
+    expect(why(landed("B", { wake: true }))).toBe("to bring in line what depends on it");
+    // a piece sent into an open worktree is not taken up: the landing is checked for it
+    expect(why(landed("C", { sent: true, wake: true }))).toBe("to check that it holds the piece");
+    expect(why(landed("C", { sent: true, wake: true }), landed("D", { sent: true, wake: true }))).toBe(
+      "to check that they hold the pieces",
     );
+    // landings of two kinds: each clause names its own
+    expect(why(landed("B", { wake: true }), landed("C", { sent: true, wake: true }))).toBe(
+      'to check that "C" holds the piece, and to bring in line what depends on "B"',
+    );
+    // a wait recorded without its pieces
+    expect(why(landed("A", { awaited: true, wake: true }))).toBe("to start the piece that waited for it");
+    expect(
+      why(
+        landed("A", { awaited: true, pieces: ["One", "Two"], wake: true }),
+        landed("E", { awaited: true, pieces: ["Two", "Three"], wake: true }),
+      ),
+    ).toBe('to start "One", "Two" and "Three", which waited for them');
   });
 
   test("a worktree whose own work is done is started by its card, not by a landing", () => {
@@ -203,7 +232,9 @@ describe("newsToSend", () => {
     const msg = newsToSend(entries, { rest: true })!;
     expect(msg.text).toContain('Do "Fix it" here, and only that.');
     expect(msg.text).not.toContain("has landed");
-    expect(msg.why).toBe("the piece kept here, so the agent starts on it");
+    expect(msg.why).toBe("to start the piece kept here");
+    // an answer on Toyon's own card has no other chat behind it
+    expect(msg.from).toBeUndefined();
   });
 
   test("an answer and a landing untold together are one message, each in its words", () => {
@@ -211,8 +242,8 @@ describe("newsToSend", () => {
     expect(msg.text.split("\n\n")).toHaveLength(3);
     expect(msg.text).toContain("They added: smaller");
     expect(msg.text).toContain('"A" (toyon/a), has landed');
-    expect(msg.why).toBe(
-      'the list was sent back with a note, so the agent reads it before going on; "A" landed, so the agent takes up what it handed off',
-    );
+    // the landing's clause first, since the row has just named the worktree it speaks of
+    expect(msg.why).toBe("to bring in line what depends on it, and to read the note sent back with the list");
+    expect(msg.from).toEqual([{ id: "a", title: "A" }]);
   });
 });

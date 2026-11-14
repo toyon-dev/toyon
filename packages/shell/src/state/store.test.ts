@@ -548,6 +548,62 @@ describe("chat folding", () => {
     ]);
     expect(s.local.a?.chat).toEqual([{ kind: "asked", about: "check", why: "the check failed" }]);
   });
+  test("Toyon's message for news of the work handed off is a message row under the landing, with what was sent", () => {
+    const landing: AgentEvent = {
+      type: "piece-landed",
+      worktreeId: "b",
+      repoName: "toyon",
+      title: "Handoff review",
+      same: true,
+      sent: true,
+      wake: true,
+      ts: 1,
+    };
+    const s = run([
+      hello(wt("a")),
+      agent("a", landing),
+      agent("a", {
+        type: "fix-asked",
+        text: "The worktree this one sent a piece to has landed; check that the landing holds the piece.",
+        ts: 2,
+        kind: "news",
+        why: "to check that it holds the piece",
+        from: [{ id: "b", title: "Handoff review" }],
+      }),
+    ]);
+    expect(s.local.a?.chat).toEqual([
+      {
+        kind: "piece-landed",
+        worktreeId: "b",
+        repoName: "toyon",
+        title: "Handoff review",
+        same: true,
+        sent: true,
+        ts: 1,
+      },
+      {
+        kind: "news",
+        why: "to check that it holds the piece",
+        from: [{ id: "b", title: "Handoff review" }],
+        text: "The worktree this one sent a piece to has landed; check that the landing holds the piece.",
+        ts: 2,
+      },
+    ]);
+    // a chat stored before the message had a kind of its own reads back as the row it was written as
+    const stored = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "fix-asked",
+        text: "The work this worktree handed off has landed.",
+        ts: 2,
+        kind: "handoff",
+        why: '"Handoff review" landed, so the agent takes up what it handed off',
+      }),
+    ]);
+    expect(stored.local.a?.chat).toEqual([
+      { kind: "asked", about: "handoff", why: '"Handoff review" landed, so the agent takes up what it handed off' },
+    ]);
+  });
   test("a failed command keeps the daemon's mark that it can be fixed, and the ask about it names its row", () => {
     const s = run([
       hello(wt("a")),

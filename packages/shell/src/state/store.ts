@@ -35,6 +35,7 @@ import type {
   LandMark,
   LogLine,
   ManagedView,
+  NewsFrom,
   OwnedWorktree,
   PageEntry,
   PageLink,
@@ -176,6 +177,11 @@ export type ChatItem =
   /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
    * the kind of thing it was sent for, which is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
+  /** a message Toyon sent the agent for what became of the work handed off: nothing failed and
+   * nobody asked, so it is drawn as a message. `from` is the worktrees whose landing it is for,
+   * named as who it is from; without them the row names no sender. `why` is what the agent is to do,
+   * as the daemon worded it to follow that, and `text` what the agent was sent. */
+  | { kind: "news"; why: string; text: string; from?: NewsFrom[]; ts: number }
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
@@ -3753,6 +3759,10 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
   switch (event.type) {
     case "fix-asked":
       // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
+      if (event.kind === "news") {
+        const from = event.from?.length ? { from: event.from } : {};
+        return [...items, { kind: "news", why: event.why, text: event.text, ...from, ts: event.ts }];
+      }
       return [
         ...items,
         { kind: "asked", about: event.kind, why: event.why, ...(event.toolId ? { toolId: event.toolId } : {}) },

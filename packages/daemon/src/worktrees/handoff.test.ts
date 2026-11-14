@@ -565,8 +565,9 @@ describe("go", () => {
     await until(() => agentOf(a.id).sent.length === before + 1);
     const woke = agentOf(a.id).sent.at(-1)!;
     expect(woke.asked).toEqual({
-      kind: "handoff",
-      why: '"Composer" landed, so the agent starts the piece that waited',
+      kind: "news",
+      why: 'to start "Mine", which waited for it',
+      from: [{ id: b.id, title: "Composer" }],
     });
     expect(woke.keepCards).toBe(true);
     expect(woke.text).toContain(`The branch your own piece "Mine" waited for, "Composer" (${b.branch}), has landed`);
@@ -655,7 +656,11 @@ describe("go", () => {
       'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; check that the landing holds the piece.',
     );
     expect(woke.text).toContain("Then say in a line or two what landed and what you did with it.");
-    expect(woke.asked).toEqual({ kind: "handoff", why: '"Composer" landed, so the agent takes up what it handed off' });
+    expect(woke.asked).toEqual({
+      kind: "news",
+      why: "to check that it holds the piece",
+      from: [{ id: b.id, title: "Composer" }],
+    });
     expect(woke.keepCards).toBe(true);
     await land(c.id, "form.txt");
     await until(() => recorded(a.id, "piece-landed").length === 2);
@@ -1066,7 +1071,7 @@ describe("read off the plan", () => {
     w.hub.emit("agentStatus", a.id, "idle");
     await until(() => agentOf(a.id).sent.length === before + 1);
     const told = agentOf(a.id).sent.at(-1)!;
-    expect(told.asked?.kind).toBe("handoff");
+    expect(told.asked?.kind).toBe("news");
     expect(told.keepCards).toBe(true);
     expect(told.text).toContain('"One", "Two"');
     expect(told.text).toContain("They added: merge the two");
@@ -1093,7 +1098,7 @@ describe("read off the plan", () => {
     w.hub.emit("agentStatus", a.id, "idle");
     await until(() => agentOf(a.id).sent.length === before + 1);
     const told = agentOf(a.id).sent.at(-1)!;
-    expect(told.asked?.kind).toBe("handoff");
+    expect(told.asked?.kind).toBe("news");
     expect(told.keepCards).toBe(true);
     expect(told.text).toContain('Do "Mine" here, and only that.');
     expect(told.text).toContain("The person added: carefully");
@@ -1189,7 +1194,8 @@ describe("read off the plan", () => {
     expect(woke.text).toContain(`"Theirs" (${theirs.branch}), has landed`);
     expect(woke.text).toContain(`"Also theirs" (${also.branch}), has landed`);
     expect(woke.text).toContain('Do "Mine later", "Mine last" here now, and only those.');
-    expect(woke.asked?.why).toBe('"Theirs", "Also theirs" landed, so the agent starts the pieces that waited');
+    expect(woke.asked?.why).toBe('to start "Mine later" and "Mine last", which waited for them');
+    expect(woke.asked?.from?.map((f) => f.title)).toEqual(["Theirs", "Also theirs"]);
     await settle();
     expect(agentOf(a.id).sent).toHaveLength(before + 1);
     // a message sent during the turn carried the note on its prompt: nothing more goes
@@ -1436,7 +1442,11 @@ describe("another project", () => {
       'The work this worktree handed off, "Fix form" (toyon/fix-form), has landed on main in the project claude-agent-acp.',
     );
     expect(woke.text).toContain("Then say in a line or two what landed and what you did with it.");
-    expect(woke.asked).toEqual({ kind: "handoff", why: '"Fix form" landed, so the agent takes up what it handed off' });
+    expect(woke.asked).toEqual({
+      kind: "news",
+      why: "to bring in line what depends on it",
+      from: [{ id: b.id, title: "Fix form", project: "claude-agent-acp" }],
+    });
     expect(woke.keepCards).toBe(true);
     // what it lands after that is its own follow-up: a note for the next prompt, and no start
     await land(b.id, "more.txt");

@@ -36,6 +36,18 @@ describe("a message Toyon sent itself", () => {
       [[], ["the check failed"]],
     ]);
   });
+  test("one sent for a landing says which worktree landed, since its reason is worded after it", () => {
+    const news: AgentEvent = {
+      type: "fix-asked",
+      text: "The worktree this one sent a piece to has landed.",
+      ts: 5,
+      kind: "news",
+      why: "to check that it holds the piece",
+      from: [{ id: "b", title: "Composer" }],
+    };
+    const turns = turnsSince(log(news, start(6), end(7)), 0);
+    expect(turns.map((t) => t.fixes)).toEqual([['from "Composer", to check that it holds the piece']]);
+  });
   test("is not the task, even when it is the first thing on the transcript", () => {
     expect(firstAskOf(log(fix, user("add a header", 9)))).toBe("add a header");
   });

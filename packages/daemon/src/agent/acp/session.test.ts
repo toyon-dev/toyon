@@ -4381,8 +4381,8 @@ describe("AcpSession cards", () => {
       'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Docs" started in a sibling worktree of this project. Do "Fix it" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself. The person added: carefully',
     ]);
     expect(askedLast(w.events)).toMatchObject({
-      kind: "handoff",
-      why: "the piece kept here, so the agent starts on it",
+      kind: "news",
+      why: "to start the piece kept here",
     });
     w.session.send("two");
     await w.idle();
@@ -4402,7 +4402,8 @@ describe("AcpSession cards", () => {
     expect(texts(fake)[1]).toHaveLength(1);
     expect(texts(fake)[1]![0]).toContain("They added: smaller");
     expect(askedLast(w.events)).toMatchObject({
-      why: "the list was sent back with a note, so the agent reads it before going on",
+      kind: "news",
+      why: "to read the note sent back with the list",
     });
     await w.session.close();
   });
@@ -4429,7 +4430,12 @@ describe("AcpSession cards", () => {
     expect(behind).toContain('The branch your own piece waited for, "Theirs"');
     expect(behind).toContain('"Old", landed again');
     expect(askedLast(w.events)).toMatchObject({
-      why: '"Theirs", "Also theirs" landed, so the agent starts the piece that waited',
+      kind: "news",
+      why: 'to start "Mine", which waited for "Theirs"',
+      from: [
+        { id: "b", title: "Theirs" },
+        { id: "c", title: "Also theirs" },
+      ],
     });
     expect(w.statuses.filter((st) => st === "idle")).toHaveLength(1);
     await Bun.sleep(20);

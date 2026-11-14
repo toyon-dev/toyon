@@ -47,7 +47,7 @@ import {
   type ToolEntry,
   type ToolItem,
 } from "./group.ts";
-import { HandedRow } from "./HandedRow.tsx";
+import { HandedRow, NewsRow } from "./HandedRow.tsx";
 import { HandoffRow, PieceLandedRow, PieceLaterRow } from "./HandoffRow.tsx";
 import { handoffPage, handoffSaid } from "./handoff.ts";
 import { SentImageChip } from "./ImageChip.tsx";
@@ -1384,6 +1384,8 @@ export const ChatItemView = memo(function ChatItemView({
           <span className="daemon-text">{item.why}</span>
         </DaemonRow>
       );
+    case "news":
+      return <NewsRow item={item} worktreeId={worktreeId} />;
     case "stopped":
       // the word alone, with the stop button's glyph: where the turn was cut is the whole news,
       // and the box under the log offers the way on

@@ -3,9 +3,10 @@
 // it is a row of Toyon's own saying where it came from. The first message of a worktree born from
 // a piece points the agent at the plan it was given, and the row opens that plan in the pane, the
 // file this worktree owns; a piece sent into an open chat is a message with nothing on disk, and
-// the row opens its text as a document out of the transcript.
+// the row opens its text as a document out of the transcript. Toyon's own message for what became
+// of the work handed off is the same row, from the chat that landed where one did.
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { nextSeq, openFile } from "../../state/actions/file.ts";
 import { useDispatch, useSock } from "../../state/context.tsx";
 import type { ChatItem } from "../../state/store.ts";
@@ -75,6 +76,67 @@ export function HandedRow({
       <span className="daemon-text">
         from <WorktreeChip id={item.origin.id} title={item.origin.title} />
         {item.origin.project ? ` in ${item.origin.project}` : ""}
+      </span>
+    </DaemonRow>
+  );
+}
+
+/** A message Toyon sent the agent itself, for news of the work handed off that gives it
+ * something to do. One for a landing elsewhere is from the chat that landed, to the person
+ * reading: that chat reporting back, so the row names it as a sent piece's row names its origin.
+ * One for an answer on Toyon's own card has no other chat behind it and names no sender: every
+ * row here is Toyon's, and a chip for this chat would name the row the reader is in. The row
+ * opens what the agent was sent, since the reply under it answers words the chat shows nowhere
+ * else. */
+export function NewsRow({
+  item,
+  worktreeId,
+}: {
+  item: Extract<ChatItem, { kind: "news" }>;
+  worktreeId?: string | null;
+}) {
+  const dispatch = useDispatch();
+  const from = item.from ?? [];
+  return (
+    <DaemonRow
+      icon="handoff"
+      word="message"
+      tone="accent"
+      at={item.ts}
+      press={
+        // the pane keys on a worktree: with none on screen there is nowhere to open it
+        worktreeId
+          ? {
+              label: "details",
+              tip: "Read the message beside the chat",
+              onPress: () =>
+                dispatch({
+                  a: "open-loose",
+                  v: {
+                    worktreeId,
+                    name: `${from[0]?.title ?? "Message"}.md`,
+                    text: item.text,
+                    binary: false,
+                    tooLarge: false,
+                    source: { kind: "text" },
+                    seq: nextSeq(),
+                  },
+                }),
+            }
+          : undefined
+      }
+    >
+      <span className="daemon-text">
+        {from.length > 0 && "from "}
+        {from.map((f, i) => (
+          <Fragment key={f.id}>
+            {i > 0 && (i === from.length - 1 ? " and " : ", ")}
+            <WorktreeChip id={f.id} title={f.title} />
+            {f.project ? ` in ${f.project}` : ""}
+          </Fragment>
+        ))}
+        {from.length > 0 && ", "}
+        {item.why}
       </span>
     </DaemonRow>
   );

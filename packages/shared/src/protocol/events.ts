@@ -292,12 +292,27 @@ export interface AskChoice {
 
 export type AskOutcome = "answered" | "skipped" | "cancelled" | "expired";
 
-/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix, or
- * the person pressed to send it on after a turn that was stopped or that failed */
+/** a landed worktree as the message Toyon sent for its landing names it */
+export interface NewsFrom {
+  id: string;
+  title: string;
+  project?: string;
+}
+
+/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix, the
+ * person pressed to send it on after a turn that was stopped or that failed, or word came of the
+ * work it handed off that gives it something to do */
 export interface Asked {
-  /** `preview` is a dev server that will not come up */
-  kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "handoff";
+  /** `preview` is a dev server that will not come up. `news` is the message for what became of
+   * the work handed off (a landing elsewhere, an answer on Toyon's own card): nothing was asked
+   * for, so the chat draws it as a message, and `why` is what the agent is to do, worded to
+   * follow who it is from. */
+  kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "handoff" | "news";
   why: string;
+  /** `news` of a landing: the worktrees that landed, which the chat names as who the message is
+   * from, since to the person it is that chat reporting back; `project` when it is not this
+   * one. Absent when the news is only an answer on Toyon's own card, which has no other chat behind it. */
+  from?: NewsFrom[];
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
   toolId?: string;

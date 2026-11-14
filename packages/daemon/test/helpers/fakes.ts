@@ -40,7 +40,11 @@ export class FakeAgent implements AgentAdapter {
   private pumpNews() {
     if (isBusy(this.status_)) return;
     const news = newsToSend(this.transcript(), { from: this.told, rest: this.atRest() });
-    if (news) this.send(news.text, { asked: { kind: "handoff", why: news.why }, keepCards: true });
+    if (news)
+      this.send(news.text, {
+        asked: { kind: "news", why: news.why, ...(news.from ? { from: news.from } : {}) },
+        keepCards: true,
+      });
   }
   stopping = false;
   holding = 0;

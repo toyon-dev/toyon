@@ -75,9 +75,11 @@ export function turnsSince(entries: readonly TranscriptEntry[], seenAt: number):
         break;
       }
       case "fix-asked": {
-        // Toyon's own message opens or joins a turn the same way, as the failure it names
+        // Toyon's own message opens or joins a turn the same way, as the failure it names; one
+        // for a landing words its reason after the worktrees that landed, so they are said first
         const into = open && open.stop === undefined && open.error === undefined && !open.auth ? open : null;
-        (into?.fixes ?? pendingFixes).push(e.why);
+        const from = e.from?.map((f) => `"${f.title}"`).join(", ");
+        (into?.fixes ?? pendingFixes).push(from ? `from ${from}, ${e.why}` : e.why);
         break;
       }
       case "handed": {

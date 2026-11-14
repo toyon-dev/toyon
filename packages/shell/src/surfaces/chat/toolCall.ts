@@ -505,6 +505,14 @@ export function composing(call: ToolCall): string {
   // written until the brief itself is in, not until some field is.
   if (call.subagent) return field(call, "prompt") ? "" : "writing the brief";
   if (!emptyInput(call.input)) return "";
+  // a handoff's input is one field, the list, and every piece in it carries a plan that stands on
+  // its own: the longest thing the agent types into a call, with nothing to print until the last
+  // piece closes. Its row would say the tool's name for that whole stretch, which reads as a tool
+  // that hung rather than as the agent writing. The phrase is what the feature is called, not
+  // "writing the handoff": the glyph already says handoff, and the count is not known yet, so it
+  // names no piece or pieces. Read here and not through writingCall: that one also tells the
+  // daemon which calls to end as cut off, and a steer already marks this one.
+  if (call.name === HANDOFF_TOOL) return "splitting off work";
   if (!writingCall({ name: call.name, kind }, call.input)) return "";
   // an ask has no kind, and its question is the longest input an agent types that nobody sees
   // arrive: the adapter's placeholder ("Asking for your input") says the person is being waited

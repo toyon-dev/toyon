@@ -415,6 +415,17 @@ describe("toolLabel", () => {
     expect(toolLabel(asked)).toMatchObject({ name: "", icon: "chat", hint: "Which one?" });
   });
 
+  test("a handoff says work is being split off until the list lands", () => {
+    // the list is the call's one field, so nothing of it arrives before every plan is written
+    const handoff = { name: "handoff", title: "handoff", input: {} };
+    expect(composing(handoff)).toBe("splitting off work");
+    expect(composing({ ...handoff, input: { locations: [] } })).toBe("splitting off work");
+    // the list landing ends it: the row has titles to print
+    const offered = { ...handoff, input: { pieces: [{ title: "sticky header", plan: "...", where: "worktree" }] } };
+    expect(composing(offered)).toBe("");
+    expect(toolLabel(offered).hint).toBe("offered sticky header");
+  });
+
   test("a tool with no kind takes its glyph from its name, and prints the name only where the row has nothing else", () => {
     // the glyph says skill; the row says what was typed, not the adapter's "Load skill: x"
     const skill = { name: "Skill", title: "Load skill: dataviz", input: { skill: "dataviz" } };

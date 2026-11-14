@@ -62,13 +62,16 @@ const picked = "An element the user picked in the preview:";
 const heads = (blocks: ContentBlock[]) => blocks.map((b) => (b.type === "text" ? b.text.split("\n")[0] : b.type));
 
 describe("prompts for work in another project", () => {
-  test("the system append sends a change that belongs elsewhere through the handoff tool with a project, and ends the turn on it", () => {
+  test("the system append sends a change that belongs elsewhere through the handoff tool with a project, and keeps the agent on its own work", () => {
     // the tool's schema says how a piece names a project; the prompt says only that it is one
     expect(SYSTEM_APPEND).toContain(
       "propose it with the `handoff` tool when you have one, as a piece for that project",
     );
     expect(SYSTEM_APPEND).toContain("do not edit outside it and do not stop at saying so");
-    expect(SYSTEM_APPEND).toContain("once it is proposed you finish your turn");
+    // the tool's reply to a piece that is not the agent's own says the same: an agent told to stop
+    // here sits idle with work left
+    expect(SYSTEM_APPEND).toContain("you go on with the work you already have that does not depend on their answer");
+    expect(SYSTEM_APPEND).not.toContain("once it is proposed you finish your turn");
   });
 
   test("the system append and the piece ask state the title's shape, where the schema's word alone is missed", () => {

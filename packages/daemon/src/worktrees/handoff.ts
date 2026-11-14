@@ -28,21 +28,18 @@ import type {
   WorktreeInfo,
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy, pieceDoc } from "@toyon/shared";
-import type { AgentAdapter } from "../agent/adapter.ts";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
 import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
 import {
   handedPrompt,
   handoffActedPrompt,
-  handoffDeclinedPrompt,
   type PieceOrigin,
   pieceAskPrompt,
   pieceSendPrompt,
-  pieceWakePrompt,
 } from "../agent/prompt.ts";
 import type { ReadPiece } from "../agent/tasks.ts";
-import { isMessage, type TranscriptEntry } from "../agent/transcript.ts";
+import type { TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
@@ -98,7 +95,7 @@ function pieceLanded(
   repo: RepoInfo,
   to: WorktreeInfo,
   mark: LandMark | undefined,
-  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "pieces"> = {},
+  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "pieces" | "wake"> = {},
 ): PieceLanded {
   return {
     type: "piece-landed",
@@ -427,44 +424,13 @@ const HEARD_LATER: readonly Heard[] = ["await", "sent", "made", "after"];
  * that waited */
 type Hears = { as: Heard; pieces: string[] };
 
-/** a landing a wake tells of: the branch and, when it is not this project's, its project.
- * `pieces` are the worktree's own that waited for it; `handed` is a piece it handed off and set
- * nothing to wait for, whose landing its agent is started on all the same; `sent` is the same
- * for a piece it sent into the landed worktree. */
-type Woke = {
-  title: string;
-  branch: string;
-  url?: string;
-  project?: string;
-  pieces: string[];
-  handed?: true;
-  sent?: true;
-};
-
-/** the landed worktree as a wake in `to` names it */
-function wokeBy(landed: WorktreeInfo, repo: RepoInfo, to: WorktreeInfo): Omit<Woke, "pieces" | "handed" | "sent"> {
-  return {
-    title: landed.title,
-    branch: landed.branch,
-    ...(landed.pr?.url ? { url: landed.pr.url } : {}),
-    ...(to.repoId === landed.repoId ? {} : { project: repo.name }),
-  };
-}
-
 /** what a piece became in one pass of go, for the pieces of the list that wait on it */
 type Became = { fate: PieceFate; worktree?: Named; queued?: true };
 
 export class HandoffService implements ToolProvider {
-  /** the landings each worktree is to be woken for once its turn ends, by worktree (wake) */
-  private wakes = new Map<string, Woke[]>();
-
   constructor(private d: HandoffDeps) {
     d.hub.on("handoffDecided", (worktreeId, id, approved) =>
-      fireAndForget(
-        worktreeId,
-        approved ? this.act(worktreeId, id, undefined, true) : this.decline(worktreeId, id),
-        "handoff",
-      ),
+      fireAndForget(worktreeId, approved ? this.act(worktreeId, id) : this.decline(worktreeId, id), "handoff"),
     );
     d.hub.on("planUnsplit", (worktreeId, markdown, planPath) =>
       fireAndForget(worktreeId, this.read(worktreeId, markdown, planPath), "pieces read off the plan"),
@@ -829,7 +795,8 @@ export class HandoffService implements ToolProvider {
    * is the agent's to rewrite now, so its pieces are written as a page the row keeps. `note` is
    * what the person typed with not now: the agent's turn ends without the answer, so the words
    * start one, the way a plan card's no carries what to change. A bare not now starts none,
-   * since a turn begun to say nothing happened is noise; the agent's next prompt says it. */
+   * since a turn begun to say nothing happened is noise; the agent's next prompt says it. Which
+   * of the two is read off the event written here (agent/news.ts), by the session. */
   async decline(worktreeId: string, id: string, reason?: string, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
@@ -846,20 +813,6 @@ export class HandoffService implements ToolProvider {
       ...(plan ? { plan } : {}),
       ts: Date.now(),
     });
-    if (!note) return;
-    // the card goes up as the handoff call answers, so the agent may still be on that turn, and a
-    // message steered into it would abort the call in flight: the words wait for the turn to end
-    const text = handoffDeclinedPrompt(proposed.pieces, note);
-    fireAndForget(
-      wt.id,
-      this.idle(wt.id, agent).then(() =>
-        agent.send(text, {
-          asked: { kind: "handoff", why: "the list was sent back with a note, so the agent reads it before going on" },
-          keepCards: true,
-        }),
-      ),
-      "pieces declined",
-    );
   }
 
   /** The yes. The go is on the transcript before anything slow starts, so the card closes on
@@ -867,12 +820,11 @@ export class HandoffService implements ToolProvider {
    * and not the end of the list: `here` and `skip` are nothing to do, `send` is a message into
    * the open worktree, `worktree` is a worktree made now or queued behind what it waits for. A
    * piece that waits for another on the list waits for that one's worktree, made or queued
-   * earlier in the same pass, which is why the order matters. `tell`: the list went with a plan's
-   * yes, so the agent is about to build and is told what the list started elsewhere, steered into
-   * that turn once the card's answer is on the wire. Toyon's own card is answered between turns,
-   * so the message starts one, and only when a piece is the agent's own to build now; any other
-   * answer rides the agent's next prompt (the session's `cardAnswered`). */
-  async act(worktreeId: string, id: string, note?: string, tell = false): Promise<void> {
+   * earlier in the same pass, which is why the order matters. What the agent hears of it is
+   * not sent from here: the events written are its news (agent/news.ts), which the session sends
+   * once the agent is at rest when a piece is its own to build now, and carries on its next
+   * message otherwise; a list answered with a plan's yes was said ahead of that yes (`says`). */
+  async act(worktreeId: string, id: string, note?: string): Promise<void> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) return;
     const agent = this.d.runtime.ensureAgent(wt).agent;
@@ -918,41 +870,75 @@ export class HandoffService implements ToolProvider {
       }
       agent.note({ type: "handoff", id, outcomes, ts: Date.now() });
       this.watch(wt.id, waits);
-      if (tell && outcomes.some((o) => o.fate !== "here")) {
-        // the card's answer must be on the wire before anything is steered into the turn it
-        // releases: a steer that lands while the plan tool is still being answered aborts the
-        // tool, and the approval with it (session.ts, sayPlanEdited). The card closes on the
-        // transcript as it is answered, so wait for that, then a beat for the write.
-        for (let i = 0; i < 30 && openPlanCard(agent.transcript()); i++) await Bun.sleep(100);
-        await Bun.sleep(100);
-        agent.send(handoffActedPrompt(proposed.pieces, outcomes), {
-          asked: { kind: "handoff", why: "what the handoff started, so the agent builds only its own piece" },
-          keepCards: true,
-        });
-      } else if (!tell && outcomes.some((o) => o.fate === "here" && !o.after)) {
-        // Toyon's own card is not a turn's, so a piece kept here starts one: the agent was told
-        // to finish its turn when it handed off, and until it builds its piece nothing queued behind
-        // this branch can start. A piece here that waits for a sibling waits for its word. The
-        // card goes up as the handoff call answers, so the agent may still be on that turn, and a
-        // message steered into it would abort the call in flight: the message waits for the
-        // turn to end, off this call, which answers the card now.
-        const text = handoffActedPrompt(proposed.pieces, outcomes, "card", note);
-        fireAndForget(
-          wt.id,
-          this.idle(wt.id, agent).then(() =>
-            agent.send(text, {
-              asked: { kind: "handoff", why: "the piece kept here, so the agent starts on it" },
-              keepCards: true,
-            }),
-          ),
-          "pieces here",
-        );
-      }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       agent.note({ type: "handoff-declined", id, outcome: "failed", reason, ts: Date.now() });
       throw e;
     }
+  }
+
+  /** what a queued piece waits for, in the row's words: a branch, or a piece of the list still
+   * to be made */
+  private waitSaid(proposed: Proposed, waits: QueuedPiece["after"]): string {
+    return "piece" in waits
+      ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece)
+      : (this.d.state.worktree(waits.id)?.branch ?? waits.id);
+  }
+
+  /** What go will do with an open list, in the agent's words, before anything is made: said to
+   * the agent ahead of a plan's yes, since the yes itself is an option id and the worktrees take
+   * seconds (the session's `handoffSays`). A pass over the list as `act` makes it, with the fates
+   * and the rows as they stand and nothing written: a worktree not made yet stands in by its
+   * piece's title, which is all a wait on it is said by. Nothing for a list that is closed, or
+   * one whose every piece is the agent's own. A piece that then fails to start is news the
+   * agent hears on its next message. */
+  says(worktreeId: string, id: string): string | undefined {
+    const wt = this.d.state.worktree(worktreeId);
+    const entries = wt ? this.d.runtime.agentFor(wt.id)?.transcript() : undefined;
+    const proposed = entries ? openHandoff(entries).find((p) => p.id === id) : undefined;
+    if (!wt || !entries || !proposed) return undefined;
+    const became = new Map<string, Became>();
+    const outcomes: PieceOutcome[] = [];
+    for (const piece of proposed.pieces) {
+      const fate = effectiveFate(entries, proposed, piece);
+      if (fate === "here" || fate === "skip") {
+        became.set(piece.id, { fate });
+        outcomes.push({ pieceId: piece.id, fate });
+        continue;
+      }
+      if (fate === "send") {
+        became.set(piece.id, { fate, ...(piece.to ? { worktree: piece.to } : {}) });
+        outcomes.push({ pieceId: piece.id, fate, ...(piece.to ? { title: piece.to.title } : {}) });
+        continue;
+      }
+      const waits = this.waitsFor(wt, piece, became);
+      became.set(
+        piece.id,
+        waits ? { fate, queued: true } : { fate, worktree: { id: "", branch: "", title: piece.title } },
+      );
+      // a wait on a piece this pass would make has no row to name yet, so it is said by that
+      // piece's title: left blank it would read as no wait, and the piece as started
+      const on = piece.after && "piece" in piece.after ? piece.after.piece : undefined;
+      const unmade = !!waits && "id" in waits && waits.id === "" && on !== undefined;
+      const after = waits ? this.waitSaid(proposed, unmade ? { piece: on } : waits) : undefined;
+      outcomes.push({ pieceId: piece.id, fate, ...(after ? { after } : {}) });
+    }
+    for (const o of outcomes) {
+      if (o.fate !== "here") continue;
+      const piece = proposed.pieces.find((p) => p.id === o.pieceId);
+      const wait = piece ? this.hereWait(proposed, piece, became) : null;
+      if (wait) o.after = wait.said;
+    }
+    if (!outcomes.some((o) => o.fate !== "here")) return undefined;
+    return handoffActedPrompt(proposed.pieces, outcomes, "plan");
+  }
+
+  /** Whether the worktree's own work is done: landed, with nothing in its tree since. A landing
+   * elsewhere starts no turn there (the session's `atRest`). Not `takesSend`, which a turn
+   * running also satisfies: this is asked as a turn ends. */
+  atRest(worktreeId: string): boolean {
+    const w = this.d.state.worktree(worktreeId);
+    return !!w?.landed && (this.d.counts(w.id)?.dirty ?? 0) === 0;
   }
 
   /** A plan card went up with no list for it: read the pieces off the plan on the quick model and
@@ -1135,12 +1121,7 @@ export class HandoffService implements ToolProvider {
       this.d.state.save();
       this.d.hub.emit("worktreesChanged");
       became.set(piece.id, { fate, queued: true });
-      // what the row says it waits for: a branch, or a piece of the list still to be made
-      const after =
-        "piece" in waits
-          ? (proposed.pieces.find((p) => p.id === waits.piece)?.title ?? waits.piece)
-          : (this.d.state.worktree(waits.id)?.branch ?? waits.id);
-      return { pieceId: piece.id, fate, after, ...crossed };
+      return { pieceId: piece.id, fate, after: this.waitSaid(proposed, waits), ...crossed };
     }
     const made = await this.make(wt, origin, piece, note);
     became.set(piece.id, { fate, worktree: { id: made.id, branch: made.branch, title: made.title } });
@@ -1180,20 +1161,6 @@ export class HandoffService implements ToolProvider {
     if (!q) return;
     q.heres = [...new Set([...(q.heres ?? []), here])];
     this.d.state.save();
-  }
-
-  /** resolves once the worktree's agent is between turns: at once when it is, else on the first
-   * status that says so. A worktree removed meanwhile never says so, and the listener stays; one
-   * closure, once per go, which is nothing. */
-  private idle(worktreeId: string, agent: Pick<AgentAdapter, "status">): Promise<void> {
-    if (!isBusy(agent.status)) return Promise.resolve();
-    return new Promise((resolve) => {
-      const off = this.d.hub.on("agentStatus", (id, status) => {
-        if (id !== worktreeId || isBusy(status)) return;
-        off();
-        resolve();
-      });
-    });
   }
 
   /** The landings `watcherId` is told of from here on, onto its own record, so they survive a
@@ -1308,20 +1275,6 @@ export class HandoffService implements ToolProvider {
   async landed(landedId: string, mark?: LandMark): Promise<void> {
     const landed = this.d.state.worktree(landedId);
     const watchers = landed ? this.watchers(landed) : new Map<string, Hears>();
-    // a wait is over and a send has ridden with this landing, heard or not: a piece sent after
-    // it rides the next one
-    let letGo = false;
-    for (const w of this.d.state.worktrees) {
-      const kept = w.watches?.filter((x) => x.id !== landedId || x.as === "after");
-      if (!w.watches || kept?.length === w.watches.length) continue;
-      if (kept?.length) w.watches = kept;
-      else delete w.watches;
-      letGo = true;
-    }
-    if (letGo) {
-      this.d.state.save();
-      this.d.hub.emit("worktreesChanged");
-    }
     // the worktrees this landing makes waited for it by design: this is their first word, not again
     const madeNow = new Set<string>();
     for (const origin of this.d.state.worktrees) {
@@ -1360,14 +1313,35 @@ export class HandoffService implements ToolProvider {
       }
     }
     const repo = landed ? this.d.state.repo(landed.repoId) : undefined;
-    if (!landed || !repo) return;
+    // A wait is over and a send has ridden with this landing, heard or not: a piece sent after
+    // it rides the next one. Taken off as the watcher's note is written and not before the
+    // pieces above were made, which takes seconds each: a landing cut short there (the daemon
+    // stopping) leaves the watch on record for the next landing to tell.
+    let letGo = false;
+    const saved = () => {
+      if (!letGo) return;
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+    };
+    if (!landed || !repo) {
+      // nothing to say of a landing whose row or project is gone: the watches on it go all the same
+      for (const w of this.d.state.worktrees) letGo = this.letGo(w, landedId) || letGo;
+      return saved();
+    }
     for (const [id, { as, pieces }] of watchers) {
       const w = this.d.state.worktree(id);
+      if (w) letGo = this.letGo(w, landedId) || letGo;
       if (w?.kind !== "worktree") continue;
       // a landing that is only news is none to a worktree whose work is done, and the first word
       // to one this landing just made
       if (as === "after" && (w.landed || madeNow.has(id))) continue;
-      const agent = this.d.runtime.ensureAgent(w).agent;
+      // the agent with something to do about the landing is started on it once it is at rest
+      // (agent/news.ts reads `wake` off the note): never one whose own work is done
+      const wake =
+        as !== "after" &&
+        this.takesSend(w) &&
+        (as === "await" ||
+          (!w.watches?.some((x) => x.as === "await") && !(as === "made" && (landed.lands?.length ?? 0) > 1)));
       const why =
         as === "await"
           ? { awaited: true as const, ...(pieces.length ? { pieces } : {}) }
@@ -1376,20 +1350,21 @@ export class HandoffService implements ToolProvider {
             : as === "after"
               ? { again: true as const }
               : {};
-      agent.note(pieceLanded(landed, repo, w, mark, why));
-      if (as === "after" || !this.takesSend(w)) continue;
-      if (as === "await") {
-        this.wake(w, agent, { ...wokeBy(landed, repo, w), pieces });
-        continue;
-      }
-      if (w.watches?.some((x) => x.as === "await")) continue;
-      if (as === "made" && (landed.lands?.length ?? 0) > 1) continue;
-      this.wake(w, agent, {
-        ...wokeBy(landed, repo, w),
-        pieces: [],
-        ...(as === "sent" ? { sent: true as const } : { handed: true as const }),
-      });
+      this.d.runtime
+        .ensureAgent(w)
+        .agent.note(pieceLanded(landed, repo, w, mark, { ...why, ...(wake ? { wake: true as const } : {}) }));
     }
+    saved();
+  }
+
+  /** takes a worktree's one-shot watches on a landing off its record (a wait, a send); being
+   * made behind it stands for the next landing. Says whether anything went; the caller saves. */
+  private letGo(w: WorktreeInfo, landedId: string): boolean {
+    const kept = w.watches?.filter((x) => x.id !== landedId || x.as === "after");
+    if (!w.watches || kept?.length === w.watches.length) return false;
+    if (kept?.length) w.watches = kept;
+    else delete w.watches;
+    return true;
   }
 
   /** who hears this landing, each once, by the strongest reason it has */
@@ -1409,43 +1384,6 @@ export class HandoffService implements ToolProvider {
       for (const x of w.watches ?? []) if (x.id === landed.id) hear(w.id, x.as, x.pieces);
     }
     return heard;
-  }
-
-  /** The agent whose own piece waited for the landed branch, or who handed the landed work off
-   * or sent a piece into it, is started on it, between turns: the landing's note rides the next prompt, but an agent with
-   * nothing else to do sends none, and what is queued behind this branch waits on that piece.
-   * Landings during one turn make one wake naming them all, since the first wake's own message
-   * would make a second read as told. Nothing is sent when a message went out meanwhile, the
-   * person's or Toyon's, which carried the note already, or when the worktree's work was done or
-   * the worktree gone by the time the turn ended. */
-  private wake(w: WorktreeInfo, agent: AgentAdapter, woke: Woke): void {
-    const pending = this.wakes.get(w.id);
-    if (pending) return void pending.push(woke);
-    this.wakes.set(w.id, [woke]);
-    const mark = agent.transcript().length;
-    fireAndForget(
-      w.id,
-      this.idle(w.id, agent).then(() => {
-        const landed = this.wakes.get(w.id) ?? [];
-        this.wakes.delete(w.id);
-        const live = this.d.state.worktree(w.id);
-        if (live?.kind !== "worktree" || !this.takesSend(live)) return;
-        if (
-          agent
-            .transcript()
-            .slice(mark)
-            .some((e) => isMessage(e.event))
-        )
-          return;
-        const titles = landed.map((l) => `"${l.title}"`).join(", ");
-        const pieces = new Set(landed.flatMap((l) => l.pieces));
-        const why = landed.every((l) => l.handed || l.sent)
-          ? `${titles} landed, so the agent takes up what it handed off`
-          : `${titles} landed, so the agent starts the ${pieces.size === 1 ? "piece" : "pieces"} that waited`;
-        agent.send(pieceWakePrompt(landed), { asked: { kind: "handoff", why }, keepCards: true });
-      }),
-      "piece woken",
-    );
   }
 
   /** the queued pieces of the same list that waited for `made`'s piece now wait for its worktree */

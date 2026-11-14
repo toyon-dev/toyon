@@ -4281,29 +4281,35 @@ describe("AcpSession cards", () => {
     );
   });
 
-  test("an answer that is its own message, a plan card's, or no answer at all adds nothing", async () => {
-    // a piece kept here starts the agent with what the list became
-    const here: AgentEvent = {
-      type: "handoff",
-      id: "h1",
-      outcomes: [
-        { pieceId: "p1", fate: "here" },
-        { pieceId: "p2", fate: "worktree" },
-      ],
-      ts: 3,
-    };
-    expect(await heard([list(), { type: "handoff-go", id: "h1", ts: 2 }, here])).toBeUndefined();
-    // words typed with not now are sent as a message
-    expect(await heard([list(), { type: "handoff-declined", id: "h1", note: "smaller", ts: 2 }])).toBeUndefined();
+  test("an answer a plan card gave, or no answer at all, adds nothing", async () => {
     // the agent handed over again, which closes its earlier list
     expect(
       await heard([list(), { type: "handoff-declined", id: "h1", reason: "handed over again", ts: 2 }]),
     ).toBeUndefined();
-    // a held list is answered by its plan card: the plan's reply and the steer after it say it
+    // a held list is answered by its plan card: what it starts was said ahead of the plan's reply
     expect(await heard([list(true), { type: "handoff-go", id: "h1", ts: 2 }, went])).toBeUndefined();
     expect(await heard([list(true), { type: "handoff-declined", id: "h1", ts: 2 }])).toBeUndefined();
     // an agent without the tool handed nothing over: the list was the person's own
     expect(await heard([list(), { type: "handoff-go", id: "h1", ts: 2 }, went], false)).toBeUndefined();
+  });
+
+  test("a piece a plan's yes could not start is the one thing said after it", async () => {
+    const said = await heard([
+      list(true),
+      { type: "handoff-go", id: "h1", ts: 2 },
+      {
+        type: "handoff",
+        id: "h1",
+        outcomes: [
+          { pieceId: "p1", fate: "send", worktreeId: "b", title: "Composer" },
+          { pieceId: "p2", fate: "worktree", error: "no port" },
+        ],
+        ts: 3,
+      },
+    ]);
+    expect(said).toBe(
+      '[Attached by Toyon:\nToyon could not finish acting on the list you handed over ("Docs"): no port. A piece may not have started; say so, and hand it over again if the split still fits.]',
+    );
   });
 
   test("a held list shown as Toyon's own card is answered there, and said", async () => {
@@ -4313,6 +4319,250 @@ describe("AcpSession cards", () => {
       { type: "handoff-declined", id: "h1", ts: 3 },
     ]);
     expect(said).toContain("The person answered the handoff card with not now");
+  });
+  /** every prompt the agent was sent, block by block */
+  const texts = (fake: FakeAgent) => fake.prompts.map((p) => p.prompt.map((b) => (b as { text: string }).text));
+  /** an agent with Toyon's tools whose first turn waits to be released */
+  function gated() {
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let turns = 0;
+    const fake = fakeAgent(
+      async () => {
+        if (turns++ === 0) await gate;
+        return { stopReason: "end_turn" };
+      },
+      { mcpHttp: true },
+    );
+    return { fake, release };
+  }
+  const tooled = (extra: Partial<AcpSessionDeps> = {}) => ({ mcp: mcpDep().mcp, ...extra });
+  /** a go on Toyon's own card that kept "Fix it" here and started "Docs" elsewhere */
+  const kept: AgentEvent = {
+    type: "handoff",
+    id: "h1",
+    outcomes: [
+      { pieceId: "p1", fate: "here" },
+      { pieceId: "p2", fate: "worktree", worktreeId: "b", title: "Docs" },
+    ],
+    ts: 3,
+  };
+  const landing = (
+    id: string,
+    title: string,
+    why: Partial<Extract<AgentEvent, { type: "piece-landed" }>> = {},
+  ): AgentEvent => ({
+    type: "piece-landed",
+    worktreeId: id,
+    repoName: "toyon",
+    title,
+    branch: `toyon/${id}`,
+    same: true,
+    ...why,
+    ts: 5,
+  });
+  const askedLast = (events: AgentEvent[]) => events.findLast((e) => e.type === "fix-asked");
+
+  test("a go that keeps a piece here is Toyon's own message to an agent at rest, said once", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    w.session.note(list());
+    w.session.note({ type: "handoff-go", id: "h1", note: "carefully", ts: 2 });
+    expect(fake.prompts).toHaveLength(1);
+    w.session.note(kept);
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    // the text says it, so nothing rides behind it
+    expect(texts(fake)[1]).toEqual([
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over: "Docs" started in a sibling worktree of this project. Do "Fix it" here, and only that. The siblings read the list at its path in this worktree; never do their pieces yourself. The person added: carefully',
+    ]);
+    expect(askedLast(w.events)).toMatchObject({
+      kind: "handoff",
+      why: "the piece kept here, so the agent starts on it",
+    });
+    w.session.send("two");
+    await w.idle();
+    expect(texts(fake)[2]).toEqual(["two"]);
+    await w.session.close();
+  });
+
+  test("words typed with not now start the agent on them", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    w.session.note(list());
+    w.session.note({ type: "handoff-declined", id: "h1", note: "smaller", ts: 2 });
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    expect(texts(fake)[1]).toHaveLength(1);
+    expect(texts(fake)[1]![0]).toContain("They added: smaller");
+    expect(askedLast(w.events)).toMatchObject({
+      why: "the list was sent back with a note, so the agent reads it before going on",
+    });
+    await w.session.close();
+  });
+
+  test("landings during a turn make one message as it ends, with no idle between", async () => {
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note(landing("b", "Theirs", { awaited: true, pieces: ["Mine"], wake: true }));
+    w.session.note(landing("c", "Also theirs", { wake: true }));
+    // a landing that starts nothing is carried all the same
+    w.session.note(landing("d", "Old", { again: true }));
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toContain('The branch your own piece "Mine" waited for, "Theirs" (toyon/b), has landed');
+    expect(text).toContain('The work this worktree handed off, "Also theirs" (toyon/c), has landed');
+    expect(text).toContain('Do "Mine" here now, and only that.');
+    expect(text).not.toContain('"Old"');
+    expect(behind).toContain('The branch your own piece waited for, "Theirs"');
+    expect(behind).toContain('"Old", landed again');
+    expect(askedLast(w.events)).toMatchObject({
+      why: '"Theirs", "Also theirs" landed, so the agent starts the piece that waited',
+    });
+    expect(w.statuses.filter((st) => st === "idle")).toHaveLength(1);
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a message queued behind the turn carries the news, and Toyon sends none", async () => {
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note(list());
+    w.session.note({ type: "handoff-go", id: "h1", ts: 2 });
+    w.session.note(kept);
+    w.session.send("two");
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    expect(texts(fake)[1]![0]).toBe("two");
+    expect(texts(fake)[1]![1]).toContain('Do "Fix it" here, and only that.');
+    expect(w.types()).not.toContain("fix-asked");
+    await w.session.close();
+  });
+
+  test("Toyon's message recorded ahead of one of the person's still carries what came before it", async () => {
+    // no steering, so both wait behind the turn: the person's is recorded as its turn starts,
+    // Toyon's as it is queued, and they go out in the other order than they are written
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note(landing("b", "Theirs", { awaited: true, pieces: ["Mine"], wake: true }));
+    w.session.send("two");
+    w.session.send("fix the check", { asked: { kind: "check", why: "the check failed" }, keepCards: true });
+    release();
+    await waitFor(() => fake.prompts.length === 3);
+    await w.idle();
+    await Bun.sleep(20);
+    expect(texts(fake)[1]).toEqual(["two"]);
+    expect(texts(fake)[2]![0]).toBe("fix the check");
+    expect(texts(fake)[2]![1]).toContain('The branch your own piece waited for, "Theirs"');
+    // told, so nothing of Toyon's own follows
+    expect(fake.prompts).toHaveLength(3);
+    await w.session.close();
+  });
+
+  test("news written during a turn that failed still goes, once", async () => {
+    let turns = 0;
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async () => {
+        if (turns++ > 0) return { stopReason: "end_turn" };
+        await gate;
+        throw new Error("the model fell over");
+      },
+      { mcpHttp: true },
+    );
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note(landing("b", "Theirs", { wake: true }));
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    expect(w.types()).toContain("agent-error");
+    expect(texts(fake)[1]![0]).toContain('The work this worktree handed off, "Theirs" (toyon/b), has landed');
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("a daemon coming up starts no turn: what was untold rides the next message", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    // the first daemon's worktree is at rest, so the landing starts nothing there either
+    const first = world(fake, claudeSpec, 60_000, undefined, tooled({ atRest: () => true }));
+    first.session.send("one");
+    await first.idle();
+    first.session.note(landing("b", "Theirs", { wake: true }));
+    await first.session.close();
+    const again = world(fake, claudeSpec, 60_000, first.id, tooled());
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    again.session.send("two");
+    await again.idle();
+    expect(texts(fake)[1]![1]).toContain('The sibling worktree "Theirs", a piece of the work planned here, has landed');
+    expect(again.types()).not.toContain("fix-asked");
+    await again.session.close();
+  });
+
+  test("news waits for a card of Toyon's that is up, and goes when it is answered", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    w.session.note(list());
+    w.session.note(landing("b", "Theirs", { wake: true }));
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.session.status).toBe("waiting");
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 6 });
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toContain('The work this worktree handed off, "Theirs" (toyon/b), has landed');
+    // the bare not now starts nothing of its own, and is said behind the message that went
+    expect(behind).toContain("The person answered the handoff card with not now");
+    await w.session.close();
+  });
+
+  test("a worktree whose own work is done is started by an answer on its card, never by a landing", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled({ atRest: () => true }));
+    w.session.send("one");
+    await w.idle();
+    w.session.note(landing("b", "Theirs", { wake: true }));
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    w.session.note(list());
+    w.session.note({ type: "handoff-go", id: "h1", ts: 2 });
+    w.session.note(kept);
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toContain('Do "Fix it" here, and only that.');
+    expect(text).not.toContain("has landed");
+    expect(behind).toContain('The sibling worktree "Theirs"');
+    await w.session.close();
   });
 });
 
@@ -4636,6 +4886,72 @@ describe("AcpSession handoff", () => {
     expect(w.types()).not.toContain("fix-asked");
     expect(w.types()).not.toContain("agent-ask-end");
     expect(openAsk(w.events)).toBeTruthy();
+    await w.session.close();
+  });
+  test("a plan's yes says what the list starts ahead of the approval, read before the list is acted on", async () => {
+    const order: string[] = [];
+    let release = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const fake = fakeAgent(
+      async (p, client) => {
+        await gate;
+        await client.request(acp.methods.client.session.requestPermission, {
+          sessionId: p.sessionId,
+          toolCall: {
+            toolCallId: "t1",
+            title: "Approve Plan",
+            kind: "switch_mode",
+            content: [{ type: "content", content: { type: "text", text: "# the plan" } }],
+          },
+          options: PLAN_OPTIONS,
+        });
+        return { stopReason: "end_turn" };
+      },
+      { steering: true },
+    );
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      handoffSays: (id) => {
+        order.push(`says ${id}`);
+        return "Do your own piece, and only that.";
+      },
+      onHandoff: (id, approved) => order.push(`decided ${id} ${approved}`),
+    });
+    w.session.send("plan it");
+    w.session.note(held);
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
+    await w.idle();
+    expect(order).toEqual(["says l1", "decided l1 true"]);
+    // into the turn the approval releases, as Toyon's own row and not the person's bubble
+    expect(fake.steers).toHaveLength(1);
+    expect(fake.steers[0]!.prompt).toEqual([{ type: "text", text: "Do your own piece, and only that." }]);
+    expect(w.events.findLast((e) => e.type === "fix-asked")).toMatchObject({
+      kind: "handoff",
+      text: "Do your own piece, and only that.",
+      why: "what the handoff started, so the agent builds only its own piece",
+    });
+    await w.session.close();
+  });
+
+  test("a plan sent back asks for nothing to be said of what the list starts", async () => {
+    const said: string[] = [];
+    const { fake, release } = planner();
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      handoffSays: (id) => {
+        said.push(id);
+        return "never";
+      },
+    });
+    w.session.send("plan it");
+    w.session.note(held);
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
+    await w.idle();
+    expect(said).toEqual([]);
     await w.session.close();
   });
 });

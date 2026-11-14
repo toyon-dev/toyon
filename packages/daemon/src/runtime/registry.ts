@@ -112,6 +112,12 @@ export interface RuntimeDeps {
    * says a worktree this one handed work to has landed; read as the message goes out. Absent in
    * tests, where the sentence names no chat */
   chatFile?: (worktreeId: string) => string | undefined;
+  /** what a yes to a plan will do with the pieces list beside it, in the agent's words
+   * (HandoffService.says); absent in tests with no handoff service */
+  handoffSays?: (worktreeId: string, listId: string) => string | undefined;
+  /** whether a worktree's own work is done, so a landing elsewhere starts no turn there
+   * (HandoffService.atRest); absent in tests with no handoff service */
+  atRest?: (worktreeId: string) => boolean;
   /** where a worktree's work stands (its tree read now, its landed and PR marks), for the
    * paragraph behind every message; absent in tests */
   standing?: (worktreeId: string) => Promise<WorkStanding | null>;
@@ -336,6 +342,9 @@ function defaultAgent(
     },
     // the handoff service is built after the runtime, so the hub is the seam, as it is for a landing
     onHandoff: (id, approved) => d.hub.emit("handoffDecided", wt.id, id, approved),
+    // a question the hub cannot carry an answer to: read off the service at call time
+    handoffSays: (id) => d.handoffSays?.(wt.id, id),
+    atRest: () => d.atRest?.(wt.id) ?? false,
     onPlanUnsplit: (markdown, planPath) => d.hub.emit("planUnsplit", wt.id, markdown, planPath),
     // the briefs as a file for the card's section; the record's own plan stays the agent's plan
     onHandoffShown: (_id, pieces) => writePlanDocNow(wt.path, listDoc(pieces)),

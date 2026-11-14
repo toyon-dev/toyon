@@ -122,6 +122,7 @@ export function world() {
     reader: async (wt, markdown) => planReader.fn?.(wt, markdown) ?? null,
     archivedTitle: (id) => worktrees.archivedTitle(id),
   });
+  f.rest.of = (id) => handoff.atRest(id);
   return {
     ...t,
     interest,

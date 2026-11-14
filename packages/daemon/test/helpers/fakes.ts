@@ -10,6 +10,7 @@ import type {
 } from "@toyon/shared";
 import { isBusy } from "@toyon/shared";
 import type { AgentAdapter, AskOpts, AskReply, FollowUp, SendOpts } from "../../src/agent/adapter.ts";
+import { isNews, newsToSend } from "../../src/agent/news.ts";
 import { AgentReadiness, type AgentReadinessDeps } from "../../src/agent/readiness.ts";
 import { AgentRegistry, type AgentSpec } from "../../src/agent/registry.ts";
 import type { ForwardOpts, ProcForwarder } from "../../src/runtime/forward.ts";
@@ -19,7 +20,28 @@ import type { RuntimeDeps } from "../../src/runtime/registry.ts";
 import type { WorktreeProcs } from "../../src/runtime/supervisor.ts";
 
 export class FakeAgent implements AgentAdapter {
-  status: AgentStatus = "idle";
+  private status_: AgentStatus = "idle";
+  get status(): AgentStatus {
+    return this.status_;
+  }
+  /** a test moves the status by hand; coming to rest is when untold news goes, as in the session */
+  set status(s: AgentStatus) {
+    this.status_ = s;
+    this.pumpNews();
+  }
+  /** the session's `atRest`: a world with a handoff service points it there */
+  atRest: () => boolean = () => false;
+  /** how far the transcript was told. The session records each message it sends on the
+   * transcript; a fake's `send` records nothing, so the mark stands in for the message. */
+  private told = 0;
+  /** The session's rule for news, on the same reading of the transcript (agent/news.ts): Toyon's
+   * message for what the agent has not been told, once it is at rest. What the session adds, the
+   * queue and the cards, has its own tests. */
+  private pumpNews() {
+    if (isBusy(this.status_)) return;
+    const news = newsToSend(this.transcript(), { from: this.told, rest: this.atRest() });
+    if (news) this.send(news.text, { asked: { kind: "handoff", why: news.why }, keepCards: true });
+  }
   stopping = false;
   holding = 0;
   wakes: number | null = null;
@@ -77,6 +99,7 @@ export class FakeAgent implements AgentAdapter {
   unsettled = false;
   send(text: string, opts: SendOpts = {}) {
     this.sent.push({ text, ...opts });
+    this.told = this.recorded.length;
   }
   /** whether the queue is held now, and how many times it was */
   held = false;
@@ -140,6 +163,7 @@ export class FakeAgent implements AgentAdapter {
   recorded: AgentEvent[] = [];
   note(event: AgentEvent) {
     this.recorded.push(event);
+    if (isNews(event)) this.pumpNews();
   }
   transcript(): Array<{ seq: number; event: AgentEvent }> {
     return this.recorded.map((event, seq) => ({ seq, event }));
@@ -398,6 +422,8 @@ export function fakeReadiness(agents: AgentRegistry, connect?: AgentReadinessDep
 
 /** RuntimeDeps factories that build the fakes above and remember them by worktree id */
 export function fakeFactories() {
+  /** what a fake agent's `atRest` asks, once a world has a handoff service to answer */
+  const rest: { of: ((worktreeId: string) => boolean) | null } = { of: null };
   const agents = new Map<string, FakeAgent>();
   const procs = new Map<string, FakeProcs>();
   const proxies = new Map<string, FakeProxy>();
@@ -419,6 +445,7 @@ export function fakeFactories() {
     makeAgent: (wt: WorktreeInfo, _deps, _preview, onProcess) => {
       const a = new FakeAgent(wt.id);
       a.onProcess = onProcess;
+      a.atRest = () => rest.of?.(wt.id) ?? false;
       agents.set(wt.id, a);
       return a;
     },
@@ -433,5 +460,5 @@ export function fakeFactories() {
       return p;
     },
   };
-  return { factories, agents, procs, proxies, forwards, terminals };
+  return { factories, agents, procs, proxies, forwards, terminals, rest };
 }

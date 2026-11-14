@@ -474,7 +474,9 @@ export type AgentEvent =
    * put on that main, as its mark says it (`LandMark.subjects`); absent when there is nothing to
    * say. `sent`: this worktree sent a piece into the landed one and did not make it, so the
    * landing is that worktree's own and may not hold the piece. `branch` is the landed branch as
-   * it stood at the landing, and `pieces` the here pieces that waited, with `awaited`. */
+   * it stood at the landing, and `pieces` the here pieces that waited, with `awaited`. `wake`:
+   * the landing gives this worktree's agent something to do, so Toyon starts it once it is at
+   * rest rather than leave the word for its next message. */
   | {
       type: "piece-landed";
       worktreeId: string;
@@ -488,6 +490,7 @@ export type AgentEvent =
       again?: true;
       awaited?: true;
       sent?: true;
+      wake?: true;
       ts: number;
     }
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list

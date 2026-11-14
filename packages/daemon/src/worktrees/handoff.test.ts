@@ -1229,6 +1229,8 @@ describe("read off the plan", () => {
       same: true,
       awaited: true,
       pieces: ["Mine later"],
+      // the session reads this off the note and starts the agent once it is at rest
+      wake: true,
     });
     expect(agentOf(a.id).sent).toHaveLength(before);
     agentOf(a.id).status = "idle";
@@ -1310,28 +1312,58 @@ describe("read off the plan", () => {
     expect(agentOf(a.id).sent.at(-1)!.text).toContain('Do "Mine" here now, and only that.');
   });
 
-  test("the plan's yes tells the agent what the list started, steered into its turn; Toyon's own card does not", async () => {
+  test("a plan's yes is said before it is acted on, from where the pieces stand; the go itself sends nothing", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
-    await call(a.id, piece({ title: "Mine", plan: "I do this.", where: "here" }), piece());
+    const x = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    await call(
+      a.id,
+      piece({ title: "Mine", plan: "I do this.", where: "here" }),
+      piece(),
+      piece({ title: "After mine", after: "this" }),
+      piece({ title: "Mine later", plan: "Then.", where: "here", after: x.branch }),
+    );
     const id = lastProposal(a.id).id;
+    // read while the list is open: nothing is made yet, and nothing is written by the reading
+    const says = w.handoff.says(a.id, id)!;
+    expect(says).toContain("Toyon acted on the pieces you handed over with the plan's approval");
+    expect(says).toContain('"Rail fixes" started in a sibling worktree of this project');
+    expect(says).toContain(`"After mine" waits for ${a.branch} to land and then starts in its own worktree`);
+    expect(says).toContain(`Do "Mine", "Mine later" (once ${x.branch} lands) here, and only that.`);
+    expect(madeTitled("Rail fixes")).toBeUndefined();
+    expect(w.state.worktree(a.id)!.queued).toBeUndefined();
+    // a piece the person moved is said as it stands, and a wait whose branch has landed is none:
+    // the agent told to wait for it would wait for a landing that is not coming
+    w.handoff.fate(a.id, id, "p2", "skip");
+    w.state.worktree(x.id)!.landed = true;
+    const moved = w.handoff.says(a.id, id)!;
+    expect(moved).toContain('"Rail fixes" was skipped by the person');
+    expect(moved).toContain('Do "Mine", "Mine later" here, and only that.');
     const before = agentOf(a.id).sent.length;
     w.hub.emit("handoffDecided", a.id, id, true);
     await until(() => recorded(a.id, "handoff").length === 1);
-    // the steer waits a beat for the card's answer to be on the wire
-    await until(() => agentOf(a.id).sent.length === before + 1);
-    const told = agentOf(a.id).sent.at(-1)!;
-    expect(told.asked?.kind).toBe("handoff");
-    expect(told.keepCards).toBe(true);
-    expect(told.text).toContain('"Rail fixes" started in a sibling worktree of this project');
-    expect(told.text).toContain('Do "Mine" here, and only that.');
-    // Toyon's own card, answered between turns: nothing to steer into
-    const b = await w.worktrees.create(repoId, "task", { title: "Other" });
-    await call(b.id, piece({ title: "Theirs" }));
-    const sentBefore = agentOf(b.id).sent.length;
-    await w.handoff.answer(b.id, lastProposal(b.id).id, true);
     await settle();
-    expect(agentOf(b.id).sent).toHaveLength(sentBefore);
+    // the plan card's answer carried the word: the go is no message of its own
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    // a closed list says nothing, and neither does one whose every piece is the agent's own
+    expect(w.handoff.says(a.id, id)).toBeUndefined();
+    const b = await w.worktrees.create(repoId, "task", { title: "Other", mode: "plan" });
+    await call(b.id, piece({ title: "All mine", where: "here" }));
+    expect(w.handoff.says(b.id, lastProposal(b.id).id)).toBeUndefined();
+    // a piece behind one this go would make waits for a worktree with no row yet: said as
+    // waiting, by that piece's title, never as started
+    const c = await w.worktrees.create(repoId, "task", { title: "Third", mode: "plan" });
+    await call(
+      c.id,
+      piece({ title: "First" }),
+      piece({ title: "Second", after: "First" }),
+      piece({ title: "Mine", where: "here", after: "Second" }),
+    );
+    const chained = w.handoff.says(c.id, lastProposal(c.id).id)!;
+    expect(chained).toContain('"First" started in a sibling worktree of this project');
+    expect(chained).toContain('"Second" waits for First to land and then starts in its own worktree');
+    expect(chained).toContain('Do "Mine" (once Second lands) here, and only that.');
+    expect(chained).not.toContain('"First", "Second" started');
   });
 });
 

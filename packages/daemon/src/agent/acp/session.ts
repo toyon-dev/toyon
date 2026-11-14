@@ -42,21 +42,15 @@ import {
   setAwsAuthRefresh,
 } from "../awsAuth.ts";
 import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
+import { carried, inText, isNews, newsToSend, sentence } from "../news.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { adoptPicture, PICTURES_MAX, pictureLinks } from "../pictures.ts";
 import { decide, decideUnattended, pickOption } from "../policy.ts";
-import {
-  ambientBlock,
-  buildPrompt,
-  handoffActedPrompt,
-  handoffDeclinedContext,
-  pieceLandedContext,
-  SYSTEM_APPEND,
-} from "../prompt.ts";
+import { ambientBlock, buildPrompt, SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
 import { type Bounds, type Prepared, prepareLaunch } from "../sandbox.ts";
-import { isMessage, sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
+import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../transcript.ts";
 import { uploadIds } from "../uploads.ts";
 import { askOnce } from "./ask.ts";
 import {
@@ -155,6 +149,13 @@ export interface AcpSessionDeps {
   planEdited?: (path: string, proposed: string) => Promise<boolean>;
   /** a pieces list held beside a plan card was answered with the plan: approved, or sent back */
   onHandoff?: (id: string, approved: boolean) => void;
+  /** What a yes to the plan will do with the list beside it, in the agent's words, read while the
+   * list is still open and before anything is made: which pieces start elsewhere and which are
+   * its own. Nothing when every piece is its own, or where no service holds lists (tests). */
+  handoffSays?: (id: string) => string | undefined;
+  /** this worktree's own work is done (landed, and nothing in its tree since): a landing
+   * elsewhere is only news to it then, and starts no turn */
+  atRest?: () => boolean;
   /** a plan card went up with no list handed over for it: takes the plan's markdown and its file,
    * for a list read off the plan by Toyon, which arrives held and rides the card like one the
    * agent handed over */
@@ -293,6 +294,8 @@ interface Live {
  * or sent again after a login — is recorded once and keeps the attachment numbers it was shown with. */
 interface Recorded {
   attachments: Stored[];
+  /** the message's own record on the transcript: what it carries is measured from there */
+  seq: number;
 }
 
 interface QueueItem {
@@ -304,6 +307,9 @@ interface QueueItem {
   asked?: Asked["kind"];
   /** sent on another agent's behalf: the record the message makes is `handed`, not a bubble */
   handed?: Handed;
+  /** Toyon's message for news the agent had not been told (news.ts): its text says the news that
+   * started it, so the sentences behind it leave that out */
+  news?: true;
   /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
    * and pick the message up after all (a command still running holds the interrupt off, and the
    * adapter forces the turn closed only after a floor), and its answer then belongs to the
@@ -710,16 +716,44 @@ export class AcpSession implements AgentAdapter {
 
   /** every event the session writes, its own and a service's, passes the card tracking: a card
    * closing live (an ask ending, cancelled or answered) moves the held list the same way its
-   * replay does on a restart. The restore walks the transcript itself, so it tracks nothing here. */
-  private emit(event: AgentEvent) {
+   * replay does on a restart. The restore walks the transcript itself, so it tracks nothing here.
+   * Answers with the record's seq, which a message keeps as where it stands on the transcript. */
+  private emit(event: AgentEvent): number {
     // a turn's reply is scanned from its start (scanPictures)
     if (event.type === "turn-start") {
       this.replyText = "";
       this.pictured.clear();
     }
-    const entry = this.log.append(event);
-    this.d.onEvent(event, entry.seq);
+    const { seq } = this.log.append(event);
+    this.d.onEvent(event, seq);
     if (this.restored && this.trackCards(event)) this.syncStatus();
+    // after the cards: an answer closes its card in the line above, and news waits for none
+    if (this.restored && isNews(event)) this.pumpNews();
+    return seq;
+  }
+
+  /** Toyon's message for what the agent has not been told, when some of it gives the agent
+   * something to do (news.ts), or null. Not while a card is up: the person's answer is owed
+   * first, and a turn begun under it would read as one. The message is recorded here, as any of
+   * Toyon's own is when it is sent, which is also what makes the news told. */
+  private newsItem(): QueueItem | null {
+    if (this.stopped || this.asks.size > 0 || this.openCards.size > 0) return null;
+    const news = newsToSend(this.log.entries, { rest: this.d.atRest?.() ?? false });
+    if (!news) return null;
+    const seq = this.emit({ type: "fix-asked", text: news.text, ts: Date.now(), kind: "handoff", why: news.why });
+    return { text: news.text, asked: "handoff", recorded: { attachments: [], seq }, news: true };
+  }
+
+  /** News for a session with no turn running: written while the agent is at rest, or still
+   * untold as it comes to rest. A turn in flight is left alone; the queue running empty at its
+   * end asks again (drain), by which time a message of the person's may have carried it. Never
+   * during the restore: a daemon coming up begins no turn. What it found untold rides the next
+   * message, or goes at the next moment this is asked with the agent at rest: news written, or
+   * a hold released, which every commit, sync and land on the row is. */
+  private pumpNews() {
+    if (!this.restored || this.running || this.own || this.held || this.queue.length > 0) return;
+    const item = this.newsItem();
+    if (item) this.enqueue(item);
   }
 
   private setStatus(s: AgentStatus) {
@@ -794,8 +828,7 @@ export class AcpSession implements AgentAdapter {
     // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
     // stands from the moment of the failure
     if (asked) {
-      this.emit({ type: "fix-asked", text, ts: Date.now(), ...asked });
-      item.recorded = { attachments: [] };
+      item.recorded = { attachments: [], seq: this.emit({ type: "fix-asked", text, ts: Date.now(), ...asked }) };
     }
     // held from here until the message is recorded, which for a queued one is turns away
     this.d.attachments.uploads.hold(uploadIds(attachments));
@@ -826,6 +859,7 @@ export class AcpSession implements AgentAdapter {
       this.holds--;
       if (!this.held && !this.running && this.queue.length > 0)
         fireAndForget(this.d.worktreeId, this.drain(), "agent drain");
+      else this.pumpNews();
     };
   }
 
@@ -970,10 +1004,15 @@ export class AcpSession implements AgentAdapter {
     this.clearReaper();
     this.setStatus("working");
     let item: QueueItem | null = null;
+    let failed = false;
     try {
       // a hold that began during a turn stops the queue after it: the release drains the rest
-      while (this.queue.length > 0 && !this.held) {
-        item = this.queue.shift()!;
+      while (!this.held) {
+        // the queue ran empty: news still untold that gives the agent something to do goes next,
+        // as a turn of its own, without the status dropping to idle in between
+        const next = this.queue.shift() ?? this.newsItem();
+        if (!next) break;
+        item = next;
         this.queueChanged();
         const turn = { open: false, stopping: false };
         this.turn = turn;
@@ -1032,6 +1071,7 @@ export class AcpSession implements AgentAdapter {
         this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         this.endTurn("failed");
         this.setStatus("error");
+        failed = true;
         // whatever state the adapter is in, the next prompt starts from a fresh process
         fireAndForget(this.d.worktreeId, this.dropConn("error"), "drop agent after error");
       }
@@ -1042,6 +1082,9 @@ export class AcpSession implements AgentAdapter {
       this.turn = null;
       this.maybeArmReaper();
     }
+    // the turn that failed was not the news's: what was written during it still goes, once, on
+    // the fresh process. Not past a sign-in card, which the person answers first.
+    if (failed) this.pumpNews();
   }
 
   /** The turn's last event, once: nothing when no turn-start is open (a failure before the turn
@@ -1220,9 +1263,10 @@ export class AcpSession implements AgentAdapter {
     }
     const attached = stored.length ? { attachments: stored.map((s) => s.ref) } : {};
     // a message sent on another agent's behalf is Toyon's row on the chat, not a bubble
-    if (handed) this.emit({ type: "handed", ...handed, text, ...attached, ts: Date.now() });
-    else this.emit({ type: "user-message", text, ts: Date.now(), ...attached });
-    return { attachments: stored };
+    const seq = handed
+      ? this.emit({ type: "handed", ...handed, text, ...attached, ts: Date.now() })
+      : this.emit({ type: "user-message", text, ts: Date.now(), ...attached });
+    return { attachments: stored, seq };
   }
 
   /** the attachments this connection will take, and the visible note when it will not take the
@@ -1284,53 +1328,21 @@ export class AcpSession implements AgentAdapter {
       this.d.preview?.(),
       this.d.tier?.(),
       this.d.pageErrors?.(),
-      ...this.heardSince(),
+      ...this.heardSince(item),
     ]);
   }
 
-  /** What happened to this worktree's handed work since the message before this one, a sentence
-   * each: a worktree it handed work to landed, or the person answered its handoff card. Derived
-   * from the transcript rather than kept: the message going out is the newest record on it, so
-   * the events between the one before and it are what this prompt is the first to carry, and the
-   * next prompt starts past them. */
-  private heardSince(): string[] {
-    const entries = this.log.entries;
-    let i = entries.length - 1;
-    while (i >= 0 && !isMessage(entries[i]!.event)) i--;
-    const out: string[] = [];
-    for (i--; i >= 0; i--) {
-      const e = entries[i]!.event;
-      if (isMessage(e)) break;
-      const said =
-        e.type === "piece-landed" ? pieceLandedContext(e, this.d.chatOf?.(e.worktreeId)) : this.cardAnswered(e);
-      if (said) out.unshift(said);
-    }
-    return out;
-  }
-
-  /** The answer to Toyon's own handoff card, where no message carried it to the agent: a go that
-   * kept nothing here to start on, a not now with no words, a go that broke off. The press starts
-   * no turn in those cases, since one begun to say "sent" repeats the row, so the agent would
-   * otherwise learn what became of its offer only by reading a sibling's files. Nothing for an
-   * answer that is its own message (a piece kept here, words typed with not now), for a list a
-   * plan card answered, which the plan's own reply and the steer after it cover, or for a list
-   * closed by anything but the person's press. */
-  private cardAnswered(e: AgentEvent): string | undefined {
-    if (e.type !== "handoff" && e.type !== "handoff-declined") return undefined;
-    const list = this.proposed(e.id);
-    // an agent without the tool handed nothing over: the list was the person's own, from the verb
-    if (!list || this.mcpTools === false) return undefined;
-    if (e.type === "handoff-declined" && e.outcome === "failed") return handoffDeclinedContext(list.pieces, e.reason);
-    const withPlan =
-      list.held && !this.log.entries.some(({ event }) => event.type === "handoff-shown" && event.id === e.id);
-    if (withPlan) return undefined;
-    if (e.type === "handoff-declined") {
-      // a reason is Toyon's own closing (handed over again, a card that went away), not an answer
-      return e.note || e.reason ? undefined : handoffDeclinedContext(list.pieces);
-    }
-    if (e.outcomes.some((o) => o.fate === "here" && !o.after)) return undefined;
-    const go = this.log.entries.findLast(({ event }) => event.type === "handoff-go" && event.id === e.id)?.event;
-    return handoffActedPrompt(list.pieces, e.outcomes, "card", go?.type === "handoff-go" ? go.note : undefined);
+  /** What became of this worktree's handed work since the message before this one, a sentence
+   * each (news.ts): a worktree it handed work to landed, or the person answered its handoff card.
+   * Derived from the transcript rather than kept: the message going out is the newest record on
+   * it, so the events between the one before and it are what this prompt is the first to carry,
+   * and the next prompt starts past them. Toyon's own message for the news says in its text what
+   * started it, and carries the rest. */
+  private heardSince(item: QueueItem): string[] {
+    const opts = { ...(this.d.chatOf ? { chatOf: this.d.chatOf } : {}), cards: this.mcpTools !== false };
+    return carried(this.log.entries, item.recorded?.seq ?? -1)
+      .filter((n) => !(item.news && inText(n)))
+      .flatMap((n) => sentence(n, opts) ?? []);
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn.
@@ -1832,12 +1844,19 @@ export class AcpSession implements AgentAdapter {
         // after the mode, so the act reads the mode the work runs in; a list handed over late,
         // while the card was open, is answered with it too
         const decided = handoff ?? (plan ? this.heldHandoff : null);
+        // read before the list is acted on: the go closes it, and the worktrees take seconds
+        const says = decided && approved ? this.d.handoffSays?.(decided) : undefined;
         if (decided) {
           if (this.heldHandoff === decided) this.heldHandoff = null;
           this.d.onHandoff?.(decided, approved);
         }
         // the yes said yes to the file, which may no longer be the plan the agent holds
-        if (plan && approved && planPath) return this.sayPlanEdited(detail, planPath).then(() => res);
+        if (plan && approved && planPath) {
+          return this.sayPlanEdited(detail, planPath)
+            .then(() => (says ? this.sayHandoffActed(says) : undefined))
+            .then(() => res);
+        }
+        if (says) return this.sayHandoffActed(says).then(() => res);
         // the no took the agent's list with it, and the agent heard only that the hand-over went
         // through; a list Toyon read for the card was never the agent's to hand over again
         if (plan && !approved && decided && this.proposed(decided)?.by !== "toyon") {
@@ -1852,6 +1871,23 @@ export class AcpSession implements AgentAdapter {
   private proposed(id: string) {
     const list = this.log.entries.findLast(({ event }) => event.type === "handoff-proposed" && event.id === id)?.event;
     return list?.type === "handoff-proposed" ? list : undefined;
+  }
+
+  /** A plan approved with a list beside it. The approval is an option id and says nothing of the
+   * list, so the agent would go and build the whole plan; which pieces start elsewhere and which
+   * are its own goes in as Toyon's message, awaited ahead of the answer as `sayPlanEdited` is. It
+   * is said from where the pieces stand as the yes is pressed, before a worktree is made: a piece
+   * that then cannot start rides the agent's next message (news.ts). */
+  private async sayHandoffActed(text: string) {
+    try {
+      await this.deliver(text, {
+        asked: { kind: "handoff", why: "what the handoff started, so the agent builds only its own piece" },
+        keepCards: true,
+      });
+    } catch (e) {
+      // the approval still goes back; a reply that fails would read to the agent as a refusal
+      log.warn(this.d.worktreeId, "what the list started was not sent", e);
+    }
   }
 
   /** A plan sent back with the agent's own list beside it. The rejection is an option id, and the
@@ -2044,6 +2080,7 @@ export class AcpSession implements AgentAdapter {
     this.turnOver(stopReason, by);
     this.syncStatus();
     this.maybeArmReaper();
+    this.pumpNews();
   }
 
   /** nothing to hold the process for: no turn, no question out, no card open, and nothing held

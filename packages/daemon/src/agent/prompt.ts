@@ -255,7 +255,14 @@ export interface PieceOrigin {
  * the approval releases, since the approval itself is an option id and says nothing of the list. */
 export function handoffActedPrompt(
   pieces: ReadonlyArray<{ id: string; title: string }>,
-  outcomes: ReadonlyArray<{ pieceId: string; fate: string; title?: string; after?: string; error?: string }>,
+  outcomes: ReadonlyArray<{
+    pieceId: string;
+    fate: string;
+    title?: string;
+    after?: string;
+    own?: boolean;
+    error?: string;
+  }>,
   /** what the person answered: the plan card the list rode beside, or Toyon's own card, whose go
    * is what starts the agent's turn */
   by: "plan" | "card" = "plan",
@@ -269,7 +276,18 @@ export function handoffActedPrompt(
   const sent = outcomes.filter((o) => o.fate === "send" && !o.error);
   const here = outcomes
     .filter((o) => o.fate === "here")
-    .map((o) => (o.after ? `${titled(o.pieceId)} (once ${o.after} lands)` : titled(o.pieceId)));
+    .map((o) =>
+      o.own
+        ? `${titled(o.pieceId)} (once this worktree lands)`
+        : o.after
+          ? `${titled(o.pieceId)} (once ${o.after} lands)`
+          : titled(o.pieceId),
+    );
+  // a part that waits for this worktree's own landing is the one wait the agent could end by
+  // going on: said outright, since "once this worktree lands" alone reads as an order of work
+  const startedLater = outcomes.some((o) => o.fate === "here" && o.own)
+    ? " A piece that waits for this worktree is not yours to start: the person lands what is here first, and Toyon starts you on it then, one piece per landing in list order."
+    : "";
   const skipped = outcomes.filter((o) => o.fate === "skip").map((o) => titled(o.pieceId));
   const failed = outcomes.filter((o) => o.error).map((o) => `${titled(o.pieceId)} (${o.error})`);
   const parts: string[] = [];
@@ -287,7 +305,9 @@ export function handoffActedPrompt(
     parts.push(sent.map((o) => `${titled(o.pieceId)} went to the open worktree "${o.title ?? "named"}"`).join("; "));
   if (skipped.length) parts.push(`${list(skipped)} ${skipped.length === 1 ? "was" : "were"} skipped by the person`);
   if (failed.length) parts.push(`${list(failed)} could not start`);
-  const own = here.length ? `Do ${list(here)} here, and only that.` : "Nothing on the list is yours here.";
+  const own = here.length
+    ? `Do ${list(here)} here, and only that.${startedLater}`
+    : "Nothing on the list is yours here.";
   if (by === "card") {
     const acted = parts.length ? `: ${parts.join("; ")}` : "";
     // a sibling is a piece that went somewhere; one skipped or failed has no agent reading the list
@@ -299,6 +319,8 @@ export function handoffActedPrompt(
     // the note goes last: it is the person's own words, with no full stop promised
     return `The person answered the handoff card, and Toyon acted on the pieces you handed over${acted}. ${own}${siblings}${said}`;
   }
+  // a list that is all the agent's own is said for the parts that wait: nothing went anywhere
+  if (parts.length === 0) return `Toyon acted on the pieces you handed over with the plan's approval. ${own}`;
   return `Toyon acted on the pieces you handed over with the plan's approval: ${parts.join("; ")}. ${own} The siblings read the plan at its path in this worktree; never do their pieces yourself.`;
 }
 
@@ -390,17 +412,23 @@ const chatAt = (transcript: string) =>
 /** The ambient sentence on the next prompt after a worktree this one handed work to has landed,
  * then what the landing put on main and where that worktree's chat is. The chat is how its agent
  * reports back: what it checked and what it left undone is in its replies, and the landing is
- * the only word this worktree gets of it. `chat` is absent for a chat no longer on disk. */
+ * the only word this worktree gets of it. `chat` is absent for a chat no longer on disk. `own`
+ * is this worktree's own landing, which a part of its work waited for: the chat is this one, so
+ * none is named, and the sentence says the branch the part starts on is a fresh one. */
 export function pieceLandedContext(
   landed: Pick<
     Extract<AgentEvent, { type: "piece-landed" }>,
-    "title" | "repoName" | "url" | "subjects" | "same" | "again" | "awaited" | "sent"
+    "title" | "repoName" | "url" | "subjects" | "same" | "again" | "awaited" | "sent" | "own" | "pieces"
   >,
   chat?: string,
 ): string {
   const { title } = landed;
   const where = landed.url ? ` (${landed.url})` : "";
   const what = landed.subjects?.length ? ` What landed: ${landed.subjects.map((s) => `"${s}"`).join("; ")}.` : "";
+  if (landed.own) {
+    const piece = landed.pieces?.length ? `Your own piece "${landed.pieces[0]}"` : "Your own piece";
+    return `This worktree's own work has landed on this project's main${where}, and its branch restarted from main. ${piece} waited for that landing and can go ahead now, on the fresh branch.${what}`;
+  }
   const read = chat
     ? ` ${chatAt(chat)} Read its agent's last replies there when what it checked or left undone matters here.`
     : "";
@@ -424,7 +452,9 @@ export function pieceLandedContext(
  * landing here was waited for, the agent is asked to bring in line what depends on it, if
  * anything does, and to say what it did, which is the piece reporting back. `sent` is the same
  * for a piece sent into a worktree that was already open: the landing is that worktree's own,
- * so the agent is told to check that it holds the piece. */
+ * so the agent is told to check that it holds the piece. `own` is this worktree's own landing,
+ * which the next part of its work waited for: the branch restarted from main, so the part
+ * starts on a fresh one, and there is no other worktree's work to read. */
 export function pieceWakePrompt(
   landed: ReadonlyArray<{
     title: string;
@@ -434,12 +464,17 @@ export function pieceWakePrompt(
     pieces: readonly string[];
     handed?: boolean;
     sent?: boolean;
+    own?: boolean;
   }>,
 ): string {
   const quoted = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(", ");
   const sentences = landed.map((l) => {
     const where = l.url ? ` (${l.url})` : "";
     const main = l.project ? `main in the project ${l.project}` : "this project's main";
+    if (l.own) {
+      const piece = l.pieces.length === 0 ? "your own piece" : `your own piece ${quoted(l.pieces)}`;
+      return `This worktree's own work has landed on ${main}${where}, which ${piece} waited for; its branch restarted from main, so the piece starts on a fresh branch.`;
+    }
     if (l.handed)
       return `The work this worktree handed off, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
     if (l.sent)
@@ -458,8 +493,11 @@ export function pieceWakePrompt(
       : pieces.length === 0
         ? "Do the piece that waited here now, and only that."
         : `Do ${quoted(pieces)} here now, and only ${pieces.length === 1 ? "that" : "those"}.`;
-  const titles = quoted(landed.map((l) => l.title));
-  const here = landed.some((l) => !l.project);
+  // what this worktree landed itself is its own work, in the tree it starts from
+  const others = landed.filter((l) => !l.own);
+  if (others.length === 0) return `${sentences.join(" ")} ${build}`;
+  const titles = quoted(others.map((l) => l.title));
+  const here = others.some((l) => !l.project);
   const commits = `What ${titles} landed is readable on main now${here ? ", and Toyon rebases onto main when this lands" : ""}.`;
   return `${sentences.join(" ")} ${build} ${commits}`;
 }

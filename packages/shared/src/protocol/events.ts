@@ -99,6 +99,9 @@ export interface PieceOutcome {
   repoName?: string;
   /** queued until this branch lands; on a `here` piece, what the origin's own work waits for */
   after?: string;
+  /** a `here` piece that waits for the origin's own landing: Toyon starts the agent on it then,
+   * one such piece per landing */
+  own?: true;
   /** in the daemon's words, when the piece could not be acted on */
   error?: string;
 }
@@ -491,7 +494,9 @@ export type AgentEvent =
    * landing is that worktree's own and may not hold the piece. `branch` is the landed branch as
    * it stood at the landing, and `pieces` the here pieces that waited, with `awaited`. `wake`:
    * the landing gives this worktree's agent something to do, so Toyon starts it once it is at
-   * rest rather than leave the word for its next message. */
+   * rest rather than leave the word for its next message. `own`: the landing is this worktree's
+   * own, which a here piece of its list waited for; the chat's `landed` row has said it, so this
+   * one draws nothing and is there to start the agent on the piece. */
   | {
       type: "piece-landed";
       worktreeId: string;
@@ -505,6 +510,7 @@ export type AgentEvent =
       again?: true;
       awaited?: true;
       sent?: true;
+      own?: true;
       wake?: true;
       ts: number;
     }

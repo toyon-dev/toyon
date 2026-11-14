@@ -2,7 +2,7 @@
 // pieces list is the agent's hand-over of its work: what the plan page draws at its head, what the
 // plan card's byline and Toyon's own card say about it, and what a press on a row sends.
 
-import type { ClientMsg, Piece, PieceFate } from "@toyon/shared";
+import type { ClientMsg, Piece, PieceFate, WorktreeInfo } from "@toyon/shared";
 import type { ChatItem } from "../../state/store.ts";
 
 export type HandoffItem = Extract<ChatItem, { kind: "handoff" }>;
@@ -81,6 +81,18 @@ export function waitOf(item: Pick<HandoffItem, "pieces">, piece: Piece): Wait | 
     return { kind: "piece", title: item.pieces.find((p) => p.id === after.piece)?.title ?? "another piece" };
   }
   return { kind: "branch", ...after };
+}
+
+/** Whether the piece, done here, waits for this worktree's own landing: work built in parts in
+ * one worktree, each landed before the next. `selfId` is the worktree the list is in. */
+export const waitsOnSelf = (piece: Piece, selfId: string | undefined): boolean =>
+  !!selfId && !!piece.after && "id" in piece.after && piece.after.id === selfId;
+
+/** The parts of this worktree's own work that wait for it to land, in the order they start: the
+ * next landing starts the first. Read off the record, which loses a part as its landing comes,
+ * where the list in the chat would go on naming it. */
+export function ownParts(w: Pick<WorktreeInfo, "id" | "watches">): string[] {
+  return w.watches?.find((x) => x.id === w.id && x.as === "await")?.pieces ?? [];
 }
 
 /** how the list would act on a yes, by fate: siblings made now, siblings queued behind a branch
@@ -163,8 +175,9 @@ export interface OneRow {
 
 /** the rows for one piece, in digit order: what the agent proposed first, so enter on an
  * untouched card is the proposal, the alternative, then not now. A piece for another project has
- * no "here": the work does not belong in this worktree. */
-export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece): OneRow[] {
+ * no "here": the work does not belong in this worktree. `selfId` is the worktree the card is in,
+ * so a piece that waits for its own landing says when "here" starts. */
+export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece, selfId?: string): OneRow[] {
   const wait = waitOf(item, piece);
   const where = wait ? ` once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
   const worktree: OneRow = piece.project
@@ -181,7 +194,9 @@ export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece): OneRow
   const here: OneRow = {
     fate: "here",
     label: "do it here",
-    description: "this worktree's agent, after its turn",
+    description: waitsOnSelf(piece, selfId)
+      ? "this worktree's agent, once this lands"
+      : "this worktree's agent, after its turn",
   };
   const notNow: OneRow = { fate: null, label: "not now" };
   if (piece.fate === "send") {
@@ -229,14 +244,16 @@ export function fateWord(piece: Piece, fate: PieceFate): string {
   return `sent to ${piece.to?.title ?? "the worktree"}`;
 }
 
-/** what the fate does once the list is answered, as the sentence the open row states */
-export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null): string {
+/** what the fate does once the list is answered, as the sentence the open row states. `self`:
+ * done here, the piece waits for this worktree's own landing (waitsOnSelf). */
+export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null, self = false): string {
   if (fate === "worktree") {
     const where = piece.project ? ` in ${piece.project.name}` : "";
     const when = wait ? `, once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
     return `Starts as a new worktree${where}${when}, with this text as its plan.`;
   }
-  if (fate === "here") return "This worktree's agent does it.";
+  if (fate === "here")
+    return self ? "This worktree's agent does it, once this lands." : "This worktree's agent does it.";
   if (fate === "send") return `Goes to ${piece.to?.title ?? "that worktree"}'s agent as a message.`;
   return "Skipped: nothing happens to it.";
 }
@@ -394,15 +411,16 @@ export function defaultTab(item: HandoffItem, hasPlan: boolean): string {
 
 /** What the origin's own work waits for, once the list was answered: the worktrees its here
  * pieces named, a piece of the list by the worktree it became. Nothing before go, and nothing
- * for a wait that never became a worktree. Each once. */
-export function hereWaits(item: HandoffItem): Array<{ id: string; title: string }> {
+ * for a wait that never became a worktree. Each once. Not the origin itself (`selfId`): a wait
+ * for its own landing is no other row to point at, and is read off its record (ownParts). */
+export function hereWaits(item: HandoffItem, selfId?: string): Array<{ id: string; title: string }> {
   if (item.state !== "done") return [];
   const out = new Map<string, string>();
   for (const piece of item.pieces) {
     const after = piece.after;
     if (!after || effectiveFate(item, piece) !== "here") continue;
     if ("id" in after) {
-      out.set(after.id, after.title);
+      if (after.id !== selfId) out.set(after.id, after.title);
       continue;
     }
     const on = item.pieces.find((p) => p.id === after.piece);

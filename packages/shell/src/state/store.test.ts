@@ -4254,6 +4254,8 @@ describe("a sibling's landing, and a guest from another project", () => {
       // the branch and the pieces are the daemon's, for the wake; the row says only why
       agent("a", { ...landed, branch: "toyon/bump", same: true, sent: true, ts: 5 }),
       agent("a", { ...landed, branch: "toyon/bump", same: true, awaited: true, pieces: ["Mine"], ts: 6 }),
+      // its own landing, noted to start the next part: the `landed` row said it, so this is no row
+      agent("a", { ...landed, worktreeId: "a", same: true, awaited: true, own: true, pieces: ["Part 2"], ts: 7 }),
     ]);
     expect(s.local.a?.chat).toEqual([
       { kind: "piece-landed", worktreeId: "g", repoName: "r2", title: "Bump the pin", url: "https://x/1", ts: 3 },

@@ -91,7 +91,10 @@ export function HandoffCard({
   const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
   /** the rows: one piece's fates, or go and not now for a list */
-  const shape: readonly OneRow[] = useMemo(() => (only ? oneRows(item, only) : LIST_ROWS), [item, only]);
+  const shape: readonly OneRow[] = useMemo(
+    () => (only ? oneRows(item, only, worktreeId) : LIST_ROWS),
+    [item, only, worktreeId],
+  );
 
   /** the answer: a fate the agent did not propose goes first, then go, two frames the daemon
    * reads in order (the fate is recorded before go reads the list); not now closes the card.

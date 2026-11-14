@@ -27,12 +27,14 @@ import {
   fatesFor,
   fateWord,
   type HandoffItem,
+  ownParts,
   type PieceStanding,
   pieceFate,
   pieceMark,
   pieceOrder,
   pieceStanding,
   waitOf,
+  waitsOnSelf,
 } from "../chat/handoff.ts";
 import { ImageChip } from "../chat/ImageChip.tsx";
 import { useMarkdown } from "../chat/markdown.ts";
@@ -190,8 +192,12 @@ export function HandoffTrack({ tabs }: { tabs: Omit<TabsProps<string>, "end"> })
 
 /** what became of the open piece, as the line over its text states it: standingWords, with the
  * row's chip in place of its name where there is a row to open */
-function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
+function Standing({ item, piece, worktreeId }: { item: HandoffItem; piece: Piece; worktreeId: string }) {
   const s = pieceStanding(item, piece);
+  // a part that waits for this worktree's own landing, for as long as the record still holds it:
+  // once its landing came the agent is on it, and the wait is no longer true
+  const self = useStore((st) => st.visible.find((r) => r.worktree.id === worktreeId)?.worktree);
+  const waitsHere = waitsOnSelf(piece, worktreeId) && !!self && ownParts(self).includes(piece.title);
   const where = "repoName" in s && s.repoName ? ` in ${s.repoName}` : "";
   switch (s.kind) {
     case "starting":
@@ -228,7 +234,8 @@ function Standing({ item, piece }: { item: HandoffItem; piece: Piece }) {
     case "here": {
       // the wait the origin's own work named: a branch by its row, a piece by the worktree it
       // became, which the line under the box says too for as long as it stands
-      const after = piece.after;
+      if (waitsHere) return <>This worktree's agent does it, once this lands.</>;
+      const after = waitsOnSelf(piece, worktreeId) ? undefined : piece.after;
       const on = after && "piece" in after ? item.pieces.find((p) => p.id === after.piece) : undefined;
       const became = on ? pieceStanding(item, on) : null;
       const wait =
@@ -285,7 +292,7 @@ export function PiecePage({
     <p className="editor-piece-line hint">
       {deciding(item) ? (
         <>
-          {fateSentence(piece, fate, wait)}
+          {fateSentence(piece, fate, wait, waitsOnSelf(piece, worktreeId))}
           {others.length > 0 && (
             <>
               {" "}
@@ -302,7 +309,7 @@ export function PiecePage({
           )}
         </>
       ) : (
-        <Standing item={item} piece={piece} />
+        <Standing item={item} piece={piece} worktreeId={worktreeId} />
       )}
     </p>
   );

@@ -22,12 +22,14 @@ import {
   notNowRow,
   oneRows,
   openHandoff,
+  ownParts,
   pieceFate,
   pieceMark,
   pieceOrder,
   pieceStanding,
   startingPieces,
   waitOf,
+  waitsOnSelf,
 } from "./handoff.ts";
 
 describe("handoffSaid", () => {
@@ -435,6 +437,36 @@ describe("the strip", () => {
     expect(hereWaits(l2)).toEqual([]);
     // a piece the person moved away from here waits for nothing
     expect(hereWaits(list([now, here], { p3: "skip" }, { state: "done", outcomes }))).toEqual([]);
+    // a wait for this worktree's own landing is no other row to point at
+    expect(hereWaits(l, "b")).toEqual([{ id: "w1", title: "Piece p1" }]);
+  });
+
+  test("a part that waits for this worktree's own landing says so, and the record says which are left", () => {
+    const part = piece("p2", { fate: "here", after: { id: "a", branch: "toyon/a", title: "A" } });
+    expect(waitsOnSelf(part, "a")).toBe(true);
+    // another worktree's branch, a piece of the list, no wait, or no worktree to be in
+    expect(waitsOnSelf(part, "b")).toBe(false);
+    expect(waitsOnSelf(piece("p2", { fate: "here", after: { piece: "p1" } }), "a")).toBe(false);
+    expect(waitsOnSelf(piece("p2", { fate: "here" }), "a")).toBe(false);
+    expect(waitsOnSelf(part, undefined)).toBe(false);
+    expect(fateSentence(part, "here", waitOf(list([part]), part), true)).toBe(
+      "This worktree's agent does it, once this lands.",
+    );
+    const l = list([part]);
+    expect(oneRows(l, part, "a")[0]).toEqual({
+      fate: "here",
+      label: "do it here",
+      description: "this worktree's agent, once this lands",
+    });
+    expect(oneRows(l, part, "b")[0]!.description).toBe("this worktree's agent, after its turn");
+    // the line of parts is the record's, in the order they start; a wait on a sibling is not one
+    const watches = [
+      { id: "b", as: "await" as const, pieces: ["Mine"] },
+      { id: "a", as: "await" as const, pieces: ["Part 2", "Part 3"] },
+    ];
+    expect(ownParts({ id: "a", watches })).toEqual(["Part 2", "Part 3"]);
+    expect(ownParts({ id: "c", watches })).toEqual([]);
+    expect(ownParts({ id: "a" })).toEqual([]);
   });
 });
 

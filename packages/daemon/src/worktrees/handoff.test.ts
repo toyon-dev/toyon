@@ -121,16 +121,19 @@ describe("the tool", () => {
     await refusal(piece({ title: " " }), "has no title");
     await refusal(piece({ plan: "x".repeat(20_001) }), "over 20000 characters");
 
-    await refusal(piece({ where: "here", after: "this" }), "is `here` and waits for its own branch");
     await refusal(piece({ where: "here", after: "Rail fixes" }), '"Rail fixes" is this piece itself');
-    // the origin's own work waits for a worktree, never for its own other pieces or in a circle
+    // the origin's own work waits for a worktree or for its own landing, never for its own other
+    // pieces or in a circle; the refusal says how a part that follows another is written
     expect(
       await call(
         a.id,
         piece({ title: "Mine", plan: "Do it.", where: "here", after: "Theirs" }),
         piece({ title: "Theirs", plan: "Do that.", where: "here" }),
       ),
-    ).toMatchObject({ text: expect.stringContaining('waits for "Theirs", which is `here` too'), isError: true });
+    ).toMatchObject({
+      text: 'Piece 1 ("Mine") waits for "Theirs", which is `here` too. A part that follows another in this worktree waits for "this": Toyon starts one part per landing, in list order.',
+      isError: true,
+    });
     expect(
       await call(
         a.id,
@@ -1226,6 +1229,108 @@ describe("read off the plan", () => {
     expect(agentOf(c.id).sent).toHaveLength(sentC);
   });
 
+  test("parts built here that wait for this worktree's own landing start one per landing, in list order", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await until(() => a.branch === "toyon/rail");
+    const before = agentOf(a.id).sent.length;
+    await call(
+      a.id,
+      piece({ title: "Part 1", plan: "One.", where: "here" }),
+      piece({ title: "Part 2", plan: "Two.", where: "here", after: "this" }),
+      piece({ title: "Part 3", plan: "Three.", where: "here", after: a.branch }),
+    );
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    expect(outcomesOf(a.id)).toEqual([
+      { pieceId: "p1", fate: "here" },
+      { pieceId: "p2", fate: "here", after: a.branch, own: true },
+      { pieceId: "p3", fate: "here", after: a.branch, own: true },
+    ]);
+    // one watch on its own id: the parts are a line, in the order the list gave them
+    const watches = () => w.state.worktree(a.id)!.watches;
+    expect(watches()).toEqual([{ id: a.id, as: "await", pieces: ["Part 2", "Part 3"] }]);
+    // the go starts the agent on the part with nothing to wait for, and says who starts the rest
+    await until(() => agentOf(a.id).sent.length === before + 1);
+    const told = agentOf(a.id).sent.at(-1)!.text;
+    expect(told).toContain(
+      'Do "Part 1", "Part 2" (once this worktree lands), "Part 3" (once this worktree lands) here, and only that.',
+    );
+    expect(told).toContain("Toyon starts you on it then, one piece per landing in list order.");
+    // The first landing. The row is at rest with its work on main, which stops every other
+    // landing from starting it and is the very thing this part waited for.
+    await land(a.id, "one.txt");
+    await w.worktrees.tree.refresh(a.id);
+    expect(w.handoff.atRest(a.id)).toBe(true);
+    await until(() => agentOf(a.id).sent.length === before + 2);
+    expect(recorded(a.id, "piece-landed")).toHaveLength(1);
+    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({
+      worktreeId: a.id,
+      same: true,
+      awaited: true,
+      own: true,
+      pieces: ["Part 2"],
+      wake: true,
+    });
+    const woke = agentOf(a.id).sent.at(-1)!;
+    expect(woke.text).toBe(
+      'This worktree\'s own work has landed on this project\'s main, which your own piece "Part 2" waited for; its branch restarted from main, so the piece starts on a fresh branch. Do "Part 2" here now, and only that.',
+    );
+    expect(woke.asked).toEqual({ kind: "news", why: 'to start "Part 2", which waited for this worktree to land' });
+    // the part after it stays in the line for the landing after this one
+    expect(watches()).toEqual([{ id: a.id, as: "await", pieces: ["Part 3"] }]);
+    await settle();
+    expect(agentOf(a.id).sent).toHaveLength(before + 2);
+    await land(a.id, "two.txt");
+    await until(() => agentOf(a.id).sent.length === before + 3);
+    expect(agentOf(a.id).sent.at(-1)!.text).toContain('Do "Part 3" here now, and only that.');
+    expect(watches()).toBeUndefined();
+    // the line is empty: a landing after it is no news to the worktree that landed
+    await land(a.id, "three.txt");
+    await settle();
+    expect(recorded(a.id, "piece-landed")).toHaveLength(2);
+    expect(agentOf(a.id).sent).toHaveLength(before + 3);
+    // a part the person moved to a worktree of its own is queued behind this branch as any
+    // other, and is no wait of the origin's
+    const b = await w.worktrees.create(repoId, "task", { title: "Other" });
+    await until(() => b.branch === "toyon/other");
+    await call(
+      b.id,
+      piece({ title: "First", plan: "One.", where: "here" }),
+      piece({ title: "Then", plan: "Two.", where: "here", after: "this" }),
+    );
+    const moved = lastProposal(b.id).id;
+    w.handoff.fate(b.id, moved, "p2", "worktree");
+    await w.handoff.answer(b.id, moved, true);
+    expect(outcomesOf(b.id)[1]).toEqual({ pieceId: "p2", fate: "worktree", after: b.branch });
+    expect(w.state.worktree(b.id)!.watches).toBeUndefined();
+    expect(w.state.worktree(b.id)!.queued?.map((q) => q.title)).toEqual(["Then"]);
+    // a worktree behind a part that waits for the landing is made by the landing after the one
+    // that starts the part: the first puts none of the part on main
+    const c = await w.worktrees.create(repoId, "task", { title: "Third" });
+    await until(() => c.branch === "toyon/third");
+    await call(
+      c.id,
+      piece({ title: "Core", plan: "One.", where: "here" }),
+      piece({ title: "Flag", plan: "Two.", where: "here", after: "this" }),
+      piece({ title: "Flag docs", plan: "Three.", after: "Flag" }),
+      piece({ title: "Core docs", plan: "Four.", after: "Core" }),
+    );
+    await w.handoff.answer(c.id, lastProposal(c.id).id, true);
+    expect(w.state.worktree(c.id)!.queued?.map((q) => [q.title, q.after])).toEqual([
+      ["Flag docs", { id: c.id, part: "Flag" }],
+      ["Core docs", { id: c.id }],
+    ]);
+    await land(c.id, "core.txt");
+    await until(() => madeTitled("Core docs") !== undefined);
+    await until(() => w.state.worktree(c.id)!.watches === undefined);
+    await settle();
+    expect(madeTitled("Flag docs")).toBeUndefined();
+    expect(w.state.worktree(c.id)!.queued?.map((q) => q.title)).toEqual(["Flag docs"]);
+    await land(c.id, "flag.txt");
+    await until(() => madeTitled("Flag docs") !== undefined);
+    expect(w.state.worktree(c.id)!.queued).toBeUndefined();
+  });
+
   test("a here piece behind a piece still queued is recorded on it, and waits for the worktree it becomes", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
@@ -1304,6 +1409,16 @@ describe("read off the plan", () => {
     const b = await w.worktrees.create(repoId, "task", { title: "Other", mode: "plan" });
     await call(b.id, piece({ title: "All mine", where: "here" }));
     expect(w.handoff.says(b.id, lastProposal(b.id).id)).toBeUndefined();
+    // unless a part of it waits for this worktree to land: the agent is told Toyon starts it
+    const d = await w.worktrees.create(repoId, "task", { title: "Parts", mode: "plan" });
+    await call(
+      d.id,
+      piece({ title: "Part 1", where: "here" }),
+      piece({ title: "Part 2", where: "here", after: "this" }),
+    );
+    expect(w.handoff.says(d.id, lastProposal(d.id).id)).toBe(
+      'Toyon acted on the pieces you handed over with the plan\'s approval. Do "Part 1", "Part 2" (once this worktree lands) here, and only that. A piece that waits for this worktree is not yours to start: the person lands what is here first, and Toyon starts you on it then, one piece per landing in list order.',
+    );
     // a piece behind one this go would make waits for a worktree with no row yet: said as
     // waiting, by that piece's title, never as started
     const c = await w.worktrees.create(repoId, "task", { title: "Third", mode: "plan" });

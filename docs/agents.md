@@ -59,6 +59,7 @@ After you approve:
 - Its agent starts at once. Its dev servers start the first time you open it.
 - A piece sent to an open worktree arrives as a message that says which worktree sent it. When that worktree next lands, the chat that sent the piece shows what landed and its agent starts, as below.
 - When a worktree made from a piece lands, the chat that proposed the piece shows what landed. The first time, its agent starts: it is told what landed and where the other chat is on disk, and replies with what it did about it.
+- A piece kept in this worktree can wait for this worktree to land. When you land, the agent starts on it. Several such pieces start one per landing, in list order. A pull request counts once it is merged.
 
 `/handoff` does the same from your own message, without the tool. `/handoff fix the footer` hands that work to a new worktree in this project. Start with another open project's name to hand it to a worktree there.
 

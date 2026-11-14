@@ -108,7 +108,7 @@ import { caretAtPoint, takeCarried } from "./carried.ts";
 import { DraftChip } from "./DraftChip.tsx";
 import { GlobalInstallOffer } from "./GlobalInstallOffer.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
-import { hereWaits, openHandoff } from "./handoff.ts";
+import { hereWaits, openHandoff, ownParts } from "./handoff.ts";
 import { MentionText, openMention } from "./Mentions.tsx";
 import {
   asBranches,
@@ -993,11 +993,15 @@ export function Composer({
   // goes when the last of them lands.
   const waitedOn = useMemo(() => {
     const list = chat ? openHandoff(chat) : null;
-    return (list ? hereWaits(list) : []).filter((w) => {
+    return (list ? hereWaits(list, id ?? undefined) : []).filter((w) => {
       const row = railRows.find((r) => r.worktree.id === w.id);
       return !!row && !row.worktree.landed;
     });
-  }, [chat, railRows]);
+  }, [chat, railRows, id]);
+  // The next part of this worktree's own work, which this landing starts. Nothing is in the way
+  // of the press, so the line stands only where no other does: it says what the word sets going.
+  const nextPart = active ? ownParts(active.worktree)[0] : undefined;
+  const startsLine = nextPart ? `After this lands, the agent starts ${nextPart}.` : null;
   const waitLine: ReactNode =
     waitedOn.length > 0 ? (
       <>
@@ -1013,7 +1017,7 @@ export function Composer({
     ) : null;
   const offeredUnder: ReactNode =
     (offered?.kind === "ship" || offered?.kind === "check") && landing
-      ? (waitLine ?? verdictLine(landing))
+      ? (waitLine ?? verdictLine(landing) ?? startsLine)
       : offered?.word === "archive" && landedUnder
         ? ended(landedUnder)
         : null;

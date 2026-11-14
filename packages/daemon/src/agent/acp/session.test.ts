@@ -4551,6 +4551,31 @@ describe("AcpSession cards", () => {
     await w.session.close();
   });
 
+  test("a worktree at rest is started by its own landing on the part that waited for it", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled({ atRest: () => true }));
+    w.session.send("one");
+    await w.idle();
+    // a sibling's landing is only news to it; its own is what the part waited for
+    w.session.note(landing("b", "Theirs", { wake: true }));
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    w.session.note(landing("a", "Rail", { awaited: true, own: true, pieces: ["Part 2"], wake: true }));
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toContain("This worktree's own work has landed on this project's main");
+    expect(text).toContain('Do "Part 2" here now, and only that.');
+    expect(text).not.toContain('"Theirs"');
+    const row = askedLast(w.events)!;
+    expect(row).toMatchObject({ kind: "news", why: 'to start "Part 2", which waited for this worktree to land' });
+    // no sender on the row: the landing is this chat's own
+    expect(row).not.toHaveProperty("from");
+    // the sibling's landing rides behind the message, and the own one is said there once more
+    expect(behind).toContain('The sibling worktree "Theirs"');
+    await w.session.close();
+  });
+
   test("a worktree whose own work is done is started by an answer on its card, never by a landing", async () => {
     const fake = fakeAgent(say("ok"), { mcpHttp: true });
     const w = world(fake, claudeSpec, 60_000, undefined, tooled({ atRest: () => true }));

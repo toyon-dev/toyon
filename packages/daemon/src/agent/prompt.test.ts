@@ -139,6 +139,17 @@ describe("prompts for work in another project", () => {
     expect(pieceLandedContext({ ...first, awaited: true })).toBe(
       'The branch your own piece waited for, "First", has landed on this project\'s main; that piece can go ahead now, and Toyon rebases onto main when this lands.',
     );
+    // this worktree's own landing, which the next part of its work waited for: no chat to read
+    const own = { title: "Rail", repoName: "toyon", same: true as const, awaited: true as const, own: true as const };
+    expect(
+      pieceLandedContext(
+        { ...own, pieces: ["Part 2"], url: "https://x/pull/9", subjects: ["rail: part 1"] },
+        "/chats/a",
+      ),
+    ).toBe(
+      'This worktree\'s own work has landed on this project\'s main (https://x/pull/9), and its branch restarted from main. Your own piece "Part 2" waited for that landing and can go ahead now, on the fresh branch. What landed: "rail: part 1".',
+    );
+    expect(pieceLandedContext(own)).toContain("Your own piece waited for that landing");
   });
 
   test("the landed sentence says what landed and where the chat that did it is", () => {

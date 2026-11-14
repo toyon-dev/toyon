@@ -135,12 +135,16 @@ function listed(names: readonly string[]): string {
  * landing is that worktree's own, so the agent checks that it holds the piece. Work handed off
  * with nothing here waiting for it: the agent brings in line what depends on it, which the
  * message only asks for when nothing waited. A clause about every landing named says "it" or
- * "them"; one about some of them names its own. */
+ * "them"; one about some of them names its own. This worktree's own landing is named by no one
+ * (`own`), so its clause says what the part waited for in words, after the clauses that speak
+ * of the worktrees named. */
 function landedWhy(woke: readonly Woke[]): string[] {
-  const waited = woke.filter((l) => !l.handed && !l.sent);
-  const sent = woke.filter((l) => l.sent);
-  const handed = woke.filter((l) => l.handed);
-  const all = (ls: readonly Woke[]) => ls.length === woke.length;
+  const named = woke.filter((l) => !l.own);
+  const own = woke.filter((l) => l.own);
+  const waited = named.filter((l) => !l.handed && !l.sent);
+  const sent = named.filter((l) => l.sent);
+  const handed = named.filter((l) => l.handed);
+  const all = (ls: readonly Woke[]) => ls.length === named.length;
   const them = (ls: readonly Woke[]) => (all(ls) ? (ls.length === 1 ? "it" : "them") : listed(ls.map((l) => l.title)));
   const why: string[] = [];
   if (waited.length > 0) {
@@ -155,7 +159,17 @@ function landedWhy(woke: readonly Woke[]): string[] {
     const they = all(sent) ? (sent.length === 1 ? "it" : "they") : listed(sent.map((l) => l.title));
     why.push(`to check that ${they} ${sent.length === 1 ? "holds the piece" : "hold the pieces"}`);
   }
-  if (handed.length > 0 && waited.length === 0) why.push(`to bring in line what depends on ${them(handed)}`);
+  if (handed.length > 0 && waited.length === 0 && own.length === 0) {
+    why.push(`to bring in line what depends on ${them(handed)}`);
+  }
+  if (own.length > 0) {
+    const pieces = [...new Set(own.flatMap((l) => l.pieces))];
+    why.push(
+      pieces.length === 0
+        ? "to start the piece that waited for this worktree to land"
+        : `to start ${listed(pieces)}, which waited for this worktree to land`,
+    );
+  }
   return why;
 }
 
@@ -163,14 +177,19 @@ function landedWhy(woke: readonly Woke[]): string[] {
  * of it starts the agent. One message however much is untold: a second would find the first had
  * already told it. `rest`: the worktree's own work is done (landed, nothing since), so a landing
  * elsewhere is only news to it and starts nothing; an answer on its own card still does, since
- * the person just pressed it there. `from` is the worktrees whose landing the message is for,
- * which the chat's row names as who it is from, and `why` what the agent is to do, as the row
- * says it after them: a landing's clauses first, since they speak of the worktrees just named. */
+ * the person just pressed it there, and so does its own landing when a part of its work waited
+ * for it, since being at rest is then the very thing the part waited for. `from` is the
+ * worktrees whose landing the message is for, which the chat's row names as who it is from, and
+ * `why` what the agent is to do, as the row says it after them: a landing's clauses first, since
+ * they speak of the worktrees just named. This worktree's own landing is not among them: a chip
+ * for this chat would name the row the reader is in. */
 export function newsToSend(
   entries: readonly TranscriptEntry[],
   opts: { from?: number; rest?: boolean } = {},
 ): { text: string; why: string; from?: NewsFrom[] } | null {
-  const starters = untold(entries, opts.from).filter((n) => starts(n) && !(opts.rest && n.kind === "landed"));
+  const starters = untold(entries, opts.from).filter(
+    (n) => starts(n) && !(opts.rest && n.kind === "landed" && !n.event.own),
+  );
   if (starters.length === 0) return null;
   const text: string[] = [];
   const why: string[] = [];
@@ -193,13 +212,13 @@ export function newsToSend(
       ...(e.url ? { url: e.url } : {}),
       ...(e.same ? {} : { project: e.repoName }),
       pieces: e.pieces ?? [],
-      ...(e.sent ? { sent: true } : e.awaited ? {} : { handed: true }),
+      ...(e.own ? { own: true } : e.sent ? { sent: true } : e.awaited ? {} : { handed: true }),
     }),
   );
   text.push(pieceWakePrompt(woke));
   why.unshift(...landedWhy(woke));
-  const from = landings.map(
-    (e): NewsFrom => ({ id: e.worktreeId, title: e.title, ...(e.same ? {} : { project: e.repoName }) }),
-  );
-  return { text: text.join("\n\n"), why: why.join(", and "), from };
+  const from = landings
+    .filter((e) => !e.own)
+    .map((e): NewsFrom => ({ id: e.worktreeId, title: e.title, ...(e.same ? {} : { project: e.repoName }) }));
+  return { text: text.join("\n\n"), why: why.join(", and "), ...(from.length ? { from } : {}) };
 }

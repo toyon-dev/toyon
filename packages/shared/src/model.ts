@@ -390,8 +390,11 @@ export interface QueuedPiece {
   /** the plan its worktree is born with */
   plan: string;
   /** the worktree it waits for, by id alone (its record has the branch and title, which move after
-   * a provisional sibling is made), or a piece of the same list not yet made into one */
-  after: { id: string } | { piece: string };
+   * a provisional sibling is made), or a piece of the same list not yet made into one. `part`,
+   * with the origin's own id: it waits for a here piece that itself waits for the origin to
+   * land, by that piece's title, so the landing that starts the part is not its landing and the
+   * one after is */
+  after: { id: string; part?: string } | { piece: string };
   /** another open project the worktree is made in */
   project?: { id: string; name: string };
   /** what the origin's chat attached, re-attached when the worktree is made */
@@ -416,7 +419,9 @@ export type AgentPicks = Partial<Pick<WorktreeInfo, "model" | "effort">>;
  * pieces (`pieces`, by title) wait for it; told at its landing, once, and its agent started on
  * them. `after`: this worktree was made when that one landed, and hears each time it lands again.
  * By id alone: a row's branch and title move. The worktree a piece became is not listed: its
- * `from.origin` names who made it. */
+ * `from.origin` names who made it. An `await` on the worktree's own id is work built in parts,
+ * each landed before the next: its `pieces` are a line in the order they start, a landing takes
+ * the first, and the watch stands until the line is empty. */
 export interface Watch {
   id: string;
   as: "sent" | "await" | "after";

@@ -3914,6 +3914,9 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
         },
       ];
     case "piece-landed":
+      // this worktree's own landing, noted to start its next part: the `landed` row above has
+      // said it, and Toyon's message under it says what it started
+      if (event.own) return items;
       return [
         ...items,
         {

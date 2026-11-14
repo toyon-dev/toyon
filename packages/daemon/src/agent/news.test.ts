@@ -237,6 +237,56 @@ describe("newsToSend", () => {
     expect(msg.from).toBeUndefined();
   });
 
+  test("its own landing starts a worktree at rest on the part that waited; any other landing still does not", () => {
+    const own = landed("Rail", { awaited: true, own: true, pieces: ["Part 2"], wake: true });
+    const msg = newsToSend(log(own), { rest: true })!;
+    expect(msg.text).toBe(
+      'This worktree\'s own work has landed on this project\'s main, which your own piece "Part 2" waited for; its branch restarted from main, so the piece starts on a fresh branch. Do "Part 2" here now, and only that.',
+    );
+    // the row names no sender: a chip for this chat would name the row the reader is in
+    expect(msg.why).toBe('to start "Part 2", which waited for this worktree to land');
+    expect(msg.from).toBeUndefined();
+    // a sibling's landing untold beside it is only news to a worktree at rest: it rides behind
+    const both = newsToSend(log(landed("A", { awaited: true, pieces: ["Mine"], wake: true }), own), { rest: true })!;
+    expect(both.text).not.toContain('"A"');
+    expect(both.text).toContain('Do "Part 2" here now, and only that.');
+    expect(newsToSend(log(landed("A", { awaited: true, pieces: ["Mine"], wake: true })), { rest: true })).toBeNull();
+    // with work in its tree again both start it, in one message: what the sibling landed is the
+    // only work to read on main
+    const atWork = newsToSend(log(landed("A", { awaited: true, pieces: ["Mine"], wake: true }), own))!;
+    expect(atWork.text).toContain('Do "Mine", "Part 2" here now, and only those.');
+    expect(atWork.text).toEndWith(
+      'What "A" landed is readable on main now, and Toyon rebases onto main when this lands.',
+    );
+    expect(atWork.why).toBe(
+      'to start "Mine", which waited for it, and to start "Part 2", which waited for this worktree to land',
+    );
+    expect(atWork.from).toEqual([{ id: "a", title: "A" }]);
+    // carried by a message of the person's instead, it says the same without naming a chat to read
+    expect(sentence(untold(log(own))[0]!, { chatOf: (id) => `/chats/${id}` })).toBe(
+      "This worktree's own work has landed on this project's main, and its branch restarted from main. Your own piece \"Part 2\" waited for that landing and can go ahead now, on the fresh branch.",
+    );
+  });
+
+  test("a go that keeps a part here until this worktree lands says Toyon starts it, and starts only what is ready", () => {
+    const parts: AgentEvent = {
+      type: "handoff",
+      id: "h1",
+      outcomes: [
+        { pieceId: "p1", fate: "here" },
+        { pieceId: "p2", fate: "here", after: "toyon/rail", own: true },
+      ],
+      ts: 3,
+    };
+    const msg = newsToSend(log(list(), go(), parts))!;
+    expect(msg.text).toBe(
+      'The person answered the handoff card, and Toyon acted on the pieces you handed over. Do "Fix it", "Docs" (once this worktree lands) here, and only that. A piece that waits for this worktree is not yours to start: the person lands what is here first, and Toyon starts you on it then, one piece per landing in list order.',
+    );
+    // a list whose only piece waits for the landing starts no turn: the landing does
+    const later: AgentEvent = { ...parts, outcomes: [parts.outcomes[1]!] };
+    expect(newsToSend(log(list(), go(), later))).toBeNull();
+  });
+
   test("an answer and a landing untold together are one message, each in its words", () => {
     const msg = newsToSend(log(list(), notNow({ note: "smaller" }), landed("A", { wake: true })))!;
     expect(msg.text.split("\n\n")).toHaveLength(3);

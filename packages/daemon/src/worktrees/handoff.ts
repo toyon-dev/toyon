@@ -8,7 +8,9 @@
 // with the same id, and the fates the person pressed are `handoff-fate` events, the last one per
 // piece standing. A piece that waits for a sibling to land is held on the origin's record, so it
 // survives a restart and leaves with the origin. Who hears of a landing is one list on the hearer's
-// own record, its `watches`, beside the `from.origin` of the worktree a piece became.
+// own record, its `watches`, beside the `from.origin` of the worktree a piece became. A worktree
+// may watch its own landing: work built here in parts, each landed before the next, where the
+// landing is what starts the agent on the next part.
 
 import { randomUUID } from "node:crypto";
 import type {
@@ -101,7 +103,7 @@ function pieceLanded(
   repo: RepoInfo,
   to: WorktreeInfo,
   mark: LandMark | undefined,
-  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "pieces" | "wake"> = {},
+  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "own" | "pieces" | "wake"> = {},
 ): PieceLanded {
   return {
     type: "piece-landed",
@@ -125,7 +127,7 @@ export interface RawPiece {
   attachments?: string[];
   where: "here" | "worktree" | "send";
   /** `worktree`: the branch it waits for, another piece of the list by its title, or "this" for
-   * the origin itself */
+   * the origin itself. `here`: the same, where "this" is the origin's own landing */
   after?: string;
   /** `send`: the open worktree it goes to, by branch or title */
   to?: string;
@@ -188,7 +190,7 @@ export function handoffTool(worktrees: readonly string[], projects: readonly str
               after: {
                 type: "string",
                 description:
-                  'worktree: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch. here: what your own work on the piece waits for, a branch or another piece of this list; Toyon shows the wait under the box until it lands.',
+                  'worktree: what the piece waits for before it starts: a branch, another piece of this list by its title, or "this" for your own branch. here: what your own work on the piece waits for: a branch, another piece of this list, or "this" when you build in parts in this worktree and each part lands before the next, one part per landing in list order. Toyon shows the wait under the box and starts you on the piece when it lands.',
               },
               to: { type: "string", description: "send only: the open worktree it goes to, by branch or title." },
               project: {
@@ -346,8 +348,9 @@ const HEARD_LATER: readonly Heard[] = ["await", "sent", "made", "after"];
  * that waited */
 type Hears = { as: Heard; pieces: string[] };
 
-/** what a piece became in one pass of go, for the pieces of the list that wait on it */
-type Became = { fate: PieceFate; worktree?: Named; queued?: true };
+/** what a piece became in one pass of go, for the pieces of the list that wait on it. `part`: kept
+ * here until the origin's own landing, by its title */
+type Became = { fate: PieceFate; worktree?: Named; queued?: true; part?: string };
 
 export class HandoffService implements ToolProvider {
   constructor(private d: HandoffDeps) {
@@ -504,18 +507,16 @@ export class HandoffService implements ToolProvider {
         // not made at all, so it may wait for any other piece of the list, wherever it stands
         const after = this.resolveAfter(wt, raw, i, q, p.where === "here");
         if ("refused" in after) return refused(`Piece ${i + 1} ("${title}"): ${after.refused}`);
-        if (p.where === "here" && !("piece" in after.after) && after.after.id === wt.id) {
-          return refused(`Piece ${i + 1} ("${title}") is \`here\` and waits for its own branch.`);
-        }
         if (p.where === "here" && "piece" in after.after) {
-          // the origin's own work waits for a worktree: not for another piece of its own, which
-          // lands with it, and not for a piece that waits for the origin in turn, which is a cycle
-          // nothing would break
+          // the origin's own work waits for a worktree or for its own landing: not for another
+          // piece of its own, which lands when the origin does and so is a wait for "this", and
+          // not for a piece that waits for the origin in turn, which is a cycle nothing would
+          // break
           const on = raw[Number(after.after.piece.slice(1)) - 1]!;
           const onTitle = sentenceCase(on.title.trim());
           if (on.where === "here") {
             return refused(
-              `Piece ${i + 1} ("${title}") waits for "${onTitle}", which is \`here\` too and lands with it.`,
+              `Piece ${i + 1} ("${title}") waits for "${onTitle}", which is \`here\` too. A part that follows another in this worktree waits for "this": Toyon starts one part per landing, in list order.`,
             );
           }
           const back = on.after?.trim() ?? "";
@@ -779,11 +780,13 @@ export class HandoffService implements ToolProvider {
         if (o.fate !== "here") continue;
         const piece = proposed.pieces.find((p) => p.id === o.pieceId);
         if (!piece) continue;
-        const wait = this.hereWait(proposed, piece, became);
+        const wait = this.hereWait(wt, proposed, piece, became);
         if (!wait) continue;
         o.after = wait.said;
+        if (wait.own) o.own = true;
         if (wait.queued) this.waitOnQueued(wt.id, proposed.id, wait.queued, piece.title);
         if (!wait.worktree) continue;
+        // in list order, which for the origin's own landing is the order the parts start in
         waits.push({ id: wait.worktree.id, as: "await", pieces: [piece.title] });
       }
       agent.note({ type: "handoff", id, outcomes, ts: Date.now() });
@@ -808,8 +811,8 @@ export class HandoffService implements ToolProvider {
    * seconds (the session's `handoffSays`). A pass over the list as `act` makes it, with the fates
    * and the rows as they stand and nothing written: a worktree not made yet stands in by its
    * piece's title, which is all a wait on it is said by. Nothing for a list that is closed, or
-   * one whose every piece is the agent's own. A piece that then fails to start is news the
-   * agent hears on its next message. */
+   * one whose every piece is the agent's own to do now. A piece that then fails to start is news
+   * the agent hears on its next message. */
   says(worktreeId: string, id: string): string | undefined {
     const wt = this.d.state.worktree(worktreeId);
     const entries = wt ? this.d.runtime.agentFor(wt.id)?.transcript() : undefined;
@@ -820,7 +823,7 @@ export class HandoffService implements ToolProvider {
     for (const piece of proposed.pieces) {
       const fate = effectiveFate(entries, proposed, piece);
       if (fate === "here" || fate === "skip") {
-        became.set(piece.id, { fate });
+        became.set(piece.id, this.keptOrSkipped(wt, piece, fate));
         outcomes.push({ pieceId: piece.id, fate });
         continue;
       }
@@ -844,10 +847,13 @@ export class HandoffService implements ToolProvider {
     for (const o of outcomes) {
       if (o.fate !== "here") continue;
       const piece = proposed.pieces.find((p) => p.id === o.pieceId);
-      const wait = piece ? this.hereWait(proposed, piece, became) : null;
+      const wait = piece ? this.hereWait(wt, proposed, piece, became) : null;
       if (wait) o.after = wait.said;
+      if (wait?.own) o.own = true;
     }
-    if (!outcomes.some((o) => o.fate !== "here")) return undefined;
+    // a list that is all the agent's own still has something to say when a part of it waits for
+    // this worktree to land: that Toyon starts it, and when
+    if (!outcomes.some((o) => o.fate !== "here" || o.own)) return undefined;
     return handoffActedPrompt(proposed.pieces, outcomes, "plan");
   }
 
@@ -949,7 +955,7 @@ export class HandoffService implements ToolProvider {
   ): Promise<PieceOutcome> {
     const crossed = piece.project ? { repoName: piece.project.name } : {};
     if (fate === "here" || fate === "skip") {
-      became.set(piece.id, { fate });
+      became.set(piece.id, this.keptOrSkipped(wt, piece, fate));
       // what a here piece waits for is filled in once the whole list was acted on (act)
       return { pieceId: piece.id, fate };
     }
@@ -1007,19 +1013,23 @@ export class HandoffService implements ToolProvider {
   }
 
   /** What the origin's own work on a here piece still waits for as go runs, or null to start it
-   * now: a branch it named that is open and has not landed; a piece of the list by the worktree
+   * now: a branch it named that is open and has not landed; the origin's own landing (`own`),
+   * which is always the next one, whatever it landed before; a piece of the list by the worktree
    * it became in this pass, made or sent on; a piece itself queued, by the piece, until it is
-   * made. A piece skipped or failed, or a branch landed or gone, is nothing to wait for. `said`
-   * is the wait in the row's words, a branch or a piece's title; `worktree` the one to record,
-   * `queued` the piece to record it on once it is made (waitOnQueued). */
+   * made. A piece skipped or failed, or a branch landed or gone, is nothing to wait for, and
+   * neither is the landing of a main checkout, which never lands. `said` is the wait in the row's
+   * words, a branch or a piece's title; `worktree` the one to record, `queued` the piece to
+   * record it on once it is made (waitOnQueued). */
   private hereWait(
+    origin: WorktreeInfo,
     proposed: Proposed,
     piece: Piece,
     became: Map<string, Became>,
-  ): { said: string; worktree?: Named; queued?: string } | null {
+  ): { said: string; worktree?: Named; queued?: string; own?: true } | null {
     const after = piece.after;
     if (!after) return null;
     if (!("piece" in after)) {
+      if (this.waitsOnOwn(origin, piece)) return { said: origin.branch, worktree: after, own: true };
       const w = this.d.state.worktree(after.id);
       return w?.kind === "worktree" && !w.landed ? { said: after.branch, worktree: after } : null;
     }
@@ -1028,6 +1038,18 @@ export class HandoffService implements ToolProvider {
     if (on?.worktree) return { said, worktree: on.worktree };
     if (on?.queued) return { said, queued: after.piece };
     return null;
+  }
+
+  /** Whether a piece, done here, waits for the origin's own landing: it named the origin's
+   * branch, and the origin is a worktree, since a main checkout never lands. */
+  private waitsOnOwn(origin: WorktreeInfo, piece: Piece): boolean {
+    const after = piece.after;
+    return origin.kind === "worktree" && !!after && !("piece" in after) && after.id === origin.id;
+  }
+
+  /** a piece kept here or skipped, as the pieces that wait on it read it */
+  private keptOrSkipped(origin: WorktreeInfo, piece: Piece, fate: "here" | "skip"): Became {
+    return { fate, ...(fate === "here" && this.waitsOnOwn(origin, piece) ? { part: piece.title } : {}) };
   }
 
   /** a here piece that waits for a piece still queued is named on that piece's record: there is
@@ -1056,8 +1078,9 @@ export class HandoffService implements ToolProvider {
   /** What a `worktree` piece still has to wait for as go runs, or null to make it now. A branch
    * it named that has not landed; a piece of the list made into a worktree in this pass, by that
    * worktree; a piece itself queued, by the piece, until it is made; a piece kept here, by the
-   * origin's own branch; a piece sent on, by the worktree it went to; a piece skipped or failed,
-   * nothing. */
+   * origin's own branch, and where that piece waits for the origin to land, by the landing after
+   * the one that starts it (`part`); a piece sent on, by the worktree it went to; a piece skipped
+   * or failed, nothing. */
   private waitsFor(wt: WorktreeInfo, piece: Piece, became: Map<string, Became>): QueuedPiece["after"] | null {
     const after = piece.after;
     if (!after) return null;
@@ -1069,7 +1092,7 @@ export class HandoffService implements ToolProvider {
     if (!on) return null;
     if (on.queued) return { piece: after.piece };
     if (on.worktree) return { id: on.worktree.id };
-    if (on.fate === "here") return { id: wt.id };
+    if (on.fate === "here") return { id: wt.id, ...(on.part ? { part: on.part } : {}) };
     return null;
   }
 
@@ -1149,14 +1172,20 @@ export class HandoffService implements ToolProvider {
    * own follow-up; a sender, at this one landing its send rode, which at a later landing is the
    * origin's word too when it sent a piece in since. Not the last two while a piece of theirs
    * still waits for another branch: that landing starts them, on a prompt that carries this
-   * one's note. Never a worktree whose own work is done. */
+   * one's note. Never a worktree whose own work is done, but for the landed worktree itself when
+   * a part of its work waited for this landing: its work being done is what the part waited for. */
   async landed(landedId: string, mark?: LandMark): Promise<void> {
     const landed = this.d.state.worktree(landedId);
     const watchers = landed ? this.watchers(landed) : new Map<string, Hears>();
     // the worktrees this landing makes waited for it by design: this is their first word, not again
     const madeNow = new Set<string>();
     for (const origin of this.d.state.worktrees) {
-      const due = origin.queued?.filter((q) => !("piece" in q.after) && q.after.id === landedId) ?? [];
+      // not a piece behind a part of the origin's own work that this landing only starts: the
+      // part is still in the origin's line, which is read before the landing takes it off
+      const due =
+        origin.queued?.filter(
+          (q) => !("piece" in q.after) && q.after.id === landedId && !this.partWaits(origin, q.after.part),
+        ) ?? [];
       if (due.length === 0) continue;
       const repo = this.d.state.repo(origin.repoId);
       origin.queued = origin.queued?.filter((q) => !due.includes(q));
@@ -1214,15 +1243,17 @@ export class HandoffService implements ToolProvider {
       // to one this landing just made
       if (as === "after" && (w.landed || madeNow.has(id))) continue;
       // the agent with something to do about the landing is started on it once it is at rest
-      // (agent/news.ts reads `wake` off the note): never one whose own work is done
+      // (agent/news.ts reads `wake` off the note): never one whose own work is done, which the
+      // landed worktree's is by this very landing, and that is what its next part waited for
+      const own = id === landedId;
       const wake =
         as !== "after" &&
-        this.takesSend(w) &&
+        (own || this.takesSend(w)) &&
         (as === "await" ||
           (!w.watches?.some((x) => x.as === "await") && !(as === "made" && (landed.lands?.length ?? 0) > 1)));
       const why =
         as === "await"
-          ? { awaited: true as const, ...(pieces.length ? { pieces } : {}) }
+          ? { awaited: true as const, ...(own ? { own: true as const } : {}), ...(pieces.length ? { pieces } : {}) }
           : as === "sent"
             ? { sent: true as const }
             : as === "after"
@@ -1235,22 +1266,41 @@ export class HandoffService implements ToolProvider {
     saved();
   }
 
+  /** whether a part of a worktree's own work still waits in its line for a landing of its own */
+  private partWaits(w: WorktreeInfo, part: string | undefined): boolean {
+    return !!part && !!w.watches?.some((x) => x.id === w.id && x.as === "await" && x.pieces?.includes(part));
+  }
+
   /** takes a worktree's one-shot watches on a landing off its record (a wait, a send); being
-   * made behind it stands for the next landing. Says whether anything went; the caller saves. */
+   * made behind it stands for the next landing, and so does a wait on its own landing for as
+   * long as parts are in its line, less the one this landing started. Says whether anything
+   * went; the caller saves. */
   private letGo(w: WorktreeInfo, landedId: string): boolean {
-    const kept = w.watches?.filter((x) => x.id !== landedId || x.as === "after");
-    if (!w.watches || kept?.length === w.watches.length) return false;
-    if (kept?.length) w.watches = kept;
+    if (!w.watches) return false;
+    let went = false;
+    const kept = w.watches.filter((x) => {
+      if (x.id !== landedId || x.as === "after") return true;
+      went = true;
+      if (w.id !== landedId || (x.pieces?.length ?? 0) < 2) return false;
+      x.pieces = x.pieces!.slice(1);
+      return true;
+    });
+    if (!went) return false;
+    if (kept.length) w.watches = kept;
     else delete w.watches;
     return true;
   }
 
-  /** who hears this landing, each once, by the strongest reason it has */
+  /** who hears this landing, each once, by the strongest reason it has. The landed worktree
+   * itself only for a wait on its own landing, and then for the first part in its line alone:
+   * the parts after it wait for the landings after this one. */
   private watchers(landed: WorktreeInfo): Map<string, Hears> {
     const rank = (landed.lands?.length ?? 0) <= 1 ? HEARD_FIRST : HEARD_LATER;
     const heard = new Map<string, Hears>();
-    const hear = (id: string, as: Heard, pieces: readonly string[] = []) => {
-      if (id === landed.id) return;
+    const hear = (id: string, as: Heard, waited: readonly string[] = []) => {
+      const own = id === landed.id;
+      if (own && as !== "await") return;
+      const pieces = own ? waited.slice(0, 1) : waited;
       const had = heard.get(id);
       heard.set(id, {
         as: !had || rank.indexOf(as) < rank.indexOf(had.as) ? as : had.as,

@@ -122,6 +122,7 @@ export function EditorPane({
   height,
   full = false,
   onToggleFull,
+  above,
   onDragStart,
   placement = "stack",
   headIn,
@@ -130,6 +131,8 @@ export function EditorPane({
   height?: number | string;
   full?: boolean;
   onToggleFull?: () => void;
+  /** what the centre shows over the pane (Pane, `above`) */
+  above?: "preview" | "chat";
   onDragStart?: (e: React.PointerEvent) => void;
   placement?: "stack" | "screen";
   /** where the head is drawn when it is not the pane's first row (Pane, `headIn`) */
@@ -368,6 +371,7 @@ export function EditorPane({
       onClose={zenFile ? undefined : () => dispatch({ a: "close-editor" })}
       headIn={headIn}
       full={full}
+      above={above}
       // a screen is already the column, so it has no split to go back to
       onToggleFull={onScreen ? undefined : onToggleFull}
       // the head holds what is about the text in sight: which view, and whether lines fold. What is

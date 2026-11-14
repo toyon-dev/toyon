@@ -604,21 +604,25 @@ export function Center({
     landsFrom,
   });
 
+  // the design pane is about the page on screen, so a page of toyon's own over the centre has none
+  const designShown = designOpen && !!activeId && !archivedPage && !notesPage;
+  // what stands above the panes is a chat and not their app: the project's own with nothing to
+  // run, a removed worktree's, or that of a worktree toyon does not run
+  const chatAbove = chatCentred || !!archivedPage || !!activeDiscovered;
+
   return (
     <div className="center-root" ref={rootRef}>
       {/* a full-height pane takes the preview's place; in zen the panes are hidden (app.css), so
           the preview comes back for the window rather than leaving the column blank, unless zen
-          gave the window to the file, which then has the column whatever its height was. A page
-          of toyon's own over the centre hides the panes instead (below), so the area stays. */}
+          gave the window to the file, which then has the column whatever its height was. Only a
+          pane that is drawn takes it: a page of toyon's own over the centre hides the design pane
+          (below) and keeps the area, while a file read through an archived page is a pane like
+          any other and takes the column from that page's chat. */}
       <div
         className={cx("center-area", dropOver && "drop-over")}
         style={{
           display:
-            zenFile ||
-            (!(zen && !chatCentred) &&
-              !archivedPage &&
-              !notesPage &&
-              ((editor && editorFull) || (designOpen && designFull)))
+            zenFile || (!(zen && !chatCentred) && ((editor && editorFull) || (designShown && designFull)))
               ? "none"
               : undefined,
         }}
@@ -712,6 +716,7 @@ export function Center({
           editor={editor}
           height={editorFull ? "100%" : editorH > 0 ? editorH : "45%"}
           full={editorFull || zenFile}
+          above={chatAbove ? "chat" : "preview"}
           // the window is the file's in zen, with no preview above to split with
           onToggleFull={zenFile ? undefined : () => setEditorFull(!editorFull)}
           onDragStart={startEditorDrag}
@@ -722,7 +727,7 @@ export function Center({
       {/* the panes remount per worktree, and they are siblings in one children array: a key both
           share is a duplicate key to React, which then paints a second copy of one on an update
           (the design pane, on the first pointer move of its resize) that no close removes */}
-      {designOpen && activeId && !archivedPage && !notesPage && (
+      {designShown && activeId && (
         <DesignPane
           key={`design:${activeId}`}
           worktreeId={activeId}

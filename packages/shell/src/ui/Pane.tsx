@@ -39,6 +39,7 @@ export function Pane({
   menu,
   full,
   onToggleFull,
+  above = "preview",
   onClose,
   closeHint = "esc",
   headIn,
@@ -62,6 +63,9 @@ export function Pane({
    * pane's shape rather than what it shows */
   full?: boolean;
   onToggleFull?: () => void;
+  /** what the centre shows over the pane, and so what full height hides: the tip names it, since
+   * "the preview" over a project that runs nothing, or over a removed worktree, names nothing there */
+  above?: "preview" | "chat";
   /** omitted: the head draws no close. A pane the window was given to is left by leaving that,
    * and the control for it stands where the cross would; Escape closes the pane as it always does */
   onClose?: () => void;
@@ -81,7 +85,7 @@ export function Pane({
       tone="chrome"
       on={full}
       aria-pressed={!!full}
-      label="Full height: hide the preview"
+      label={`Full height: hide the ${above}`}
       onClick={onToggleFull}
     />
   );

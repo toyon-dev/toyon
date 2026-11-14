@@ -14,6 +14,7 @@ import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AgentCommand, AgentEvent, AgentLimits, AgentStatus, AuthStatus, PermissionMode } from "@toyon/shared";
 import { AttachmentStore } from "../attachments.ts";
+import { formatOutput } from "../output.ts";
 import { ownPlanPath, PLANS_DIR, planEdited, writePlanDoc } from "../planDoc.ts";
 import { SYSTEM_APPEND } from "../prompt.ts";
 import type { AgentSpec } from "../registry.ts";
@@ -2938,10 +2939,13 @@ describe("AcpSession ask cards", () => {
     w.session.send("Fix what the hook complains about.", {
       asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
     });
-    expect(w.types()).toContain("fix-asked");
-    // nobody answered: a hook refused while the card was up, and the card is still the person's
+    // nobody answered: the card is still the person's, and the message waits behind the turn the
+    // card holds open, with no row and no place in the queued strip until it goes to the agent
     expect(w.types()).not.toContain("agent-ask-end");
     expect(openAsk(w.events)).toBeTruthy();
+    expect(w.types()).not.toContain("fix-asked");
+    expect(w.session.queueLength).toBe(1);
+    expect(w.session.queueItems).toEqual([]);
     await w.session.close();
   });
 
@@ -4463,25 +4467,175 @@ describe("AcpSession cards", () => {
     await w.session.close();
   });
 
-  test("Toyon's message recorded ahead of one of the person's still carries what came before it", async () => {
-    // no steering, so both wait behind the turn: the person's is recorded as its turn starts,
-    // Toyon's as it is queued, and they go out in the other order than they are written
+  test("Toyon's own message is recorded as it goes out, and the message ahead of it carries the news", async () => {
+    // no steering, so both wait behind the turn, and each is on the transcript only once the
+    // agent is sent it: a message that waits is lost with the daemon without a row saying it went
     const { fake, release } = gated();
     const w = world(fake, claudeSpec, 60_000, undefined, tooled());
     w.session.send("one");
     await waitFor(() => fake.prompts.length === 1);
     w.session.note(landing("b", "Theirs", { awaited: true, pieces: ["Mine"], wake: true }));
     w.session.send("two");
-    w.session.send("fix the check", { asked: { kind: "check", why: "the check failed" }, keepCards: true });
+    const press = {
+      asked: { kind: "check" as const, why: "the check failed", toolId: "check-1" },
+      keepCards: true as const,
+    };
+    w.session.send("fix the check", press);
+    // a second press while the first still waits says nothing new
+    w.session.send("fix the check", press);
+    expect(w.types()).not.toContain("fix-asked");
+    expect(w.session.queueItems.map((q) => q.text)).toEqual(["two"]);
     release();
     await waitFor(() => fake.prompts.length === 3);
     await w.idle();
     await Bun.sleep(20);
-    expect(texts(fake)[1]).toEqual(["two"]);
-    expect(texts(fake)[2]![0]).toBe("fix the check");
-    expect(texts(fake)[2]![1]).toContain('The branch your own piece waited for, "Theirs"');
+    expect(texts(fake)[1]![0]).toBe("two");
+    expect(texts(fake)[1]![1]).toContain('The branch your own piece waited for, "Theirs"');
+    expect(texts(fake)[2]).toEqual(["fix the check"]);
+    const messages = w.events.filter((e) => e.type === "user-message" || e.type === "fix-asked");
+    expect(messages.map((e) => e.type)).toEqual(["user-message", "user-message", "fix-asked"]);
     // told, so nothing of Toyon's own follows
     expect(fake.prompts).toHaveLength(3);
+    await w.session.close();
+  });
+
+  /** the repo's check as the daemon leaves it on the chat when it fails: its row, then the record
+   * that the failure is the agent's to fix */
+  const checkFailed = (n: number): AgentEvent[] => [
+    { type: "tool-start", toolId: `check-${n}`, name: "check", input: { command: "bun run check" } },
+    {
+      type: "tool-end",
+      toolId: `check-${n}`,
+      output: formatOutput(`${n} errors\n`, 1, false),
+      isError: true,
+      fixable: { kind: "check" },
+    },
+    { type: "failure", kind: "check", toolId: `check-${n}`, ts: 7 },
+  ];
+  const CHECK_FIX =
+    "The repo's check, `bun run check`, failed, and what it printed is attached below. Fix what it reports, inside this worktree. Do not weaken the check or its configuration to get past it. Toyon runs it again when your turn ends.";
+
+  test("a failure is Toyon's own message to an agent at rest, with what was printed behind it, and the check goes once", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    for (const e of checkFailed(1)) w.session.note(e);
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toBe(CHECK_FIX);
+    expect(behind).toContain("What Toyon ran, and what it printed:\n$ bun run check\n1 errors");
+    expect(askedLast(w.events)).toMatchObject({ kind: "news", why: "to fix the failed check", toolId: "check-1" });
+    // the turn sent to fix it ends in the same check: no second message
+    for (const e of checkFailed(2)) w.session.note(e);
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    // it rides the person's next message, and the failure after that one starts the agent again
+    w.session.send("try the other way");
+    await w.idle();
+    expect(texts(fake)[2]![0]).toBe("try the other way");
+    expect(texts(fake)[2]![1]).toContain("$ bun run check\n2 errors");
+    for (const e of checkFailed(3)) w.session.note(e);
+    await waitFor(() => fake.prompts.length === 4);
+    await w.idle();
+    expect(texts(fake)[3]![0]).toBe(CHECK_FIX);
+    await w.session.close();
+  });
+
+  test("a failure met during a turn waits for it to end, and goes as a turn of its own", async () => {
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note({ type: "failure", kind: "conflict", base: "main", how: "rebase", carried: ["a.ts"], ts: 7 });
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types()).not.toContain("fix-asked");
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    // no step ran to show, so the message is the whole of it
+    expect(texts(fake)[1]).toEqual([
+      "Rebase this branch onto main and resolve the conflicts, keeping any uncommitted changes, then verify the app still works. The branch's own commits take main cleanly; the conflicts are in the uncommitted changes, in a.ts.",
+    ]);
+    expect(askedLast(w.events)).toMatchObject({
+      kind: "news",
+      why: "to resolve the conflicts between the uncommitted changes and main",
+    });
+    expect(w.statuses.filter((st) => st === "idle")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a failure waits for a card of Toyon's that is up, and for a hold on the row", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    w.session.note(list());
+    for (const e of checkFailed(1)) w.session.note(e);
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.session.status).toBe("waiting");
+    // the answer is owed first; a landing op then holds the row, and the release sends it
+    const release = w.session.hold();
+    w.session.note({ type: "handoff-declined", id: "h1", ts: 6 });
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    expect(texts(fake)[1]![0]).toBe(CHECK_FIX);
+    await w.session.close();
+  });
+
+  test("a press on the failed row that goes first carries what it printed once, and Toyon sends nothing more", async () => {
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    for (const e of checkFailed(1)) w.session.note(e);
+    const shown = "What Toyon ran, and what it printed:\n$ bun run check\n1 errors";
+    w.session.send(CHECK_FIX, {
+      asked: { kind: "check", why: "the check failed", toolId: "check-1" },
+      context: [shown],
+    });
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    const [text, behind] = texts(fake)[1]!;
+    expect(text).toBe(CHECK_FIX);
+    expect(behind!.split(shown)).toHaveLength(2);
+    expect(askedLast(w.events)).toMatchObject({ kind: "check", toolId: "check-1" });
+    await w.session.close();
+  });
+
+  test("a worktree gone that a piece waited for starts the agent on whether the piece still stands", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.send("one");
+    await w.idle();
+    w.session.note({
+      type: "piece-gone",
+      worktreeId: "b",
+      title: "Theirs",
+      archived: true,
+      awaited: true,
+      pieces: ["Mine"],
+      wake: true,
+      ts: 8,
+    });
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    // the text says it whole, so nothing rides behind
+    expect(texts(fake)[1]).toEqual([
+      'The worktree your own piece "Mine" waited for, "Theirs", was archived before it landed, so its work is not on main and the piece no longer waits. If the piece can be done without that work, do it here now, and only that; if it cannot, say what is missing and change nothing.',
+    ]);
+    const row = askedLast(w.events)!;
+    expect(row).toMatchObject({ kind: "news", why: 'to see whether "Mine" can go ahead without it' });
+    expect(row).not.toHaveProperty("from");
     await w.session.close();
   });
 
@@ -4529,6 +4683,48 @@ describe("AcpSession cards", () => {
     expect(texts(fake)[1]![1]).toContain('The sibling worktree "Theirs", a piece of the work planned here, has landed');
     expect(again.types()).not.toContain("fix-asked");
     await again.session.close();
+  });
+
+  test("opening the chat sends what a restart left untold, once", async () => {
+    const fake = fakeAgent(say("ok"), { mcpHttp: true });
+    // at rest under the first daemon, so the landing started nothing there and is still untold
+    const first = world(fake, claudeSpec, 60_000, undefined, tooled({ atRest: () => true }));
+    first.session.send("one");
+    await first.idle();
+    first.session.note(landing("b", "Theirs", { awaited: true, pieces: ["Mine"], wake: true }));
+    await first.session.close();
+    const again = world(fake, claudeSpec, 60_000, first.id, tooled());
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    // the person looks at the chat: that is the moment it goes, with them there to see it
+    again.session.opened();
+    await waitFor(() => fake.prompts.length === 2);
+    await again.idle();
+    expect(texts(fake)[1]![0]).toContain('Do "Mine" here now, and only that.');
+    expect(askedLast(again.events)).toMatchObject({ kind: "news", from: [{ id: "b", title: "Theirs" }] });
+    // a second look finds it told
+    again.session.opened();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(2);
+    await again.session.close();
+  });
+
+  test("opening a chat with nothing owed, or with a turn running, starts nothing", async () => {
+    const { fake, release } = gated();
+    const w = world(fake, claudeSpec, 60_000, undefined, tooled());
+    w.session.opened();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(0);
+    w.session.send("one");
+    await waitFor(() => fake.prompts.length === 1);
+    w.session.note(landing("b", "Theirs", { wake: true }));
+    w.session.opened();
+    await Bun.sleep(20);
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types()).not.toContain("fix-asked");
+    release();
+    await waitFor(() => fake.prompts.length === 2);
+    await w.session.close();
   });
 
   test("news waits for a card of Toyon's that is up, and goes when it is answered", async () => {

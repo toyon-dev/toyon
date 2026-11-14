@@ -302,24 +302,36 @@ export interface NewsFrom {
   project?: string;
 }
 
-/** Why Toyon sent the agent a message nobody typed: something failed that the agent can fix, the
- * person pressed to send it on after a turn that was stopped or that failed, or word came of the
- * work it handed off that gives it something to do */
+/** Why Toyon sent the agent a message nobody typed: the person pressed for it (to fix a row that
+ * failed, to go on after a turn that was stopped or that failed), or something happened that
+ * gives the agent something to do and Toyon sent the message itself */
 export interface Asked {
-  /** `preview` is a dev server that will not come up. `news` is the message for what became of
-   * the work handed off (a landing elsewhere, an answer on Toyon's own card): nothing was asked
-   * for, so the chat draws it as a message, and `why` is what the agent is to do, worded to
-   * follow who it is from. */
+  /** `preview` is a dev server that will not come up. `news` is the message Toyon sent on its own
+   * for what the agent had not been told: what became of the work handed off (a landing
+   * elsewhere, an answer on Toyon's own card, a worktree gone before it landed) or a failure
+   * that is the agent's to fix (the check, a hook, a conflict). Nobody pressed for it, so the
+   * chat draws it as a message, and `why` is what the agent is to do, worded to follow who it
+   * is from. Every other kind is a press. */
   kind: "hook" | "conflict" | "check" | "command" | "preview" | "stopped" | "failed" | "handoff" | "news";
   why: string;
   /** `news` of a landing: the worktrees that landed, which the chat names as who the message is
    * from, since to the person it is that chat reporting back; `project` when it is not this
-   * one. Absent when the news is only an answer on Toyon's own card, which has no other chat behind it. */
+   * one. Absent for news with no other chat behind it: an answer on Toyon's own card, a failure. */
   from?: NewsFrom[];
   /** the row of the command that failed, when the failure was one: what it printed went to the
    * agent with this message, and its row is not offered or attached again */
   toolId?: string;
 }
+
+/** A failure Toyon met that is the agent's to fix, as the chat's record of it holds it: the
+ * repo's check after a turn, a hook that refused a commit or a push, a rebase or merge that
+ * stopped on conflicts. `toolId` is the row of the command that failed, which holds the command
+ * and what it printed; a conflict has one when a step ran and stopped, and names the files in
+ * `carried` when the clash was in the uncommitted work a sync carried across. */
+export type Failed =
+  | { kind: "check"; toolId: string }
+  | { kind: "hook"; hook: string; toolId: string }
+  | { kind: "conflict"; base: string; how: "rebase" | "merge"; toolId?: string; carried?: string[] };
 
 /** A command's row that ended in something the agent can be asked to fix: a `!` command or the
  * repo's check that failed on its own exit, or a landing step a hook refused. Written by the
@@ -366,10 +378,17 @@ export type AgentEvent =
       attachments?: AttachmentRef[];
       ts: number;
     }
-  /** A message Toyon sent the agent itself, to fix what `why` names. It opens a turn the way a
-   * person's message does, but it is its own event so that nothing reading what the person said
-   * ever takes it for their words: `text` is what the agent was told, and the chat shows `why`. */
+  /** A message Toyon sent the agent itself, for the reason `why` names: a press, or news Toyon
+   * sent on its own. Written as the message goes to the agent and not before, so its being on
+   * the transcript says the agent was sent it. It opens a turn the way a person's message does,
+   * but it is its own event so that nothing reading what the person said ever takes it for
+   * their words: `text` is what the agent was told, and the chat shows `why`. */
   | ({ type: "fix-asked"; text: string; ts: number } & Asked)
+  /** A failure that is the agent's to fix, which nobody pressed for. It draws nothing: the row
+   * of the command that failed is above it, and the message Toyon sends for it follows. Written
+   * so the agent is owed the word from here: it goes as Toyon's own message once the agent is at
+   * rest, or rides a message of the person's that goes first. */
+  | ({ type: "failure"; ts: number } & Failed)
   | { type: "turn-start"; ts: number }
   /** `messageId` names the agent's message the chunk belongs to, when it says. A message sent
    * mid-reply lands in the transcript between that reply's chunks, and the id is what tells the
@@ -496,7 +515,9 @@ export type AgentEvent =
    * the landing gives this worktree's agent something to do, so Toyon starts it once it is at
    * rest rather than leave the word for its next message. `own`: the landing is this worktree's
    * own, which a here piece of its list waited for; the chat's `landed` row has said it, so this
-   * one draws nothing and is there to start the agent on the piece. */
+   * one draws nothing and is there to start the agent on the piece. `brief`: the file the piece
+   * this chat wrote for the landed worktree sits on, when the transcript names one, so the agent
+   * asked to check the landing against the piece is told where the piece is. */
   | {
       type: "piece-landed";
       worktreeId: string;
@@ -504,6 +525,7 @@ export type AgentEvent =
       title: string;
       branch?: string;
       pieces?: string[];
+      brief?: string;
       url?: string;
       subjects?: string[];
       same?: true;
@@ -553,6 +575,24 @@ export type AgentEvent =
       reason?: string;
       note?: string;
       plan?: string;
+      ts: number;
+    }
+  /** A worktree this one had a stake in went away before it landed, so nothing of it is on
+   * main: one a here piece of this chat's list waited for (`awaited`, with the `pieces` that
+   * waited, which wait no longer), one a piece from here was sent into (`sent`), or else one made
+   * from a piece of this chat's work. `title` is what it was called, when the archive or the
+   * record still says; `archived` when it went to the archive, from which it can come back, and
+   * absent when it was removed outright. `wake`: a piece waited, so Toyon starts the agent to
+   * see whether the piece can go ahead without it. */
+  | {
+      type: "piece-gone";
+      worktreeId: string;
+      title?: string;
+      archived?: true;
+      awaited?: true;
+      sent?: true;
+      pieces?: string[];
+      wake?: true;
       ts: number;
     }
   /** a queued piece's sibling landed and its worktree was made */

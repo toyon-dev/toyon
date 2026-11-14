@@ -48,7 +48,7 @@ export function offerOf(chat: readonly ChatItem[], at: OfferStanding): Offer {
     return { verb: "continue", key, after: "error", ...(repeats(chat) ? { again: true as const } : {}) };
   }
   if (last.kind !== "tool" || !last.done || !last.fixable || at.dismissed.has(last.id)) return null;
-  if (chat.some((i) => i.kind === "asked" && i.toolId === last.id)) return null;
+  if (chat.some((i) => (i.kind === "asked" || i.kind === "news") && i.toolId === last.id)) return null;
   const command = commandOf(last);
   return command === null ? null : { verb: "fix", key: last.id, toolId: last.id, command };
 }

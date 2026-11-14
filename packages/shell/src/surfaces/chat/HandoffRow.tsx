@@ -175,6 +175,30 @@ export function PieceLaterRow({ item }: { item: Extract<ChatItem, { kind: "piece
   );
 }
 
+/** A worktree this one had a stake in went away before it landed: the wait a here piece had on
+ * it is over with nothing on main, or the piece handed to it is not coming. The word says how it
+ * went, since an archived worktree can be brought back and its chip opens it where it lies; one
+ * removed outright has no name left. */
+export function PieceGoneRow({ item }: { item: Extract<ChatItem, { kind: "piece-gone" }> }) {
+  const pieces = item.pieces ?? [];
+  const named = pieces.map((p) => `"${p}"`);
+  const waited =
+    named.length === 0
+      ? "the piece that waited"
+      : named.length === 1
+        ? named[0]
+        : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
+  return (
+    <DaemonRow icon="close" word={item.archived ? "archived" : "removed"} tone="quiet" at={item.ts}>
+      <span className="daemon-text">
+        {item.title ? <WorktreeChip id={item.worktreeId} title={item.title} /> : "a worktree"} before it landed
+        {item.sent && ", with a piece from here in it"}
+        {item.awaited && `; ${waited} no longer ${named.length > 1 ? "wait" : "waits"}`}
+      </span>
+    </DaemonRow>
+  );
+}
+
 /** a worktree made from a piece of this one's work landed, with its pull request when the landing
  * was one: the record of the piece closing, read where it was opened. On the worktree that waited
  * for that branch before it started, the same row says it landed again; on the origin whose own

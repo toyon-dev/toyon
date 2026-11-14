@@ -659,6 +659,20 @@ describe("handlers", () => {
     await dispatch({ t: "view", worktreeId: "nope" }, ctx, services);
   });
 
+  test("a look at a chat tells its agent the chat was opened; a subscription alone does not", async () => {
+    const { services, ctx, repo, agents } = make();
+    const r = await services.repos.register(repo);
+    r.needsSetup = false;
+    const wt = await services.worktrees.create(r.id, "feature");
+    await dispatch({ t: "subscribe", worktreeId: wt.id }, ctx, services);
+    expect(agents.get(wt.id)?.opens).toBe(0);
+    await dispatch({ t: "view", worktreeId: wt.id }, ctx, services);
+    expect(agents.get(wt.id)?.opens).toBe(1);
+    // a hidden tab looks at nothing
+    await dispatch({ t: "view", worktreeId: null }, ctx, services);
+    expect(agents.get(wt.id)?.opens).toBe(1);
+  });
+
   test("subscribe to a discovered worktree streams its git status and starts nothing", async () => {
     const { services, ctx, replies, repo, agents } = make();
     await services.repos.register(repo);
@@ -1327,7 +1341,7 @@ describe("handlers", () => {
     expect(replies.find((m) => m.t === "shipped")).toMatchObject({ ok: false, asked: true });
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({
       text: expect.stringMatching(/^Rebase this branch onto main .*uncommitted changes, in README\.md\.$/),
-      asked: { kind: "conflict", why: "the uncommitted changes conflict with main" },
+      asked: { kind: "news", why: "to resolve the conflicts between the uncommitted changes and main" },
     });
     expect(readFileSync(join(wt.path, "README.md"), "utf8")).toBe("mine, uncommitted\n");
   });
@@ -1346,7 +1360,7 @@ describe("handlers", () => {
     expect(replies.find((m) => m.t === "shipped")).toMatchObject({ ok: false, asked: true });
     expect(agents.get(wt.id)?.sent.at(-1)).toMatchObject({
       text: expect.stringMatching(/^Rebase this branch onto main /),
-      asked: { kind: "conflict", why: "the branch needs a rebase onto main" },
+      asked: { kind: "news", why: "to rebase onto main and resolve the conflicts" },
     });
   });
 

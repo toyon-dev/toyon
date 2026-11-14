@@ -43,7 +43,7 @@ import {
 } from "../awsAuth.ts";
 import { heldUnshown, isListEvent, ownCards } from "../handoffLog.ts";
 import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
-import { carried, inText, isNews, newsToSend, sentence } from "../news.ts";
+import { carried, isNews, newsToSend, sentence } from "../news.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
 import { adoptPicture, PICTURES_MAX, pictureLinks } from "../pictures.ts";
@@ -304,13 +304,14 @@ interface QueueItem {
   context?: string[];
   attachments?: AttachmentInput[];
   recorded?: Recorded;
-  /** what Toyon's own message was sent for, when it is one: what rides behind it reads it */
-  asked?: Asked["kind"];
+  /** why Toyon sent the message, when it is Toyon's own: the record the message makes is
+   * `fix-asked`, not a bubble, and it is never drawn as queued */
+  asked?: Asked;
   /** sent on another agent's behalf: the record the message makes is `handed`, not a bubble */
   handed?: Handed;
-  /** Toyon's message for news the agent had not been told (news.ts): its text says the news that
-   * started it, so the sentences behind it leave that out */
-  news?: true;
+  /** Toyon's message for news the agent had not been told (news.ts): the news its text says, so
+   * the sentences behind it leave that out */
+  said?: ReadonlySet<AgentEvent>;
   /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
    * and pick the message up after all (a command still running holds the interrupt off, and the
    * adapter forces the turn closed only after a floor), and its answer then belongs to the
@@ -630,9 +631,9 @@ export class AcpSession implements AgentAdapter {
    * handed back by a stop or by the agent) just goes next: drawn as queued it would show twice, and
    * taking it back to edit would send a second copy. */
   private waiting(): QueueItem[] {
-    // a message sent on another agent's behalf has no bubble to take back, so it is never queued
-    // in sight either: its row appears when it is recorded
-    return this.queue.filter((q) => !q.recorded && !q.handed);
+    // Toyon's own message, or one sent on another agent's behalf, has no bubble to take back, so
+    // it is never queued in sight either: its row appears when it is recorded
+    return this.queue.filter((q) => !q.recorded && !q.handed && !q.asked);
   }
 
   onQueueChange: (() => void) | null = null;
@@ -686,33 +687,41 @@ export class AcpSession implements AgentAdapter {
 
   /** Toyon's message for what the agent has not been told, when some of it gives the agent
    * something to do (news.ts), or null. Not while a card is up: the person's answer is owed
-   * first, and a turn begun under it would read as one. The message is recorded here, as any of
-   * Toyon's own is when it is sent, which is also what makes the news told. */
+   * first, and a turn begun under it would read as one. Both callers send it at once, and its
+   * record as it goes is what makes the news told. */
   private newsItem(): QueueItem | null {
     if (this.stopped || this.asks.size > 0 || ownCards(this.log.entries).length > 0) return null;
     const news = newsToSend(this.log.entries, { rest: this.d.atRest?.() ?? false });
     if (!news) return null;
-    const seq = this.emit({
-      type: "fix-asked",
+    return {
       text: news.text,
-      ts: Date.now(),
-      kind: "news",
-      why: news.why,
-      ...(news.from ? { from: news.from } : {}),
-    });
-    return { text: news.text, asked: "news", recorded: { attachments: [], seq }, news: true };
+      asked: {
+        kind: "news",
+        why: news.why,
+        ...(news.from ? { from: news.from } : {}),
+        ...(news.toolId ? { toolId: news.toolId } : {}),
+      },
+      said: new Set(news.said),
+    };
   }
 
   /** News for a session with no turn running: written while the agent is at rest, or still
    * untold as it comes to rest. A turn in flight is left alone; the queue running empty at its
    * end asks again (drain), by which time a message of the person's may have carried it. Never
    * during the restore: a daemon coming up begins no turn. What it found untold rides the next
-   * message, or goes at the next moment this is asked with the agent at rest: news written, or
-   * a hold released, which every commit, sync and land on the row is. */
+   * message, or goes at the next moment this is asked with the agent at rest: the chat opened
+   * (`opened`), news written, or a hold released, which every commit, sync and land on the row is. */
   private pumpNews() {
     if (!this.restored || this.running || this.own || this.held || this.queue.length > 0) return;
     const item = this.newsItem();
     if (item) this.enqueue(item);
+  }
+
+  /** The chat is on a person's screen. News a restart left untold started no turn as the daemon
+   * came up, and nothing may follow on this row to send it: the person looking at the chat is
+   * the moment it goes, with them there to see the turn and stop it. */
+  opened() {
+    this.pumpNews();
   }
 
   private setStatus(s: AgentStatus) {
@@ -780,14 +789,20 @@ export class AcpSession implements AgentAdapter {
       text,
       context,
       ...(attachments?.length ? { attachments } : {}),
-      ...(asked ? { asked: asked.kind } : {}),
+      ...(asked ? { asked } : {}),
       ...(handed ? { handed } : {}),
     };
-    // Toyon's own message is recorded as it is sent, however long it waits for its turn: it has
-    // no bubble to take back, so it is never drawn as queued, and the row saying why it was sent
-    // stands from the moment of the failure
-    if (asked) {
-      item.recorded = { attachments: [], seq: this.emit({ type: "fix-asked", text, ts: Date.now(), ...asked }) };
+    // Toyon's own message is recorded as it goes to the agent, like any other: a message on the
+    // transcript is one the agent was sent, which is what news is read as told by (news.ts), and
+    // one that waits is lost with the daemon without a row claiming otherwise. So a second press
+    // for a message still waiting is read here, where the first one is.
+    if (
+      asked &&
+      this.queue.some(
+        (q) => !q.recorded && q.text === text && q.asked?.kind === asked.kind && q.asked.toolId === asked.toolId,
+      )
+    ) {
+      return undefined;
     }
     // held from here until the message is recorded, which for a queued one is turns away
     this.d.attachments.uploads.hold(uploadIds(attachments));
@@ -1211,7 +1226,7 @@ export class AcpSession implements AgentAdapter {
 
   /** write the attachments and show the message. Numbered and written in the order they were
    * attached before anything is shown, so the bubble and the prompt agree on "Image N". */
-  private async record({ text, attachments, handed }: QueueItem): Promise<Recorded> {
+  private async record({ text, attachments, handed, asked }: QueueItem): Promise<Recorded> {
     const stored: Stored[] = [];
     try {
       for (const a of attachments ?? [])
@@ -1221,10 +1236,13 @@ export class AcpSession implements AgentAdapter {
       this.d.attachments.uploads.release(uploadIds(attachments));
     }
     const attached = stored.length ? { attachments: stored.map((s) => s.ref) } : {};
-    // a message sent on another agent's behalf is Toyon's row on the chat, not a bubble
-    const seq = handed
-      ? this.emit({ type: "handed", ...handed, text, ...attached, ts: Date.now() })
-      : this.emit({ type: "user-message", text, ts: Date.now(), ...attached });
+    // Toyon's own message, or one sent on another agent's behalf, is Toyon's row on the chat,
+    // not a bubble
+    const seq = asked
+      ? this.emit({ type: "fix-asked", text, ts: Date.now(), ...asked })
+      : handed
+        ? this.emit({ type: "handed", ...handed, text, ...attached, ts: Date.now() })
+        : this.emit({ type: "user-message", text, ts: Date.now(), ...attached });
     return { attachments: stored, seq };
   }
 
@@ -1291,17 +1309,19 @@ export class AcpSession implements AgentAdapter {
     ]);
   }
 
-  /** What became of this worktree's handed work since the message before this one, a sentence
-   * each (news.ts): a worktree it handed work to landed, or the person answered its handoff card.
-   * Derived from the transcript rather than kept: the message going out is the newest record on
-   * it, so the events between the one before and it are what this prompt is the first to carry,
-   * and the next prompt starts past them. Toyon's own message for the news says in its text what
-   * started it, and carries the rest. */
+  /** What the agent is owed a word on since the message before this one, a sentence each
+   * (news.ts): a worktree it handed work to landed or went away, the person answered its handoff
+   * card, something failed that is its to fix. Derived from the transcript rather than kept: the
+   * events between the message before and this one's own record are what this prompt is the
+   * first to carry, and the next prompt starts past them. Toyon's own message for the news says
+   * in its text what started it, and carries the rest; a press on a failed row attaches what the
+   * row printed itself, so that failure rides it no second time. */
   private heardSince(item: QueueItem): string[] {
     const opts = { ...(this.d.chatOf ? { chatOf: this.d.chatOf } : {}), cards: this.mcpTools !== false };
+    const pressed = item.said ? undefined : item.asked?.toolId;
     return carried(this.log.entries, item.recorded?.seq ?? -1)
-      .filter((n) => !(item.news && inText(n)))
-      .flatMap((n) => sentence(n, opts) ?? []);
+      .filter((n) => !(pressed && n.kind === "failed" && n.event.toolId === pressed))
+      .flatMap((n) => sentence(n, { ...opts, said: item.said?.has(n.event) ?? false }) ?? []);
   }
 
   /** the adapter process, spawned and initialized once; concurrent callers share the spawn.

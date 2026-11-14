@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentEvent } from "@toyon/shared";
-import { carried, inText, newsToSend, sentence, starts, untold } from "./news.ts";
+import { carried, isNews, newsToSend, sentence, starts, untold } from "./news.ts";
+import { formatOutput } from "./output.ts";
 
 const log = (...events: AgentEvent[]) => events.map((event, seq) => ({ seq, event }));
 
@@ -62,6 +63,45 @@ const landed = (title: string, why: Partial<Extract<AgentEvent, { type: "piece-l
   ts: 5,
 });
 
+/** a command's two rows, as the daemon leaves them when it fails */
+const row = (toolId: string, command: string, text: string): AgentEvent[] => [
+  { type: "tool-start", toolId, name: "shell", input: { command } },
+  { type: "tool-end", toolId, output: formatOutput(text, 1, false), isError: true },
+];
+const checkFailed = (n: number): AgentEvent[] => [
+  ...row(`check-${n}`, "bun run check", `${n} errors\n`),
+  { type: "failure", kind: "check", toolId: `check-${n}`, ts: 7 },
+];
+const hookRefused: AgentEvent[] = [
+  ...row("shell-1", "git commit -m x", "lint: 1 error\n"),
+  { type: "failure", kind: "hook", hook: "pre-commit", toolId: "shell-1", ts: 7 },
+];
+const conflict = (more: { toolId?: string; carried?: string[] } = {}): AgentEvent => ({
+  type: "failure",
+  kind: "conflict",
+  base: "main",
+  how: "rebase",
+  ...more,
+  ts: 7,
+});
+const gone = (title: string, why: Partial<Extract<AgentEvent, { type: "piece-gone" }>> = {}): AgentEvent => ({
+  type: "piece-gone",
+  worktreeId: title.toLowerCase(),
+  title,
+  archived: true,
+  ...why,
+  ts: 8,
+});
+/** Toyon's own message for the news before it, as the session records it as it goes */
+const told = (toolId?: string): AgentEvent => ({
+  type: "fix-asked",
+  text: "fix",
+  kind: "news",
+  why: "to fix the failed check",
+  ...(toolId ? { toolId } : {}),
+  ts: 9,
+});
+
 describe("untold and carried", () => {
   test("news is untold until a message follows it, and that message is the one to carry it", () => {
     const entries = log(said("one"), landed("A"), said("two"), landed("B"));
@@ -75,9 +115,9 @@ describe("untold and carried", () => {
     expect(carried(log(landed("A")), 7)).toEqual([]);
   });
 
-  test("a message carries what came before its own record, whichever order the two went out in", () => {
-    // Toyon's message was recorded as it was queued, behind a message of the person's that is
-    // recorded only as its turn starts: the person's goes out first and is written last
+  test("a message carries what came before its own record, whichever is the newest on the transcript", () => {
+    // a message is recorded ahead of the request that carries it, and another may be recorded
+    // meanwhile: each still carries what came before its own record, not before the newest
     const entries = log(said("one"), landed("A", { wake: true }), asked, said("two"));
     expect(carried(entries, 3)).toEqual([]);
     expect(carried(entries, 2).map((n) => n.kind === "landed" && n.event.title)).toEqual(["A"]);
@@ -112,13 +152,15 @@ describe("what starts the agent and what rides", () => {
   test("a landing starts the agent when the service marked it, and is said both ways", () => {
     expect(starts(one(landed("A", { wake: true })))).toBe(true);
     expect(starts(one(landed("A")))).toBe(false);
-    expect(inText(one(landed("A", { wake: true })))).toBe(false);
+    // the text names the pieces to do; the sentence what landed and where that chat is
+    expect(sentence(one(landed("A", { wake: true })), { said: true })).toContain('"A"');
     expect(sentence(one(landed("A")), { chatOf: (id) => `/chats/${id}` })).toContain("Its chat is at /chats/a");
   });
 
   test("a go on Toyon's own card starts the agent only on a piece kept here with nothing to wait for", () => {
     expect(starts(one(list(), go(), kept))).toBe(true);
-    expect(inText(one(list(), go(), kept))).toBe(true);
+    // Toyon's message for it says it in its text, so nothing rides behind
+    expect(sentence(one(list(), go(), kept), { said: true })).toBeUndefined();
     expect(starts(one(list(), go(), away))).toBe(false);
     expect(starts(one(list(), go(), waits))).toBe(false);
     expect(sentence(one(list(), go("v2"), away))).toContain(
@@ -160,6 +202,100 @@ describe("what starts the agent and what rides", () => {
     expect(sentence(one(list(true), notNow()))).toBeUndefined();
   });
 
+  test("a failure that is the agent's to fix starts it, with what was printed behind the message", () => {
+    const hook = one(...hookRefused);
+    expect(hook).toMatchObject({
+      kind: "failed",
+      failure: { kind: "hook", hook: "pre-commit", command: "git commit -m x", text: "lint: 1 error" },
+    });
+    expect(starts(hook)).toBe(true);
+    // the same paragraph whether Toyon's own message asks for the fix or a message of the
+    // person's goes first: the text asks, the paragraph shows
+    const shown = "What Toyon ran, and what it printed:\n$ git commit -m x\nlint: 1 error";
+    expect(sentence(hook, { said: true })).toBe(shown);
+    expect(sentence(hook)).toBe(shown);
+    // an agent without Toyon's tools still fixes its own check
+    expect(sentence(one(...checkFailed(1)), { cards: false })).toContain("$ bun run check\n1 errors");
+    // a check or a hook whose row is gone leaves nothing to show, and is no news
+    expect(untold(log({ type: "failure", kind: "check", toolId: "nope", ts: 7 }))).toEqual([]);
+  });
+
+  test("a conflict is news with or without a step on the chat, and carries its ask when it rides", () => {
+    const bare = one(conflict({ carried: ["a.ts"] }));
+    expect(starts(bare)).toBe(true);
+    // Toyon's own message says the ask in its text, and no step ran to show
+    expect(sentence(bare, { said: true })).toBeUndefined();
+    // riding a message of the person's, the ask is the only word there is of it
+    expect(sentence(bare)).toBe(
+      "Rebase this branch onto main and resolve the conflicts, keeping any uncommitted changes, then verify the app still works. The branch's own commits take main cleanly; the conflicts are in the uncommitted changes, in a.ts.",
+    );
+    const stepped = one(...row("shell-2", "git rebase main", "CONFLICT in a.ts\n"), conflict({ toolId: "shell-2" }));
+    expect(sentence(stepped, { said: true })).toBe(
+      "What Toyon ran, and what it printed:\n$ git rebase main\nCONFLICT in a.ts",
+    );
+    expect(sentence(stepped)).toStartWith("Rebase this branch onto main and resolve the conflicts");
+    expect(sentence(stepped)).toEndWith("$ git rebase main\nCONFLICT in a.ts");
+  });
+
+  test("the check starts the agent once in a row: the turn sent to fix it ends in the same check", () => {
+    // straight after Toyon's own message for a failed check
+    expect(starts(one(...checkFailed(1), told("check-1"), ...checkFailed(2)))).toBe(false);
+    // or after a press on the check's row
+    expect(starts(one(asked, ...checkFailed(2)))).toBe(false);
+    // it rides the next message instead, with what it printed
+    const second = one(...checkFailed(1), told("check-1"), ...checkFailed(2));
+    expect(sentence(second)).toContain("$ bun run check\n2 errors");
+    // a message that is not about the check lets the next failure start it again
+    expect(starts(one(...checkFailed(1), told("check-1"), ...checkFailed(2), said("try x"), ...checkFailed(3)))).toBe(
+      true,
+    );
+    // so does Toyon's message for other news, unless a failed check rode behind it
+    expect(starts(one(landed("A", { wake: true }), told(), ...checkFailed(1)))).toBe(true);
+    expect(
+      starts(one(...checkFailed(1), told(), ...checkFailed(2), landed("A", { wake: true }), told(), ...checkFailed(3))),
+    ).toBe(false);
+    // a hook or a conflict comes back only through another press, so neither is capped
+    const again: AgentEvent[] = [
+      ...row("shell-3", "git commit -m y", "no\n"),
+      { type: "failure", kind: "hook", hook: "pre-commit", toolId: "shell-3", ts: 7 },
+    ];
+    expect(starts(one(...hookRefused, told("shell-1"), ...again))).toBe(true);
+    expect(starts(one(conflict(), told(), conflict()))).toBe(true);
+  });
+
+  test("a worktree gone before it landed starts the agent only where a piece waited for it", () => {
+    const waited = one(gone("First", { awaited: true, pieces: ["Mine"], wake: true }));
+    expect(starts(waited)).toBe(true);
+    expect(sentence(waited, { said: true })).toBeUndefined();
+    expect(sentence(waited)).toBe(
+      'The worktree your own piece "Mine" waited for, "First", was archived before it landed, so its work is not on main and the piece no longer waits.',
+    );
+    // found stale, with nobody there to see a turn begin: the word rides the next message
+    expect(starts(one(gone("First", { awaited: true, pieces: ["Mine"] })))).toBe(false);
+    // a worktree made from a piece, or one a piece was sent into, is only news
+    expect(starts(one(gone("Docs")))).toBe(false);
+    expect(sentence(one(gone("Docs")))).toContain('The worktree made from your piece, "Docs", was archived');
+    expect(sentence(one(gone("Composer", { sent: true })))).toContain("and the piece with it, is not on main");
+  });
+
+  test("a queued piece dropped rides the next message and starts nothing", () => {
+    const dropped: AgentEvent = {
+      type: "piece-dropped",
+      id: "h1",
+      pieceId: "p2",
+      reason: 'the worktree it waited for, "First", is gone',
+      ts: 8,
+    };
+    expect(isNews(dropped)).toBe(true);
+    expect(starts(one(list(), dropped))).toBe(false);
+    expect(sentence(one(list(), dropped))).toBe(
+      'Your queued piece "Docs" was dropped: the worktree it waited for, "First", is gone.',
+    );
+    // its list is off the transcript: still said, unnamed
+    expect(sentence(one(dropped))).toStartWith("A piece you queued was dropped:");
+    expect(newsToSend(log(list(), dropped))).toBeNull();
+  });
+
   test("an agent without Toyon's tools hears of landings and of no card", () => {
     expect(sentence(one(list(), go(), away), { cards: false })).toBeUndefined();
     expect(sentence(one(list(), notNow()), { cards: false })).toBeUndefined();
@@ -193,7 +329,7 @@ describe("newsToSend", () => {
     // the row's sentence, after the worktrees it is from: what the agent does about each kind of
     // landing, each clause naming its own since they differ. With a piece to start, the work
     // handed off is only mentioned to it, so the row leaves it out
-    expect(msg.why).toBe('to start "Mine", which waited for "A", and to check that "C" holds the piece');
+    expect(msg.why).toBe('to start "Mine", which waited for "A", and to check "C" against the piece written here');
     // every landing that starts it is who the message is from; one in another project says where
     expect(msg.from).toEqual([
       { id: "a", title: "A" },
@@ -204,17 +340,14 @@ describe("newsToSend", () => {
 
   test("the reason says what the agent does about the landing, by what the landing is to it", () => {
     const why = (...events: AgentEvent[]) => newsToSend(log(...events))!.why;
-    // nothing here waited for work handed off: the agent brings in line what depends on it
-    // the row names the landed worktrees first, so a clause about all of them says "it" or "them"
-    expect(why(landed("B", { wake: true }))).toBe("to bring in line what depends on it");
-    // a piece sent into an open worktree is not taken up: the landing is checked for it
-    expect(why(landed("C", { sent: true, wake: true }))).toBe("to check that it holds the piece");
-    expect(why(landed("C", { sent: true, wake: true }), landed("D", { sent: true, wake: true }))).toBe(
-      "to check that they hold the pieces",
-    );
-    // landings of two kinds: each clause names its own
+    // nothing here waited for work handed off: the agent checks the landing against the piece
+    // this chat wrote. The row names the landed worktrees first, so a clause about all of them
+    // says "it" or "them"
+    expect(why(landed("B", { wake: true }))).toBe("to check it against the piece written here");
+    // a piece sent into an open worktree is the same check
+    expect(why(landed("C", { sent: true, wake: true }))).toBe("to check it against the piece written here");
     expect(why(landed("B", { wake: true }), landed("C", { sent: true, wake: true }))).toBe(
-      'to check that "C" holds the piece, and to bring in line what depends on "B"',
+      "to check them against the pieces written here",
     );
     // a wait recorded without its pieces
     expect(why(landed("A", { awaited: true, wake: true }))).toBe("to start the piece that waited for it");
@@ -293,7 +426,68 @@ describe("newsToSend", () => {
     expect(msg.text).toContain("They added: smaller");
     expect(msg.text).toContain('"A" (toyon/a), has landed');
     // the landing's clause first, since the row has just named the worktree it speaks of
-    expect(msg.why).toBe("to bring in line what depends on it, and to read the note sent back with the list");
+    expect(msg.why).toBe("to check it against the piece written here, and to read the note sent back with the list");
     expect(msg.from).toEqual([{ id: "a", title: "A" }]);
+  });
+
+  test("a landing checked against the piece names the file the piece sits on", () => {
+    const msg = newsToSend(log(landed("B", { wake: true, brief: ".toyon/plans/2.md" })))!;
+    expect(msg.text).toContain("the piece this chat wrote for it, which is in .toyon/plans/2.md, and say what is");
+  });
+
+  test("a failure makes Toyon's own message: what to fix, the reason for the row, and the row it is about", () => {
+    const msg = newsToSend(log(said("one"), ...checkFailed(1)))!;
+    expect(msg.text).toBe(
+      "The repo's check, `bun run check`, failed, and what it printed is attached below. Fix what it reports, inside this worktree. Do not weaken the check or its configuration to get past it. Toyon runs it again when your turn ends.",
+    );
+    expect(msg.why).toBe("to fix the failed check");
+    expect(msg.toolId).toBe("check-1");
+    // no other chat is behind a failure
+    expect(msg.from).toBeUndefined();
+    // the text says the failure, so only what was printed rides behind it
+    expect(msg.said).toHaveLength(1);
+    expect(msg.said[0]).toMatchObject({ type: "failure", toolId: "check-1" });
+    // a conflict with no step names no row
+    const clash = newsToSend(log(conflict()))!;
+    expect(clash.text).toStartWith("Rebase this branch onto main and resolve the conflicts");
+    expect(clash.why).toBe("to rebase onto main and resolve the conflicts");
+    expect(clash.toolId).toBeUndefined();
+    // the check failed again straight after: no second message, whatever else is untold
+    expect(newsToSend(log(...checkFailed(1), told("check-1"), ...checkFailed(2)))).toBeNull();
+    // a worktree whose own work is done can still have a check to fix
+    expect(newsToSend(log(...hookRefused), { rest: true })?.why).toBe("to fix what the pre-commit hook refused");
+  });
+
+  test("a worktree gone that a piece waited for makes a message; at rest it is only news", () => {
+    const entries = log(gone("First", { awaited: true, pieces: ["Mine"], wake: true }));
+    const msg = newsToSend(entries)!;
+    expect(msg.text).toBe(
+      'The worktree your own piece "Mine" waited for, "First", was archived before it landed, so its work is not on main and the piece no longer waits. If the piece can be done without that work, do it here now, and only that; if it cannot, say what is missing and change nothing.',
+    );
+    expect(msg.why).toBe('to see whether "Mine" can go ahead without it');
+    // it did not land, so no chat is reporting back
+    expect(msg.from).toBeUndefined();
+    expect(newsToSend(entries, { rest: true })).toBeNull();
+    // a wait recorded without its pieces, and two worktrees gone at once
+    expect(newsToSend(log(gone("First", { awaited: true, wake: true })))?.why).toBe(
+      "to see whether the piece that waited can go ahead without it",
+    );
+    expect(
+      newsToSend(
+        log(
+          gone("First", { awaited: true, pieces: ["One"], wake: true }),
+          gone("Second", { awaited: true, pieces: ["Two"], wake: true }),
+        ),
+      )?.why,
+    ).toBe('to see whether "One" and "Two" can go ahead without them');
+  });
+
+  test("a failure and a landing untold together are one message", () => {
+    const msg = newsToSend(log(...hookRefused, landed("A", { awaited: true, pieces: ["Mine"], wake: true })))!;
+    expect(msg.text).toContain("The pre-commit hook refused that");
+    expect(msg.text).toContain('Do "Mine" here now, and only that.');
+    expect(msg.why).toBe('to start "Mine", which waited for it, and to fix what the pre-commit hook refused');
+    expect(msg.toolId).toBe("shell-1");
+    expect(msg.said).toHaveLength(2);
   });
 });

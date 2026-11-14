@@ -604,6 +604,58 @@ describe("chat folding", () => {
       { kind: "asked", about: "handoff", why: '"Handoff review" landed, so the agent takes up what it handed off' },
     ]);
   });
+  test("Toyon's own message for a failure is a message row that names the row it fixes; the failure's record draws nothing", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", { type: "tool-start", toolId: "c1", name: "check", input: { command: "bun run check" } }),
+      agent("a", { type: "tool-end", toolId: "c1", output: "exit 1", isError: true, fixable: { kind: "check" } }),
+      agent("a", { type: "failure", kind: "check", toolId: "c1", ts: 1 }),
+      agent("a", {
+        type: "fix-asked",
+        text: "The repo's check failed. Fix what it reports.",
+        ts: 2,
+        kind: "news",
+        why: "to fix the failed check",
+        toolId: "c1",
+      }),
+    ]);
+    // the row is marked as the daemon's to tell the agent about, so the box attaches it to nothing
+    expect(s.local.a?.chat).toMatchObject([
+      { kind: "tool", id: "c1", done: true, fixable: { kind: "check" }, owed: true },
+      { kind: "news", why: "to fix the failed check", toolId: "c1", ts: 2 },
+    ]);
+    expect(s.local.a?.chat).toHaveLength(2);
+    expect(s.local.a?.chat[1]).not.toHaveProperty("from");
+  });
+  test("a worktree gone before it landed is a row that says what it was to this chat", () => {
+    const s = run([
+      hello(wt("a")),
+      agent("a", {
+        type: "piece-gone",
+        worktreeId: "b",
+        title: "Composer",
+        archived: true,
+        awaited: true,
+        pieces: ["Mine"],
+        wake: true,
+        ts: 1,
+      }),
+      agent("a", { type: "piece-gone", worktreeId: "c", sent: true, ts: 2 }),
+    ]);
+    // `wake` is the daemon's own: the message under the row says what it started
+    expect(s.local.a?.chat).toEqual([
+      {
+        kind: "piece-gone",
+        worktreeId: "b",
+        title: "Composer",
+        archived: true,
+        awaited: true,
+        pieces: ["Mine"],
+        ts: 1,
+      },
+      { kind: "piece-gone", worktreeId: "c", sent: true, ts: 2 },
+    ]);
+  });
   test("a failed command keeps the daemon's mark that it can be fixed, and the ask about it names its row", () => {
     const s = run([
       hello(wt("a")),

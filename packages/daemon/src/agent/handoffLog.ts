@@ -82,6 +82,21 @@ export function listFile(entries: readonly TranscriptEntry[], id: string): strin
   return file;
 }
 
+/** The file the piece this chat wrote for a worktree sits on: the page of the newest list one of
+ * whose pieces became that worktree or was sent into it. Where an agent asked to check a landing
+ * against its piece finds the piece, turns after it wrote it. */
+export function briefFile(entries: readonly TranscriptEntry[], worktreeId: string): string | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const event = entries[i]!.event;
+    const named =
+      (event.type === "handoff" && event.outcomes.some((o) => o.worktreeId === worktreeId)) ||
+      (event.type === "handoff-piece" && event.outcome.worktreeId === worktreeId) ||
+      (event.type === "piece-made" && event.worktreeId === worktreeId);
+    if (named) return listFile(entries, event.id);
+  }
+  return undefined;
+}
+
 /** where the piece stands as go is pressed: the last fate the person set, else the agent's */
 export function effectiveFate(entries: readonly TranscriptEntry[], proposal: Proposed, piece: Piece): PieceFate {
   let fate: PieceFate = piece.fate;

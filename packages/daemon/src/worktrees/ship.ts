@@ -86,8 +86,10 @@ const uncounted = (base: string): ShipResult => ({
 });
 
 /** a landing op's result as the service hands it on: `asked` when the agent was sent the turn that
- * fixes the failure, which the transcript then says in the line's place */
-export type ShipOutcome = ShipResult & { asked?: true };
+ * fixes the failure, which the transcript then says in the line's place; `owed` when the failure
+ * is written on the chat for the agent and its message waits (a card up, a turn running, the row
+ * held), so the press still reads its failure where it was made */
+export type ShipOutcome = ShipResult & { asked?: true; owed?: true };
 
 /** what a land op hands back: the result, `landed` when the work reached main and the row's word
  * is to be noted, and the mark it put on the record, so the word carries what landed. The mark
@@ -414,8 +416,10 @@ export class Ship {
   }
 
   /** What a landing op's failure asks of the agent, after the op, whose hold on the queue is gone
-   * by now. A hook that refused a commit or a push printed why on the transcript, and a rebase or
-   * merge that stopped on conflicts names what to merge: both are the agent's to fix. A
+   * by now: it is written on the chat as news the agent is owed, and the session sends the
+   * message for it once the agent is at rest. A hook that refused a commit or a push printed
+   * why on the transcript, and a rebase or merge that stopped on conflicts names what to merge:
+   * both are the agent's to fix. A
    * commit-msg hook judged the message and not the tree, so the message is written again with
    * what the hook said, and the line says so. The op is not run again when the fix is in: the fix
    * changes what the press was about, and the check after the turn offers the word on the new
@@ -438,7 +442,8 @@ export class Ship {
             ...(result.carried ? { carried: result.carried } : {}),
           }
         : null;
-    return failure && this.d.fix.report(wt.id, failure) ? { ...result, asked: true } : result;
+    const told = failure ? this.d.fix.report(wt.id, failure) : null;
+    return told === "sent" ? { ...result, asked: true } : told === "waits" ? { ...result, owed: true } : result;
   }
 
   /** A land pressed mid-turn was offered on the verdict's tree, and the agent can write a file
@@ -1043,7 +1048,9 @@ export class Ship {
   /** The turn a queued sync waited for is over. The queue is held here, inside the status
    * dispatch, so a message sent meanwhile waits for the sync rather than start a turn under the
    * carry; the op's own hold takes over once the sync is out, and the count lets this one go.
-   * Nobody pressed this, so a failure is said on the chat the way a daemon's own is. */
+   * Nobody pressed this, so a failure is said on the chat the way a daemon's own is, unless it
+   * is one the agent is owed: that one is on the chat already, and letting the queue go is what
+   * sends the agent its message. */
   syncAfterTurn(worktreeId: string): void {
     if (!this.syncQueued.has(worktreeId)) return;
     // an op still out on the row (a commit or land pressed under the turn) would refuse a second:
@@ -1057,7 +1064,7 @@ export class Ship {
       (async () => {
         try {
           const { result } = await this.sync(worktreeId, "auto");
-          if (!result.ok && !result.asked) this.d.hub.emit("failed", worktreeId, result.message);
+          if (!result.ok && !result.asked && !result.owed) this.d.hub.emit("failed", worktreeId, result.message);
         } catch (e) {
           this.d.hub.emit("failed", worktreeId, e instanceof Error ? e.message : String(e));
         } finally {

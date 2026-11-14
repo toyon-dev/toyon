@@ -271,7 +271,7 @@ export interface WorktreeServiceDeps {
    * service and the handlers, a test may leave it to the service */
   runs?: RunService;
   /** how a failure the agent can fix is sent to it */
-  fix: Pick<FixService, "report">;
+  fix: Pick<FixService, "report" | "ask">;
   /** what a worktree's preview page has thrown since it last loaded, as the paragraph a message
    * carries: a worktree made from a lead's box carries the lead's, since that is the preview the
    * person was looking at as they typed. Absent in tests. */
@@ -1299,6 +1299,10 @@ export class WorktreeService {
     const sessionId = this.d.state.session(worktreeId);
     const placed = repo.promptedAt;
     this.d.state.removeWorktree(worktreeId);
+    // In the same tick as the record goes: what waited on this worktree's landing is told by
+    // name, from the record in hand. A rows frame from anywhere else, in the awaits below, would
+    // otherwise find the wait stale first and lift it unnamed, with nobody started.
+    if (wt.kind === "worktree") this.d.hub.emit("gone", wt, archive);
     this.tree.forget(worktreeId);
     // the project took the row's send: told before the rows frame drops the row, so the switcher
     // never shows the project sinking and climbing back
@@ -2132,8 +2136,7 @@ export class WorktreeService {
       log: this.d.runtime.recentLogs(worktreeId),
     };
     if (!isLead(wt)) {
-      if (!this.d.fix.report(worktreeId, failure, { pressed: true }))
-        throw new UserError("worktree still starting; try again in a moment");
+      if (!this.d.fix.ask(worktreeId, failure)) throw new UserError("worktree still starting; try again in a moment");
       return;
     }
     await this.create(wt.repoId, fixPrompt(failure), {

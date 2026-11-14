@@ -100,6 +100,15 @@ describe("shellContext", () => {
       run("git status", "```\nclean\n```"),
     ];
     expect(shellContext(chat)).toEndWith("printed:\n$ git status\nclean");
+    // so is a row the daemon wrote down as a failure the agent is owed: it rides behind the
+    // message from the daemon's side, and attached here it would be said twice
+    const owed: ChatItem[] = [
+      user("hi"),
+      { ...(run("bun run check", "```\n2 errors\n```\nexit 1") as Extract<ChatItem, { kind: "tool" }>), owed: true },
+      run("git status", "```\nclean\n```"),
+    ];
+    expect(shellContext(owed)).not.toContain("bun run check");
+    expect(shellContext(owed)).toEndWith("printed:\n$ git status\nclean");
   });
 
   test("the repo's check rides along too, so 'fix it' after a failed check carries the failure", () => {

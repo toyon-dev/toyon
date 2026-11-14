@@ -4,6 +4,7 @@ import {
   ambientBlock,
   buildPrompt,
   fileCaption,
+  fixTo,
   handedPrompt,
   handoffActedPrompt,
   handoffDeclinedContext,
@@ -11,6 +12,9 @@ import {
   pasteCaption,
   pickCaption,
   pieceAskPrompt,
+  pieceDroppedContext,
+  pieceGoneContext,
+  pieceGonePrompt,
   pieceLandedContext,
   pieceSendPrompt,
   pieceWakePrompt,
@@ -193,14 +197,35 @@ describe("prompts for work in another project", () => {
     expect(pieceWakePrompt([{ title: "First", branch: "acp/first", project: "acp", pieces: ["Mine"] }])).toBe(
       'The branch your own piece "Mine" waited for, "First" (acp/first), has landed on main in the project acp. Do "Mine" here now, and only that. What "First" landed is readable on main now.',
     );
-    // a piece sent into an open worktree: the same ask, with the word that the landing may not hold it
-    expect(pieceWakePrompt([{ title: "Composer", branch: "toyon/composer", pieces: [], sent: true }])).toBe(
-      'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; check that the landing holds the piece. Nothing here was set to wait for it. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it. What "Composer" landed is readable on main now, and Toyon rebases onto main when this lands.',
+    // a wait recorded without its pieces still says what to do
+    expect(pieceWakePrompt([{ title: "First", branch: "toyon/first", pieces: [] }])).toContain(
+      'your own piece waited for, "First" (toyon/first), has landed on this project\'s main. Do the piece that waited here now, and only that.',
     );
-    // work handed off with nothing set to wait: the agent brings in line what depends on it and reports
+  });
+
+  test("a landing nothing waited on asks for a check against the piece this chat wrote", () => {
+    // work handed off with nothing set to wait: compare with the piece first, and bring in line
+    // what depends on it as the lesser clause
     expect(pieceWakePrompt([{ title: "Docs", branch: "toyon/docs", project: "toyon", pieces: [], handed: true }])).toBe(
-      'The work this worktree handed off, "Docs" (toyon/docs), has landed on main in the project toyon. Nothing here was set to wait for it. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it. What "Docs" landed is readable on main now.',
+      'The work this worktree handed off, "Docs" (toyon/docs), has landed on main in the project toyon. Nothing here was set to wait for it. Compare what landed with the piece this chat wrote for it, and say what is missing or different; if the landing holds the piece, say so in one line. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line, and only that; otherwise change nothing. What "Docs" landed is readable on main now.',
     );
+    // a piece sent into an open worktree: the same ask, since the landing is more than the piece
+    expect(pieceWakePrompt([{ title: "Composer", branch: "toyon/composer", pieces: [], sent: true }])).toBe(
+      'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; the landing is that worktree\'s own work, and the piece is one part of it. Nothing here was set to wait for it. Compare what landed with the piece this chat wrote for it, and say what is missing or different; if the landing holds the piece, say so in one line. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line, and only that; otherwise change nothing. What "Composer" landed is readable on main now, and Toyon rebases onto main when this lands.',
+    );
+    // the file the piece sits on is named, so the agent does not hunt for what it wrote turns ago
+    expect(
+      pieceWakePrompt([{ title: "Docs", branch: "toyon/docs", pieces: [], handed: true, brief: ".toyon/plans/3.md" }]),
+    ).toContain("with the piece this chat wrote for it, which is in .toyon/plans/3.md, and say what is missing");
+    // two at once: each against its own piece, the pages named once
+    const two = pieceWakePrompt([
+      { title: "Docs", branch: "toyon/docs", pieces: [], handed: true, brief: ".toyon/plans/3.md" },
+      { title: "Composer", branch: "toyon/composer", pieces: [], sent: true, brief: ".toyon/plans/3.md" },
+    ]);
+    expect(two).toContain(
+      "Nothing here was set to wait for them. Compare what each landed with the piece this chat wrote for it (the pieces are in .toyon/plans/3.md), and say what is missing or different; where a landing holds its piece, say so in one line.",
+    );
+    expect(two).not.toContain("check that the landing holds the piece");
     // beside a landing that was waited for, the piece that waited is the work
     const mixed = pieceWakePrompt([
       { title: "Docs", branch: "toyon/docs", pieces: [], handed: true },
@@ -211,9 +236,62 @@ describe("prompts for work in another project", () => {
     );
     expect(mixed).toContain('Do "Mine" here now, and only that.');
     expect(mixed).not.toContain("Nothing here was set to wait");
-    // a wait recorded without its pieces still says what to do
-    expect(pieceWakePrompt([{ title: "First", branch: "toyon/first", pieces: [] }])).toContain(
-      'your own piece waited for, "First" (toyon/first), has landed on this project\'s main. Do the piece that waited here now, and only that.',
+    expect(mixed).not.toContain("Compare what landed");
+    // with a piece of its own to do, a sent piece keeps the one line that asks for the check
+    expect(
+      pieceWakePrompt([
+        { title: "Composer", branch: "toyon/composer", pieces: [], sent: true },
+        { title: "First", branch: "toyon/first", pieces: ["Mine"] },
+      ]),
+    ).toStartWith(
+      'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; check that the landing holds the piece.',
+    );
+  });
+
+  test("a worktree gone before it landed is said by the stake this one had in it", () => {
+    const waited = { title: "First", archived: true as const, awaited: true as const, pieces: ["Mine"] };
+    expect(pieceGoneContext(waited)).toBe(
+      'The worktree your own piece "Mine" waited for, "First", was archived before it landed, so its work is not on main and the piece no longer waits.',
+    );
+    // the message that starts the agent says the same, and leaves the piece to its judgement
+    expect(pieceGonePrompt([waited])).toBe(
+      'The worktree your own piece "Mine" waited for, "First", was archived before it landed, so its work is not on main and the piece no longer waits. If the piece can be done without that work, do it here now, and only that; if it cannot, say what is missing and change nothing.',
+    );
+    // more than one piece, and a worktree removed with nothing kept, which has no name left
+    expect(pieceGonePrompt([{ awaited: true, pieces: ["Mine", "Mine too"] }])).toBe(
+      'The worktree your own pieces "Mine", "Mine too" waited for was removed before it landed, so its work is not on main and the pieces no longer wait. Where a piece can be done without that work, do it here now, and only that; where it cannot, say what is missing and change nothing.',
+    );
+    expect(pieceGoneContext({ awaited: true })).toStartWith("The worktree your own piece waited for was removed");
+    // a worktree made from a piece, and one a piece was sent into: only news
+    expect(pieceGoneContext({ title: "Docs", archived: true })).toBe(
+      'The worktree made from your piece, "Docs", was archived before it landed; its work is not on main.',
+    );
+    expect(pieceGoneContext({ title: "Composer", archived: true, sent: true })).toBe(
+      'The worktree this one sent a piece to, "Composer", was archived before it landed; its work, and the piece with it, is not on main.',
+    );
+  });
+
+  test("a queued piece dropped is said in the daemon's own reason", () => {
+    expect(pieceDroppedContext("Later", 'the worktree it waited for, "First", is gone')).toBe(
+      'Your queued piece "Later" was dropped: the worktree it waited for, "First", is gone.',
+    );
+    expect(pieceDroppedContext(undefined, "the project is no longer open in Toyon.")).toBe(
+      "A piece you queued was dropped: the project is no longer open in Toyon.",
+    );
+  });
+});
+
+describe("fixTo", () => {
+  test("says what the agent is to do, as the reason Toyon's own message is given for", () => {
+    const run = { toolId: "t", command: "c", text: "" };
+    expect(fixTo({ kind: "check", ...run })).toBe("to fix the failed check");
+    expect(fixTo({ kind: "hook", hook: "pre-push", ...run })).toBe("to fix what the pre-push hook refused");
+    expect(fixTo({ kind: "conflict", base: "main", how: "rebase" })).toBe(
+      "to rebase onto main and resolve the conflicts",
+    );
+    expect(fixTo({ kind: "conflict", base: "main", how: "merge" })).toBe("to merge main in and resolve the conflicts");
+    expect(fixTo({ kind: "conflict", base: "main", how: "rebase", carried: ["a.ts"] })).toBe(
+      "to resolve the conflicts between the uncommitted changes and main",
     );
   });
 });

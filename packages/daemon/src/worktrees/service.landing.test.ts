@@ -1,10 +1,12 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHELL_TOOL } from "@toyon/shared";
+import { CHECK_TOOL, SHELL_TOOL } from "@toyon/shared";
 import type { FakeAgent } from "../../test/helpers/fakes.ts";
 import { sh } from "../../test/helpers/tmp-repo.ts";
 import { counted, registered, setRoute, settle, until, useWorld, w } from "../../test/helpers/world.ts";
+import { carried, sentence } from "../agent/news.ts";
+import { formatOutput } from "../agent/output.ts";
 import { fixPrompt } from "../agent/prompt.ts";
 import { UserError } from "../core/errors.ts";
 import { GIT, git } from "../git/exec.ts";
@@ -298,13 +300,23 @@ describe("landing", () => {
     });
     sh(w.repo, "git", "config", "core.hooksPath", hooks);
   };
-  const recorded = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).recorded;
+  /** the rows the daemon left on the chat: not the record of a failure, which draws nothing, or
+   * the message Toyon sent for it */
+  const recorded = (id: string) =>
+    (w.runtime.agentFor(id) as unknown as FakeAgent).recorded.filter(
+      (e) => e.type !== "failure" && e.type !== "fix-asked",
+    );
   /** what the agent was sent after the message that made the worktree, and its words alone */
   const sent = (id: string) =>
     (w.runtime.agentFor(id) as unknown as FakeAgent).sent.slice(1).map(({ text, asked }) => ({ text, asked }));
   const asked = (id: string) => sent(id).map((m) => m.text);
-  /** what Toyon attached behind its last message: the failed command and what it printed */
-  const shown = (id: string) => (w.runtime.agentFor(id) as unknown as FakeAgent).sent.at(-1)?.context;
+  /** what rides behind Toyon's last message as the news it was sent for: the failed command and
+   * what it printed, read off the transcript the way the session reads it as the message goes */
+  const shown = (id: string) => {
+    const entries = (w.runtime.agentFor(id) as unknown as FakeAgent).transcript();
+    const message = entries.findLast((e) => e.event.type === "fix-asked");
+    return message ? carried(entries, message.seq).flatMap((n) => sentence(n, { said: true }) ?? []) : [];
+  };
   /** a failed command for a prompt that only names it: the row and the output are not in its words */
   const ran = (command = "") => ({ toolId: "t", command, text: "" });
   const row = expect.any(String);
@@ -328,7 +340,7 @@ describe("landing", () => {
     expect(sent(wt.id)).toEqual([
       {
         text: fixPrompt({ kind: "hook", hook: "pre-commit", ...ran() }),
-        asked: { kind: "hook", why: "the pre-commit hook refused the commit", toolId: row },
+        asked: { kind: "news", why: "to fix what the pre-commit hook refused", toolId: row },
       },
     ]);
     // the commit was pressed on this row, so it moved up the rail like a send's
@@ -360,7 +372,7 @@ describe("landing", () => {
     const { result } = await w.worktrees.land(wt.id);
     expect(result).toMatchObject({ ok: false, asked: true });
     expect(result.message).toMatch(/^merge refused: /);
-    expect(sent(wt.id)).toMatchObject([{ asked: { kind: "hook", why: expect.stringContaining("pre-merge-commit") } }]);
+    expect(sent(wt.id)).toMatchObject([{ asked: { kind: "news", why: expect.stringContaining("pre-merge-commit") } }]);
     // the merge the hook stopped is aborted: left in progress, it would refuse every land after it
     expect(existsSync(join(w.repo, ".git", "MERGE_HEAD"))).toBe(false);
     expect((await git(w.repo, "rev-parse", "main")).out).toBe(main);
@@ -373,24 +385,29 @@ describe("landing", () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
-    // a fake records no turns, so each message is put on its transcript the way a session would
-    const heard = () => {
-      const m = agent.sent.at(-1)!;
-      agent.note(
-        m.asked
-          ? { type: "fix-asked", text: m.text, ts: 1, ...m.asked }
-          : { type: "user-message", text: m.text, ts: 1 },
-      );
-    };
+    // a fake records no turns, so the person's message is put on its transcript the way a
+    // session would; Toyon's own for the news is recorded by the fake as it sends it
+    const heard = () => agent.note({ type: "user-message", text: agent.sent.at(-1)!.text, ts: 1 });
     const check = fixPrompt({ kind: "check", ...ran("bun run check") });
-    const failed = (n: number) => ({ toolId: `check-${n}`, command: "bun run check", text: `${n} errors\n` });
+    // the check as its row holds it, which is where the message for it reads what it printed
+    const failed = (n: number) => {
+      const run = { toolId: `check-${n}`, command: "bun run check", text: `${n} errors\n` };
+      agent.note({ type: "tool-start", toolId: run.toolId, name: CHECK_TOOL, input: { command: run.command } });
+      agent.note({
+        type: "tool-end",
+        toolId: run.toolId,
+        output: formatOutput(run.text, 1, false),
+        isError: true,
+        fixable: { kind: "check" },
+      });
+      return run;
+    };
     w.hub.emit("checkFailed", wt.id, failed(1));
     expect(sent(wt.id)).toEqual([
-      { text: check, asked: { kind: "check", why: "the check failed", toolId: "check-1" } },
+      { text: check, asked: { kind: "news", why: "to fix the failed check", toolId: "check-1" } },
     ]);
     // what the check printed goes with the message: nothing else puts it in front of the agent
     expect(shown(wt.id)).toEqual(["What Toyon ran, and what it printed:\n$ bun run check\n1 errors"]);
-    heard();
     // the fix turn ends in the same check: a second failure waits for the person
     w.hub.emit("checkFailed", wt.id, failed(2));
     expect(asked(wt.id)).toEqual([check]);
@@ -463,7 +480,7 @@ describe("landing", () => {
     expect(sent(wt.id)).toEqual([
       {
         text: fixPrompt({ kind: "hook", hook: "pre-push", ...ran() }),
-        asked: { kind: "hook", why: "the pre-push hook refused the push", toolId: row },
+        asked: { kind: "news", why: "to fix what the pre-push hook refused", toolId: row },
       },
     ]);
     const rows = recorded(wt.id);
@@ -594,7 +611,7 @@ describe("landing", () => {
     expect(sent(wt.id)).toEqual([
       {
         text: fixPrompt({ kind: "conflict", base: "main", how: "rebase", step: ran() }),
-        asked: { kind: "conflict", why: "the branch needs a rebase onto main", toolId: row },
+        asked: { kind: "news", why: "to rebase onto main and resolve the conflicts", toolId: row },
       },
     ]);
     expect((await git(wt.path, "status", "--porcelain")).out).toBe("");
@@ -902,7 +919,7 @@ describe("landing", () => {
       expect(sent(wt.id)).toEqual([
         {
           text: fixPrompt({ kind: "conflict", base: "main", how: "rebase", carried: ["README.md"] }),
-          asked: { kind: "conflict", why: "the uncommitted changes conflict with main" },
+          asked: { kind: "news", why: "to resolve the conflicts between the uncommitted changes and main" },
         },
       ]);
       expect(sent(wt.id)[0]?.text).toContain("the conflicts are in the uncommitted changes, in README.md");
@@ -1025,6 +1042,27 @@ describe("landing", () => {
       expect(failed[0]).toContain("(loose.txt)");
       await until(() => !agent.held);
       expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
+      await noTrace(wt.path);
+    });
+
+    test("a queued sync that conflicts is the agent's once the queue lets go, with no line of the daemon's own", async () => {
+      const wt = await dirtyWorktree();
+      // main moves a file the uncommitted work here changed
+      writeFileSync(join(wt.path, "README.md"), "mine, uncommitted\n");
+      mainMoves("README.md", "main's\n");
+      const failed: string[] = [];
+      w.hub.on("failed", (_id, message) => failed.push(message));
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      status(agent, "working");
+      await w.worktrees.sync(wt.id);
+      status(agent, "idle");
+      // written while the sync still held the queue, and sent as the hold let go
+      await until(() => sent(wt.id).length === 1);
+      expect(sent(wt.id)[0]?.asked).toMatchObject({ kind: "news" });
+      expect(sent(wt.id)[0]?.text).toContain("the conflicts are in the uncommitted changes");
+      expect(agent.held).toBe(false);
+      await settle();
+      expect(failed).toEqual([]);
       await noTrace(wt.path);
     });
 

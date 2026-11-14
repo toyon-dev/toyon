@@ -1,15 +1,18 @@
 // The one place a failure is answered. Whoever meets one (a landing op, the check after a turn, a
 // press on the boot pane or on a failed command's offer) names it as a Failure and reports it
-// here; the table says what follows. An ask is Toyon's own message to the agent, so the
-// transcript shows what failed where a bubble nobody typed would have stood. An offer is the same
-// ask waiting for a press. The press that sends the agent on after a stop or an error is answered
-// here too: not a failure to fix, but the same kind of message, Toyon's own and shown as its reason.
+// here; the table says what follows. A failure that is the agent's to fix is written on the chat
+// as news it is owed, and the message for it is the session's to send (agent/news.ts): nothing
+// here sends the agent a message for a fact. A press is a person asking, and that is sent from
+// here as Toyon's own message, so the transcript shows what failed where a bubble nobody typed
+// would have stood. The press that sends the agent on after a stop or an error is answered here
+// too: not a failure to fix, but the same kind of message, Toyon's own and shown as its reason.
 
-import type { Asked } from "@toyon/shared";
+import type { AgentEvent, Failed } from "@toyon/shared";
 import { isMain } from "@toyon/shared";
-import { unformatOutput } from "../agent/output.ts";
+import type { AgentAdapter } from "../agent/adapter.ts";
+import { rowFailure } from "../agent/failure.ts";
+import { untold } from "../agent/news.ts";
 import {
-  type FailedRun,
   type Failure,
   failedRun,
   failureContext,
@@ -17,9 +20,10 @@ import {
   fixWhy,
   goOnPrompt,
   goOnWhy,
+  type OwnFailure,
   type Stop,
 } from "../agent/prompt.ts";
-import type { TranscriptEntry } from "../agent/transcript.ts";
+import { isMessage, type TranscriptEntry } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
 import type { StateStore } from "../core/state.ts";
@@ -31,36 +35,37 @@ export interface FixServiceDeps {
   runtime: Pick<RuntimeRegistry, "agentFor">;
 }
 
-/** What follows a failure. `ask` sends the agent the turn that fixes it, unasked; `offer` sends
- * nothing until a person presses for it. `once`: not twice in a row, for an ask that nobody
- * pressed. That is the check's alone: the turn sent to fix it ends in the same check, and an
- * agent that cannot make it pass would go round for good. A hook or a conflict comes back only
- * through another press of commit, land or sync, so a cap there would drop the second refusal
- * with nobody told.
+/** What follows a failure. `tell` writes it on the chat as news the agent is owed: Toyon sends
+ * the message that fixes it once the agent is at rest, unasked, or it rides a message of the
+ * person's that goes first, and the check is told that way once and not twice in a row
+ * (agent/news.ts). `offer` does nothing until a person presses for it.
  *
- * A person's own command is offered and never sent: many fail on purpose. A dev server that is
+ * A person's own command is offered and never told: many fail on purpose. A dev server that is
  * down is offered by the boot pane's own button. */
-export const RESPONSE: Record<Failure["kind"], { does: "ask" | "offer"; once?: true }> = {
-  hook: { does: "ask" },
-  conflict: { does: "ask" },
-  check: { does: "ask", once: true },
-  command: { does: "offer" },
-  preview: { does: "offer" },
+export const RESPONSE: Record<Failure["kind"], "tell" | "offer"> = {
+  hook: "tell",
+  conflict: "tell",
+  check: "tell",
+  command: "offer",
+  preview: "offer",
 };
-
-/** what the last message on a transcript was sent to fix, when it was Toyon's own */
-function lastAsked(entries: readonly TranscriptEntry[]): Asked["kind"] | undefined {
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i]!.event;
-    if (e.type === "fix-asked") return e.kind;
-    if (e.type === "user-message" || e.type === "handed") return undefined;
-  }
-  return undefined;
-}
 
 /** the row was handed to the agent already */
 function askedFor(entries: readonly TranscriptEntry[], toolId: string): boolean {
   return entries.some(({ event }) => event.type === "fix-asked" && event.toolId === toolId);
+}
+
+/** a failure as the chat's record keeps it: the row it is about, and no copy of what was printed */
+function recordOf(f: OwnFailure): Failed {
+  if (f.kind === "check") return { kind: "check", toolId: f.toolId };
+  if (f.kind === "hook") return { kind: "hook", hook: f.hook, toolId: f.toolId };
+  return {
+    kind: "conflict",
+    base: f.base,
+    how: f.how,
+    ...(f.step ? { toolId: f.step.toolId } : {}),
+    ...(f.carried ? { carried: f.carried } : {}),
+  };
 }
 
 /** How the chat ends, when it ends on a turn that was stopped or that failed and nothing has been
@@ -72,31 +77,13 @@ function askedFor(entries: readonly TranscriptEntry[], toolId: string): boolean 
 export function lastStop(entries: readonly TranscriptEntry[]): Stop | null {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
-    if (e.type === "usage" || e.type === "session-info") continue;
+    // nor is a failure's record, which draws nothing on the chat
+    if (e.type === "usage" || e.type === "session-info" || e.type === "failure") continue;
     if (e.type === "turn-end" && (e.stopReason === "failed" || e.stopReason === "auth" || e.stopReason === "lost"))
       continue;
     if (e.type === "turn-end" && e.stopReason === "interrupted") return { kind: "stopped" };
     if (e.type === "agent-error") return { kind: "failed", error: e.message };
     return null;
-  }
-  return null;
-}
-
-/** The failure a fixable row stands for, rebuilt from what the transcript holds: the command its
- * start named and the output its end kept. Null for a row that is not there or that the daemon
- * never marked: the mark is the daemon's own word, and a row's name is not. */
-function failureOf(entries: readonly TranscriptEntry[], toolId: string): Failure | null {
-  let command: string | undefined;
-  for (const { event } of entries) {
-    if (event.type === "tool-start" && event.toolId === toolId) {
-      const input = event.input as { command?: unknown } | null;
-      command = typeof input?.command === "string" ? input.command : undefined;
-    } else if (event.type === "tool-end" && event.toolId === toolId) {
-      if (!event.fixable || command === undefined) return null;
-      const run: FailedRun = { toolId, command, text: unformatOutput(event.output ?? "") };
-      if (event.fixable.kind === "hook") return { kind: "hook", hook: event.fixable.hook ?? "git", ...run };
-      return { kind: event.fixable.kind, ...run };
-    }
   }
   return null;
 }
@@ -108,24 +95,50 @@ export class FixService {
     });
   }
 
-  /** A failure met on a worktree, answered by the table. True when the agent was sent the
-   * message that fixes it, which is not the person's send, and the rail does not move for it.
-   * False when nothing was sent: the table offers this one and nobody pressed, nothing runs on
-   * main, there is no agent here, the same failure was asked about straight before (`once`; the
-   * transcript is the count, and the next ask waits for a message that is not one), or the row
-   * was handed over already. `pressed` is a person asking for the fix: it sends what the table
-   * only offers, and it is not held to `once`. */
-  report(worktreeId: string, failure: Failure, opts: { pressed?: boolean } = {}): boolean {
-    const response = RESPONSE[failure.kind];
-    if (response.does === "offer" && !opts.pressed) return false;
+  /** The agent a failure on this worktree is told to, or null: nothing runs on main, and a
+   * worktree still starting has none. */
+  private agentOf(worktreeId: string): AgentAdapter | null {
     const wt = this.d.state.worktree(worktreeId);
-    if (!wt || isMain(wt)) return false;
-    const agent = this.d.runtime.agentFor(worktreeId);
-    if (!agent) return false;
-    const entries = agent.transcript();
-    if (response.once && !opts.pressed && lastAsked(entries) === failure.kind) return false;
+    if (!wt || isMain(wt)) return null;
+    return this.d.runtime.agentFor(worktreeId) ?? null;
+  }
+
+  /** A failure met on a worktree, answered by the table: one that is the agent's to fix is
+   * written on its chat, and the session sends the message for it. `sent` when that message went
+   * as the failure was written, which is not the person's send, and the rail does not move for
+   * it. `waits` when the failure is written and the agent has not been told yet: a card is up,
+   * a turn is running, the row is held, or the check failed straight after a message about the
+   * check. Null when nothing is owed: the table offers this one, nothing runs on main, there is
+   * no agent here, the row was handed over already, or the row is not on the chat to show. */
+  report(worktreeId: string, failure: Failure): "sent" | "waits" | null {
+    if (failure.kind === "command" || failure.kind === "preview") return null;
+    const agent = this.agentOf(worktreeId);
+    if (!agent) return null;
     const toolId = failedRun(failure)?.toolId;
-    if (toolId && askedFor(entries, toolId)) return false;
+    if (toolId && askedFor(agent.transcript(), toolId)) return null;
+    const event: AgentEvent = { type: "failure", ts: Date.now(), ...recordOf(failure) };
+    agent.note(event);
+    // told is read the way news reads it: a message went to the agent after the record
+    const entries = agent.transcript();
+    const at = entries.findLastIndex((e) => e.event === event);
+    if (entries.slice(at + 1).some((e) => isMessage(e.event))) {
+      this.d.hub.emit("fixAsked", worktreeId);
+      return "sent";
+    }
+    // a check or a hook whose row is not on the chat leaves nothing to show the agent, and is
+    // no news: nothing waits
+    return untold(entries).some((n) => n.event === event) ? "waits" : null;
+  }
+
+  /** A person asking for the fix: the message goes now, as Toyon's own, for a failure the table
+   * only offers as much as for one it tells, and the check's once does not hold it back. False
+   * when nothing was sent: nothing runs on main, there is no agent here, or the row was handed
+   * over already. */
+  ask(worktreeId: string, failure: Failure): boolean {
+    const agent = this.agentOf(worktreeId);
+    if (!agent) return false;
+    const toolId = failedRun(failure)?.toolId;
+    if (toolId && askedFor(agent.transcript(), toolId)) return false;
     const context = failureContext(failure);
     agent.send(fixPrompt(failure), {
       asked: { kind: failure.kind, why: fixWhy(failure), ...(toolId ? { toolId } : {}) },
@@ -142,10 +155,10 @@ export class FixService {
     const agent = this.d.runtime.agentFor(worktreeId);
     if (!agent) throw new UserError("worktree still starting; try again in a moment");
     const entries = agent.transcript();
-    const failure = failureOf(entries, toolId);
+    const failure = rowFailure(entries, toolId);
     if (!failure) throw new UserError("nothing to fix on that row");
     if (askedFor(entries, toolId)) return;
-    if (!this.report(worktreeId, failure, { pressed: true })) throw new UserError("nothing runs on main");
+    if (!this.ask(worktreeId, failure)) throw new UserError("nothing runs on main");
   }
 
   /** The press that sends the agent on after a stop or an error: Toyon's own message, read off

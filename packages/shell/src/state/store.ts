@@ -165,6 +165,10 @@ export type ChatItem =
       until?: number;
       /** the daemon ran this command and it failed in a way the agent can be asked to fix */
       fixable?: Fixable;
+      /** the daemon wrote the failure on the chat as the agent's to fix: it tells the agent what
+       * the row printed itself, with its own message or behind the person's next one, so the
+       * box does not attach the row again */
+      owed?: true;
       /** the call never ran: a steered message cut the agent off writing it (no row; group.ts) */
       cut?: true;
     }
@@ -174,14 +178,17 @@ export type ChatItem =
   /** the turn was stopped here: what the agent had got to is the rows above. By a press, or, with
    * `by`, by the agent of the chat this worktree's piece came from */
   | { kind: "stopped"; by?: StoppedBy; seq?: number }
-  /** a message Toyon sent the agent itself, as the reason it was sent: what failed. `about` is
-   * the kind of thing it was sent for, which is how the box knows a press went on after an error */
+  /** a message Toyon sent the agent because a person pressed for it, as the reason it was sent:
+   * what failed, or the stop it goes on from. `about` is the kind of thing it was sent for, which
+   * is how the box knows a press went on after an error */
   | { kind: "asked"; about: Asked["kind"]; why: string; toolId?: string }
-  /** a message Toyon sent the agent for what became of the work handed off: nothing failed and
-   * nobody asked, so it is drawn as a message. `from` is the worktrees whose landing it is for,
-   * named as who it is from; without them the row names no sender. `why` is what the agent is to do,
-   * as the daemon worded it to follow that, and `text` what the agent was sent. */
-  | { kind: "news"; why: string; text: string; from?: NewsFrom[]; ts: number }
+  /** a message Toyon sent the agent on its own, for what it had not been told: what became of the
+   * work handed off, or a failure that is the agent's to fix. Nobody asked, so it is drawn as a
+   * message. `from` is the worktrees whose landing it is for, named as who it is from; without
+   * them the row names no sender. `why` is what the agent is to do, as the daemon worded it to
+   * follow that, and `text` what the agent was sent. `toolId` is the row of a failed command the
+   * message was sent to fix. */
+  | { kind: "news"; why: string; text: string; from?: NewsFrom[]; toolId?: string; ts: number }
   | { kind: "blocked"; tool: string; path: string; reason: string }
   /** a divider: what follows was said in another worktree, grafted in here */
   | { kind: "grafted"; title: string; branch: string }
@@ -284,6 +291,19 @@ export type ChatItem =
        * to where it was answered, below the turn that proposed it, with the answer as the person's
        * bubble */
       answered?: { go: boolean; note?: string };
+      ts: number;
+    }
+  /** a worktree this one had a stake in went away before it landed: one a here piece waited for
+   * (`awaited`, with the `pieces` that wait no longer), one a piece from here was sent into, or
+   * one made from a piece of this chat's work */
+  | {
+      kind: "piece-gone";
+      worktreeId: string;
+      title?: string;
+      archived?: true;
+      awaited?: true;
+      sent?: true;
+      pieces?: string[];
       ts: number;
     }
   /** a queued piece's turn came, long after its list: its worktree is made, or it never will be */
@@ -3761,7 +3781,9 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       // Toyon's own message is the reason it was sent, not a bubble: nobody typed it
       if (event.kind === "news") {
         const from = event.from?.length ? { from: event.from } : {};
-        return [...items, { kind: "news", why: event.why, text: event.text, ...from, ts: event.ts }];
+        // the row of a failed command the message was sent to fix, which is then offered no more
+        const fixes = event.toolId ? { toolId: event.toolId } : {};
+        return [...items, { kind: "news", why: event.why, text: event.text, ...from, ...fixes, ts: event.ts }];
       }
       return [
         ...items,
@@ -3887,6 +3909,13 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
       };
       return next;
     }
+    case "failure": {
+      // nothing of its own on the chat: the row that failed is above, and learns here that the
+      // daemon is the one telling the agent about it
+      const idx = event.toolId ? items.findLastIndex((i) => i.kind === "tool" && i.id === event.toolId) : -1;
+      if (idx === -1) return items;
+      return items.with(idx, { ...(items[idx] as Extract<ChatItem, { kind: "tool" }>), owed: true });
+    }
     case "agent-error":
       // a failure's turn-end follows the row and closes what the failure cut; a row mid-turn (an
       // agent that took the text and not the image) closes nothing.
@@ -3930,6 +3959,20 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ...(event.again ? { again: true } : {}),
           ...(event.awaited ? { awaited: true } : {}),
           ...(event.sent ? { sent: true } : {}),
+          ts: event.ts,
+        },
+      ];
+    case "piece-gone":
+      return [
+        ...items,
+        {
+          kind: "piece-gone",
+          worktreeId: event.worktreeId,
+          ...(event.title ? { title: event.title } : {}),
+          ...(event.archived ? { archived: true } : {}),
+          ...(event.awaited ? { awaited: true } : {}),
+          ...(event.sent ? { sent: true } : {}),
+          ...(event.pieces?.length ? { pieces: event.pieces } : {}),
           ts: event.ts,
         },
       ];

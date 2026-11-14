@@ -256,6 +256,10 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // the fetch this costs is the one the plus is allowed
     const wt = msg.worktreeId ? s.state.worktree(msg.worktreeId) : undefined;
     if (wt && isLead(wt)) fireAndForget(wt.repoId, s.worktrees.syncTrunk(wt.repoId), "trunk sync");
+    // A look, not a subscription: a page keeps its last few rows subscribed and re-asserts them
+    // all on a reconnect, which would start every one of them as a daemon comes up. The agent is
+    // there already, made by the subscribe the page sends ahead of its look.
+    if (wt) s.runtime.agentFor(wt.id)?.opened();
   },
 
   seen(msg, _ctx, s) {

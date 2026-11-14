@@ -38,13 +38,26 @@ export class FakeAgent implements AgentAdapter {
    * message for what the agent has not been told, once it is at rest. What the session adds, the
    * queue and the cards, has its own tests. */
   private pumpNews() {
-    if (isBusy(this.status_)) return;
+    if (isBusy(this.status_) || this.held) return;
     const news = newsToSend(this.transcript(), { from: this.told, rest: this.atRest() });
-    if (news)
-      this.send(news.text, {
-        asked: { kind: "news", why: news.why, ...(news.from ? { from: news.from } : {}) },
-        keepCards: true,
-      });
+    if (!news) return;
+    const asked = {
+      kind: "news" as const,
+      why: news.why,
+      ...(news.from ? { from: news.from } : {}),
+      ...(news.toolId ? { toolId: news.toolId } : {}),
+    };
+    this.send(news.text, { asked, keepCards: true });
+    // Toyon's own message is on the transcript as it goes, as the session records it: what reads
+    // the transcript for whether the agent was told (a failure's report) finds it there
+    this.recorded.push({ type: "fix-asked", text: news.text, ts: Date.now(), ...asked });
+    this.told = this.recorded.length;
+  }
+  /** how many times the chat was opened */
+  opens = 0;
+  opened() {
+    this.opens++;
+    this.pumpNews();
   }
   stopping = false;
   holding = 0;
@@ -120,6 +133,8 @@ export class FakeAgent implements AgentAdapter {
       released = true;
       this.open--;
       this.held = this.open > 0;
+      // the queue let go is a moment untold news goes, as in the session
+      this.pumpNews();
     };
   }
   /** who asked for each stop another chat's agent asked for */

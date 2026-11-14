@@ -48,7 +48,7 @@ import {
   type ToolItem,
 } from "./group.ts";
 import { HandedRow, NewsRow } from "./HandedRow.tsx";
-import { HandoffRow, PieceLandedRow, PieceLaterRow } from "./HandoffRow.tsx";
+import { HandoffRow, PieceGoneRow, PieceLandedRow, PieceLaterRow } from "./HandoffRow.tsx";
 import { handoffPage, handoffSaid } from "./handoff.ts";
 import { SentImageChip } from "./ImageChip.tsx";
 import { MentionText, openMention } from "./Mentions.tsx";
@@ -1432,6 +1432,8 @@ export const ChatItemView = memo(function ChatItemView({
     }
     case "piece-later":
       return <PieceLaterRow item={item} />;
+    case "piece-gone":
+      return <PieceGoneRow item={item} />;
     case "restored":
       return <RestoredRow item={item} />;
     case "adopted":

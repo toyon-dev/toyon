@@ -83,11 +83,12 @@ export function HandedRow({
   );
 }
 
-/** A message Toyon sent the agent itself, for news of the work handed off that gives it
- * something to do. One for a landing elsewhere is from the chat that landed, to the person
- * reading: that chat reporting back, so the row names it as a sent piece's row names its origin.
- * One for an answer on Toyon's own card has no other chat behind it and names no sender: every
- * row here is Toyon's, and a chip for this chat would name the row the reader is in. The row
+/** A message Toyon sent the agent on its own, for something that gives it work to do: news of
+ * what it handed off, or a failure that is its to fix. One for a landing elsewhere is from the
+ * chat that landed, to the person reading: that chat reporting back, so the row names it as a
+ * sent piece's row names its origin. One for an answer on Toyon's own card, a failure or a
+ * worktree gone has no other chat behind it and names no sender: every row here is Toyon's,
+ * and a chip for this chat would name the row the reader is in. The row
  * opens what the agent was sent, since the reply under it answers words the chat shows nowhere
  * else. */
 export function NewsRow({

@@ -52,14 +52,15 @@ export function ranClean(items: ChatItem[]): boolean {
 /** the commands run since the person's last message, with what they printed, for the agent to
  * read with the next one: `!git log` followed by "why did this break" is the point of the mode.
  * Nothing older: that was answered already, or belongs to a question that has moved on. Nor a row
- * Toyon's own message was sent to fix, whose output went to the agent with that message. */
+ * Toyon's own message was sent to fix, whose output went to the agent with that message, or one
+ * the daemon wrote down as a failure the agent is owed: the daemon carries that one itself. */
 export function shellContext(chat: ChatItem[]): string | undefined {
   const runs: string[] = [];
-  const asked = new Set(chat.flatMap((i) => (i.kind === "asked" && i.toolId ? [i.toolId] : [])));
+  const asked = new Set(chat.flatMap((i) => ((i.kind === "asked" || i.kind === "news") && i.toolId ? [i.toolId] : [])));
   for (let i = chat.length - 1; i >= 0; i--) {
     const item = chat[i]!;
     if (startsTurn(item)) break;
-    if (item.kind !== "tool" || !item.done || asked.has(item.id)) continue;
+    if (item.kind !== "tool" || !item.done || item.owed || asked.has(item.id)) continue;
     const command = commandOf(item);
     if (command === null) continue;
     const text = parseToolOutput(item.output ?? "")

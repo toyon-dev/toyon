@@ -656,12 +656,16 @@ describe("go", () => {
     await until(() => agentOf(a.id).sent.length === before + 1);
     const woke = agentOf(a.id).sent.at(-1)!;
     expect(woke.text).toContain(
-      'The worktree this one sent a piece to, "Composer" (toyon/composer), has landed on this project\'s main; check that the landing holds the piece.',
+      "The worktree this one sent a piece to, \"Composer\" (toyon/composer), has landed on this project's main; the landing is that worktree's own work, and the piece is one part of it.",
     );
-    expect(woke.text).toContain("Then say in a line or two what landed and what you did with it.");
+    // the check is against the piece this chat wrote, and the page its list sits on is named
+    expect(woke.text).toContain(
+      "Compare what landed with the piece this chat wrote for it, which is in .toyon/plans/1.md, and say what is missing or different",
+    );
+    expect(recorded(a.id, "piece-landed")[0]).toMatchObject({ brief: ".toyon/plans/1.md" });
     expect(woke.asked).toEqual({
       kind: "news",
-      why: "to check that it holds the piece",
+      why: "to check it against the piece written here",
       from: [{ id: b.id, title: "Composer" }],
     });
     expect(woke.keepCards).toBe(true);
@@ -676,7 +680,7 @@ describe("go", () => {
     expect(recorded(a.id, "piece-landed")[1]).not.toHaveProperty("same");
     await until(() => agentOf(a.id).sent.length === before + 2);
     expect(agentOf(a.id).sent.at(-1)!.text).toContain(
-      '"Form" (toyon/form), has landed on main in the project claude-agent-acp; check that the landing holds the piece.',
+      '"Form" (toyon/form), has landed on main in the project claude-agent-acp; the landing is that worktree\'s own work, and the piece is one part of it.',
     );
     // a landing after that one carries nothing of the sender's, so it says and starts nothing there
     w.hub.emit("landed", b.id);
@@ -938,6 +942,103 @@ describe("go", () => {
     await w.worktrees.archiveWorktree(c.id);
     await settle();
     expect(madeTitled("Other")).toBeUndefined();
+  });
+
+  test("a here piece whose awaited worktree is archived before it landed is released: a row, a word to the agent, and later starts work again", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    const b = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    await until(() => b.branch === "toyon/composer");
+    await call(
+      a.id,
+      piece({ title: "Docs", plan: "Write them." }),
+      piece({ title: "Mine", plan: "Meanwhile.", where: "here", after: b.branch }),
+    );
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    const docs = madeTitled("Docs")!;
+    expect(w.state.worktree(a.id)!.watches).toEqual([{ id: b.id, as: "await", pieces: ["Mine"] }]);
+    const before = agentOf(a.id).sent.length;
+    await w.worktrees.archiveWorktree(b.id);
+    // the wait is off the record, for good
+    expect(w.state.worktree(a.id)!.watches).toBeUndefined();
+    expect(new StateStore(w.paths).worktree(a.id)?.watches).toBeUndefined();
+    // the chat has the row, named as the worktree was called when it went
+    expect(recorded(a.id, "piece-gone")).toEqual([
+      {
+        type: "piece-gone",
+        worktreeId: b.id,
+        title: "Composer",
+        archived: true,
+        awaited: true,
+        pieces: ["Mine"],
+        wake: true,
+        ts: expect.any(Number),
+      },
+    ]);
+    // and the agent is started on whether the piece still stands
+    expect(agentOf(a.id).sent).toHaveLength(before + 1);
+    expect(agentOf(a.id).sent.at(-1)).toMatchObject({
+      text: 'The worktree your own piece "Mine" waited for, "Composer", was archived before it landed, so its work is not on main and the piece no longer waits. If the piece can be done without that work, do it here now, and only that; if it cannot, say what is missing and change nothing.',
+      asked: { kind: "news", why: 'to see whether "Mine" can go ahead without it' },
+    });
+    // the wait left standing would have held back every later start: the piece handed off
+    // lands, and the origin's agent is started on it
+    await land(docs.id, "docs.txt");
+    await until(() => agentOf(a.id).sent.length === before + 2);
+    expect(agentOf(a.id).sent.at(-1)!.asked).toMatchObject({ why: "to check it against the piece written here" });
+  });
+
+  test("a worktree a piece was handed to that goes before it landed is news to the origin, and starts nothing", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    await call(a.id, piece({ title: "Docs", plan: "Write them." }), piece({ title: "Notes", plan: "Take them." }));
+    await w.handoff.answer(a.id, lastProposal(a.id).id, true);
+    const [docs, notes] = [madeTitled("Docs")!, madeTitled("Notes")!];
+    const x = await w.worktrees.create(repoId, "task", { title: "Composer" });
+    w.state.worktree(a.id)!.watches = [
+      { id: x.id, as: "sent" },
+      { id: x.id, as: "after" },
+    ];
+    const before = agentOf(a.id).sent.length;
+    // made from a piece of this chat's work, and archived with nothing landed
+    await w.worktrees.archiveWorktree(docs.id);
+    // a piece from here was sent into it; removed outright, so the word is removed
+    await w.worktrees.discardWorktree(x.id);
+    expect(recorded(a.id, "piece-gone")).toEqual([
+      { type: "piece-gone", worktreeId: docs.id, title: "Docs", archived: true, ts: expect.any(Number) },
+      { type: "piece-gone", worktreeId: x.id, title: "Composer", sent: true, ts: expect.any(Number) },
+    ]);
+    // every watch on the worktree that went is off the record, the one that only heard landings too
+    expect(w.state.worktree(a.id)!.watches).toBeUndefined();
+    // one that landed has said so already: its going is no news
+    await land(notes.id, "notes.txt");
+    await until(() => recorded(a.id, "piece-landed").length === 1);
+    const told = agentOf(a.id).sent.length;
+    expect(told).toBe(before + 1);
+    await w.worktrees.archiveWorktree(notes.id);
+    await settle();
+    expect(recorded(a.id, "piece-gone")).toHaveLength(2);
+    expect(agentOf(a.id).sent).toHaveLength(told);
+  });
+
+  test("a wait found stale is lifted with the word left for the next message; a wait on its own landing stands", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { title: "Rail" });
+    w.state.worktree(a.id)!.watches = [
+      { id: "wt-gone", as: "await", pieces: ["Mine"] },
+      { id: a.id, as: "await", pieces: ["Part 2"] },
+    ];
+    const before = agentOf(a.id).sent.length;
+    w.handoff.sweep();
+    expect(w.state.worktree(a.id)!.watches).toEqual([{ id: a.id, as: "await", pieces: ["Part 2"] }]);
+    // nothing names it any more, and nobody is there to see a turn begin
+    expect(recorded(a.id, "piece-gone")).toEqual([
+      { type: "piece-gone", worktreeId: "wt-gone", awaited: true, pieces: ["Mine"], ts: expect.any(Number) },
+    ]);
+    expect(agentOf(a.id).sent).toHaveLength(before);
+    // a second sweep finds nothing more to do
+    w.handoff.sweep();
+    expect(recorded(a.id, "piece-gone")).toHaveLength(1);
   });
 
   test("the person's verb aimed at this project is one piece: the agent is asked with the tool, else the words are the plan", async () => {
@@ -1556,10 +1657,12 @@ describe("another project", () => {
     expect(woke.text).toContain(
       'The work this worktree handed off, "Fix form" (toyon/fix-form), has landed on main in the project claude-agent-acp.',
     );
-    expect(woke.text).toContain("Then say in a line or two what landed and what you did with it.");
+    expect(woke.text).toContain(
+      "Compare what landed with the piece this chat wrote for it, which is in .toyon/plans/1.md, and say what is missing or different; if the landing holds the piece, say so in one line.",
+    );
     expect(woke.asked).toEqual({
       kind: "news",
-      why: "to bring in line what depends on it",
+      why: "to check it against the piece written here",
       from: [{ id: b.id, title: "Fix form", project: "claude-agent-acp" }],
     });
     expect(woke.keepCards).toBe(true);

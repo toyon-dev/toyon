@@ -12,6 +12,7 @@ import type {
   ModelChoice,
   ProcState,
   QueuedMessage,
+  WorktreeInfo,
 } from "@toyon/shared";
 import type { OptionCategory } from "../agent/acp/options.ts";
 import type { OpenedOutside } from "../files/open.ts";
@@ -91,6 +92,9 @@ export interface HubEvents {
   visitsChanged: (repoId: string) => void;
   /** a worktree's page badges moved: a page was opened, or left */
   pagesChanged: (worktreeId: string) => void;
+  /** a worktree was archived or removed, with its record as it stood and whether it went to the
+   * archive: whoever waited on its landing hears from the handoff service that it is not coming */
+  gone: (wt: WorktreeInfo, archived: boolean) => void;
   /** a worktree of this repo was archived, restored, or deleted from the archive */
   archiveChanged: (repoId: string) => void;
   /** a composer box's unsent text changed; `clientId` is the tab that wrote it, when one did */

@@ -118,6 +118,9 @@ export interface AgentAdapter {
   modeChanged(): void;
   /** context (live-page state) reaches the prompt but never the visible transcript */
   send(text: string, opts?: SendOpts): void;
+  /** the chat is on a person's screen: news a restart left untold, which started no turn as the
+   * daemon came up, goes now when it gives the agent something to do */
+  opened(): void;
   /** hold the queue: a message sent meanwhile waits in it, drawn as queued, rather than start a
    * turn while a landing op is moving the tree under the agent. Holds nest; the last release
    * starts what waited. */

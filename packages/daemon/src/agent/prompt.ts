@@ -118,6 +118,26 @@ export function fixWhy(f: Failure): string {
   }
 }
 
+/** A failure Toyon answers on its own, with nobody pressing: the rest are offered */
+export type OwnFailure = Extract<Failure, { kind: "check" | "hook" | "conflict" }>;
+
+/** What the row says for the message Toyon sent on its own for a failure: what the agent is to
+ * do, worded as the reason a message is given for (`fixWhy` is the same failure as a press's row
+ * names it) */
+export function fixTo(f: OwnFailure): string {
+  switch (f.kind) {
+    case "check":
+      return "to fix the failed check";
+    case "hook":
+      return `to fix what the ${f.hook} hook refused`;
+    case "conflict":
+      if (f.carried) return `to resolve the conflicts between the uncommitted changes and ${f.base}`;
+      return f.how === "rebase"
+        ? `to rebase onto ${f.base} and resolve the conflicts`
+        : `to merge ${f.base} in and resolve the conflicts`;
+  }
+}
+
 /** The paragraph that shows the agent what failed: the command and what it printed, clipped the
  * way a `!` command's output is behind a person's message. It rides behind the message as
  * context, since Toyon's own message has no composer to attach it, and the heading is its own:
@@ -449,12 +469,14 @@ export function pieceLandedContext(
  * so this names the pieces and says to build them. A landing in another project says so, and
  * then nothing of it is on this project's main. `pieces` may be empty for a wait recorded
  * without them. `handed` is work this worktree handed off and set nothing to wait for: when no
- * landing here was waited for, the agent is asked to bring in line what depends on it, if
- * anything does, and to say what it did, which is the piece reporting back. `sent` is the same
- * for a piece sent into a worktree that was already open: the landing is that worktree's own,
- * so the agent is told to check that it holds the piece. `own` is this worktree's own landing,
- * which the next part of its work waited for: the branch restarted from main, so the part
- * starts on a fresh one, and there is no other worktree's work to read. */
+ * landing here was waited for, the agent is asked to compare what landed with the piece this
+ * chat wrote for it and say what is missing or different, which is the one thing such a turn
+ * has proved good for; bringing in line what depends on the landing is the lesser clause.
+ * `sent` is the same for a piece sent into a worktree that was already open, whose landing is
+ * that worktree's own work with the piece one part of it. `brief` is the file the piece sits on,
+ * so the agent is not left to hunt for what it wrote turns ago. `own` is this worktree's own
+ * landing, which the next part of its work waited for: the branch restarted from main, so the
+ * part starts on a fresh one, and there is no other worktree's work to read. */
 export function pieceWakePrompt(
   landed: ReadonlyArray<{
     title: string;
@@ -465,9 +487,11 @@ export function pieceWakePrompt(
     handed?: boolean;
     sent?: boolean;
     own?: boolean;
+    brief?: string;
   }>,
 ): string {
   const quoted = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(", ");
+  const waited = landed.filter((l) => !l.handed && !l.sent);
   const sentences = landed.map((l) => {
     const where = l.url ? ` (${l.url})` : "";
     const main = l.project ? `main in the project ${l.project}` : "this project's main";
@@ -477,19 +501,27 @@ export function pieceWakePrompt(
     }
     if (l.handed)
       return `The work this worktree handed off, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
+    // with a piece of its own to do, the check is all the message asks of a sent piece; with
+    // nothing waiting, the closing sentence asks it of every landing named
     if (l.sent)
-      return `The worktree this one sent a piece to, "${l.title}" (${l.branch}), has landed on ${main}${where}; check that the landing holds the piece.`;
+      return `The worktree this one sent a piece to, "${l.title}" (${l.branch}), has landed on ${main}${where}; ${waited.length === 0 ? "the landing is that worktree's own work, and the piece is one part of it" : "check that the landing holds the piece"}.`;
     const own =
       l.pieces.length === 0
         ? "your own piece"
         : `your own ${l.pieces.length === 1 ? "piece" : "pieces"} ${quoted(l.pieces)}`;
     return `The branch ${own} waited for, "${l.title}" (${l.branch}), has landed on ${main}${where}.`;
   });
-  const waited = landed.filter((l) => !l.handed && !l.sent);
   const pieces = [...new Set(waited.flatMap((l) => l.pieces))];
+  const briefs = [...new Set(landed.flatMap((l) => (l.brief ? [l.brief] : [])))];
+  const inLine =
+    "If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line, and only that; otherwise change nothing.";
+  const compare =
+    landed.length === 1
+      ? `Nothing here was set to wait for it. Compare what landed with the piece this chat wrote for it${briefs.length ? `, which is in ${briefs[0]}` : ""}, and say what is missing or different; if the landing holds the piece, say so in one line.`
+      : `Nothing here was set to wait for them. Compare what each landed with the piece this chat wrote for it${briefs.length ? ` (the pieces are in ${briefs.join(" and ")})` : ""}, and say what is missing or different; where a landing holds its piece, say so in one line.`;
   const build =
     waited.length === 0
-      ? `Nothing here was set to wait for ${landed.length === 1 ? "it" : "them"}. If something here depends on what landed, such as a pinned version or a copy patched by hand, bring it in line now, and only that; otherwise change nothing. Then say in a line or two what landed and what you did with it.`
+      ? `${compare} ${inLine}`
       : pieces.length === 0
         ? "Do the piece that waited here now, and only that."
         : `Do ${quoted(pieces)} here now, and only ${pieces.length === 1 ? "that" : "those"}.`;
@@ -500,6 +532,48 @@ export function pieceWakePrompt(
   const here = others.some((l) => !l.project);
   const commits = `What ${titles} landed is readable on main now${here ? ", and Toyon rebases onto main when this lands" : ""}.`;
   return `${sentences.join(" ")} ${build} ${commits}`;
+}
+
+type Gone = Pick<Extract<AgentEvent, { type: "piece-gone" }>, "title" | "archived" | "awaited" | "sent" | "pieces">;
+
+/** The ambient sentence on the next prompt after a worktree this one had a stake in went away
+ * before it landed: one a here piece waited for, one a piece was sent into, or one made from a
+ * piece of this chat's work. Nothing of it is on main, which is the whole word: the agent would
+ * otherwise go on as if the work were coming. A worktree with no title left is one removed with
+ * nothing kept. */
+export function pieceGoneContext(gone: Gone): string {
+  const named = gone.title ? `, "${gone.title}",` : "";
+  const went = `${gone.archived ? "was archived" : "was removed"} before it landed`;
+  if (gone.awaited) {
+    const pieces = gone.pieces ?? [];
+    const one = pieces.length < 2;
+    const own =
+      pieces.length === 0
+        ? "your own piece"
+        : `your own ${one ? "piece" : "pieces"} ${pieces.map((p) => `"${p}"`).join(", ")}`;
+    return `The worktree ${own} waited for${named} ${went}, so its work is not on main and the ${one ? "piece no longer waits" : "pieces no longer wait"}.`;
+  }
+  if (gone.sent)
+    return `The worktree this one sent a piece to${named} ${went}; its work, and the piece with it, is not on main.`;
+  return `The worktree made from your piece${named} ${went}; its work is not on main.`;
+}
+
+/** What starts the agent once a worktree its own pieces waited for is gone without landing: the
+ * wait is over with nothing to show for it, so whether the piece still stands is the agent's to
+ * judge, and it is told to say so rather than build on work that never arrived. */
+export function pieceGonePrompt(gone: readonly Gone[]): string {
+  const one = gone.length === 1 && (gone[0]!.pieces?.length ?? 0) < 2;
+  const ask = one
+    ? "If the piece can be done without that work, do it here now, and only that; if it cannot, say what is missing and change nothing."
+    : "Where a piece can be done without that work, do it here now, and only that; where it cannot, say what is missing and change nothing.";
+  return `${gone.map(pieceGoneContext).join(" ")} ${ask}`;
+}
+
+/** The ambient sentence on the next prompt after a piece queued behind another branch was
+ * dropped, in the daemon's own reason: the chat's row says it to the person, and this is the
+ * agent's word that the piece it handed over is not coming. */
+export function pieceDroppedContext(title: string | undefined, reason: string): string {
+  return `${title ? `Your queued piece "${title}"` : "A piece you queued"} was dropped: ${reason.replace(/\.$/, "")}.`;
 }
 
 /** where the project's preview stands as a message goes out, for the block that tells the agent */

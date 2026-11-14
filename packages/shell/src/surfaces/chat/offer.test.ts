@@ -89,6 +89,10 @@ describe("offerOf", () => {
     expect(offerOf([row, asked, again], rest)).toMatchObject({
       toolId: "t2",
     });
+    // the message Toyon sent on its own for the row retires the offer the same way
+    const told = { kind: "news", why: "to fix the failed check", text: "Fix it.", toolId: "t1", ts: 1 } as const;
+    expect(offerOf([row, told], rest)).toBeNull();
+    expect(offerOf([row, told, again], rest)).toMatchObject({ toolId: "t2" });
   });
 
   test("nothing while a message is queued or going out, or a question is up", () => {

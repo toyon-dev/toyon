@@ -10,7 +10,8 @@
 // survives a restart and leaves with the origin. Who hears of a landing is one list on the hearer's
 // own record, its `watches`, beside the `from.origin` of the worktree a piece became. A worktree
 // may watch its own landing: work built here in parts, each landed before the next, where the
-// landing is what starts the agent on the next part.
+// landing is what starts the agent on the next part. A worktree that goes away before it landed
+// takes every watch on it with it, and its watchers and its origin hear that it is not coming.
 
 import { randomUUID } from "node:crypto";
 import type {
@@ -30,6 +31,7 @@ import type {
 import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy, pieceDoc } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
 import {
+  briefFile,
   effectiveFate,
   heldUnshown,
   listFile,
@@ -103,7 +105,7 @@ function pieceLanded(
   repo: RepoInfo,
   to: WorktreeInfo,
   mark: LandMark | undefined,
-  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "own" | "pieces" | "wake"> = {},
+  why: Pick<PieceLanded, "again" | "awaited" | "sent" | "own" | "pieces" | "brief" | "wake"> = {},
 ): PieceLanded {
   return {
     type: "piece-landed",
@@ -363,6 +365,7 @@ export class HandoffService implements ToolProvider {
     d.hub.on("landed", (worktreeId, mark) =>
       fireAndForget(worktreeId, this.landed(worktreeId, mark), "pieces after landing"),
     );
+    d.hub.on("gone", (wt, archived) => this.gone(wt, archived));
     d.hub.on("worktreesChanged", () => this.sweep());
     this.sweep();
   }
@@ -1259,11 +1262,89 @@ export class HandoffService implements ToolProvider {
             : as === "after"
               ? { again: true as const }
               : {};
-      this.d.runtime
-        .ensureAgent(w)
-        .agent.note(pieceLanded(landed, repo, w, mark, { ...why, ...(wake ? { wake: true as const } : {}) }));
+      const agent = this.d.runtime.ensureAgent(w).agent;
+      // where the piece this chat wrote for the landed worktree is, for the check against it
+      const brief = as === "made" || as === "sent" ? briefFile(agent.transcript(), landedId) : undefined;
+      agent.note(
+        pieceLanded(landed, repo, w, mark, {
+          ...why,
+          ...(brief ? { brief } : {}),
+          ...(wake ? { wake: true as const } : {}),
+        }),
+      );
     }
     saved();
+  }
+
+  /** A worktree was archived or removed. One that never landed leaves its work off main, and
+   * whoever had a stake in it hears so once (`lift`): from here, by name and with the agent of a
+   * waiting piece started, since the person just sent the work away and the piece is theirs to
+   * rule on now. */
+  private gone(wt: WorktreeInfo, archived: boolean): void {
+    const landed = !!wt.landed || (wt.lands?.length ?? 0) > 0;
+    this.lift(wt.id, {
+      title: wt.title,
+      archived,
+      live: true,
+      landed,
+      ...(wt.from?.kind === "worktree" ? { origin: wt.from.origin.id } : {}),
+    });
+  }
+
+  /** Takes every watch on a worktree that is gone off the records that hold one, and tells the
+   * watchers it never landed, each once, by the strongest stake it had: a here piece that waited
+   * for it, which waits no longer; the piece it was made from (`origin`); a piece sent into it.
+   * A wait left standing would never end, and would hold back every later start of that chat's
+   * agent on a landing. Nothing is said of a worktree that `landed`, whose landing was the word,
+   * or to one only made behind it. `live`: the removal is happening now, so the agent of a piece
+   * that waited is started on it; a watch found stale later, on a removal nobody saw (a
+   * directory that went while the daemon was down), is lifted with the word left for the agent's
+   * next message, since nobody is there to see a turn begin. */
+  private lift(
+    goneId: string,
+    o: { title?: string; archived: boolean; live: boolean; landed?: boolean; origin?: string },
+  ): void {
+    const rank = ["await", "made", "sent"] as const;
+    const told = new Map<string, { as: (typeof rank)[number]; pieces: string[] }>();
+    const hear = (id: string, as: (typeof rank)[number], pieces: readonly string[] = []) => {
+      const had = told.get(id);
+      told.set(id, {
+        as: !had || rank.indexOf(as) < rank.indexOf(had.as) ? as : had.as,
+        pieces: [...(had?.pieces ?? []), ...pieces],
+      });
+    };
+    if (o.origin) hear(o.origin, "made");
+    let changed = false;
+    for (const w of this.d.state.worktrees) {
+      const on = w.watches?.filter((x) => x.id === goneId) ?? [];
+      // a wait on its own landing names itself, and leaves with its record
+      if (on.length === 0 || w.id === goneId) continue;
+      for (const x of on) if (x.as !== "after") hear(w.id, x.as, x.pieces);
+      const kept = w.watches!.filter((x) => x.id !== goneId);
+      if (kept.length) w.watches = kept;
+      else delete w.watches;
+      changed = true;
+    }
+    if (changed) {
+      this.d.state.save();
+      this.d.hub.emit("worktreesChanged");
+    }
+    if (o.landed) return;
+    for (const [id, { as, pieces }] of told) {
+      const w = this.d.state.worktree(id);
+      if (w?.kind !== "worktree") continue;
+      const wake = o.live && as === "await" && this.takesSend(w);
+      this.d.runtime.ensureAgent(w).agent.note({
+        type: "piece-gone",
+        worktreeId: goneId,
+        ...(o.title ? { title: o.title } : {}),
+        ...(o.archived ? { archived: true as const } : {}),
+        ...(as === "await" ? { awaited: true as const } : as === "sent" ? { sent: true as const } : {}),
+        ...(pieces.length ? { pieces } : {}),
+        ...(wake ? { wake: true as const } : {}),
+        ts: Date.now(),
+      });
+    }
   }
 
   /** whether a part of a worktree's own work still waits in its line for a landing of its own */
@@ -1358,9 +1439,19 @@ export class HandoffService implements ToolProvider {
 
   /** a queued piece whose awaited worktree is gone will never be made: dropped, and the origin's
    * chat told why, and the pieces that waited on it with it. One that waits for another piece of
-   * its list is left to that piece. Saves and emits only on a change, so the frame this answers
-   * to finds nothing more to do. */
+   * its list is left to that piece. A watch on a worktree that is gone is lifted the same way
+   * (`lift`), for one whose removal was not seen as it happened. Saves and emits only on a
+   * change, so the frame this answers to finds nothing more to do. */
   sweep(): void {
+    const stale = new Set<string>();
+    for (const w of this.d.state.worktrees) {
+      for (const x of w.watches ?? []) if (this.d.state.worktree(x.id)?.kind !== "worktree") stale.add(x.id);
+    }
+    for (const id of stale) {
+      // named from the archive, which keeps the title a removed worktree ended with
+      const title = this.d.archivedTitle(id);
+      this.lift(id, { ...(title ? { title } : {}), archived: title !== undefined, live: false });
+    }
     let changed = false;
     for (const origin of this.d.state.worktrees) {
       if (!origin.queued?.length) continue;

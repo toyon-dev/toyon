@@ -4658,16 +4658,6 @@ describe("a list read off the plan", () => {
       state: "held",
     });
   });
-
-  test("the plan moving under it marks it stale", () => {
-    const s = run([
-      hello(wt("a")),
-      agent("a", card),
-      agent("a", late),
-      agent("a", { type: "handoff-stale", id: "l2", ts: 3 }),
-    ]);
-    expect(s.local.a?.chat.at(-1)).toMatchObject({ kind: "handoff", stale: true });
-  });
 });
 
 describe("a pieces list", () => {

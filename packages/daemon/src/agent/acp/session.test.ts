@@ -4596,13 +4596,21 @@ describe("AcpSession handoff", () => {
   }
   const card = (events: AgentEvent[]) =>
     events.findLast((e) => e.type === "agent-permission") as Extract<AgentEvent, { type: "agent-permission" }>;
+  /** The handoff service's part of a plan card's answer, for a session with none behind it: it
+   * writes the go or the decline as it starts to act, and that record is what closes the list. */
+  const acts =
+    (session: () => AcpSession, decided: Array<[string, boolean]>) =>
+    (id: string, approved: boolean): void => {
+      decided.push([id, approved]);
+      session().note(approved ? { type: "handoff-go", id, ts: 9 } : { type: "handoff-declined", id, ts: 9 });
+    };
 
   test("a list handed over in plan mode rides beside the plan card, and the plan's yes answers both, after the mode", async () => {
     const decided: Array<[string, boolean]> = [];
     const modes: string[] = [];
     const { fake, release } = planner();
     const w = world(fake, claudeSpec, 60_000, undefined, {
-      onHandoff: (id, approved) => decided.push([id, approved]),
+      onHandoff: acts(() => w.session, decided),
       setMode: (m) => modes.push(m),
     });
     w.session.send("plan it");
@@ -4656,7 +4664,7 @@ describe("AcpSession handoff", () => {
     const { fake, release } = planner();
     const w = world(fake, claudeSpec, 60_000, undefined, {
       onPlan: async () => ".toyon/plans/1.md",
-      onHandoff: (id, approved) => decided.push([id, approved]),
+      onHandoff: acts(() => w.session, decided),
     });
     w.session.send("plan it");
     release();
@@ -4714,7 +4722,7 @@ describe("AcpSession handoff", () => {
     // held in plan mode, as a list always is: outside it the list would be Toyon's card
     const w = world(fake, claudeSpec, 60_000, undefined, {
       mode: () => "plan",
-      onHandoff: (id, approved) => decided.push([id, approved]),
+      onHandoff: acts(() => w.session, decided),
     });
     w.session.note(held);
     w.session.send("plan it");
@@ -4888,6 +4896,48 @@ describe("AcpSession handoff", () => {
     expect(openAsk(w.events)).toBeTruthy();
     await w.session.close();
   });
+  test("a message that leaves the plan card up does not take the list from under its yes", async () => {
+    const decided: Array<[string, boolean]> = [];
+    const { fake, release } = planner();
+    // the mode chip has left plan mode while the card is up: a held list with no card would be shown
+    const w = world(fake, claudeSpec, 60_000, undefined, { onHandoff: acts(() => w.session, decided) });
+    w.session.send("plan it");
+    w.session.note(held);
+    release();
+    await waitFor(() => !!openAsk(w.events));
+    expect(card(w.events).handoff).toBe("l1");
+    // Toyon's own message, and a piece sent in from another chat, answer no card
+    w.session.send("the check failed", { asked: { kind: "check", why: "the check failed" }, keepCards: true });
+    expect(openAsk(w.events)).toBeTruthy();
+    expect(w.types()).not.toContain("handoff-shown");
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit_plan_default" });
+    await w.idle();
+    expect(decided).toEqual([["l1", true]]);
+    expect(w.types()).not.toContain("handoff-shown");
+    await w.session.close();
+  });
+
+  test("a list Toyon read for a plan card that closed unanswered is declined once, however often the daemon comes up", async () => {
+    const read: AgentEvent = { ...held, id: "l2", by: "toyon" };
+    const { fake, release } = planner();
+    const first = world(fake, claudeSpec, 60_000, undefined, { mode: () => "plan" });
+    first.session.send("plan it");
+    release();
+    await waitFor(() => !!openAsk(first.events));
+    // read off the plan while the card is up
+    first.session.note(read);
+    // the daemon goes under the card: it closes unanswered, and the read goes with it
+    await first.session.close();
+    const declines = (events: AgentEvent[]) => events.filter((e) => e.type === "handoff-declined");
+    expect(declines(first.events)).toMatchObject([{ id: "l2", reason: "the plan card closed before it was answered" }]);
+    for (let boot = 0; boot < 3; boot++) {
+      const again = world(fakeAgent(say("ok")), claudeSpec, 60_000, first.id, { mode: () => "plan" });
+      expect(declines(again.events)).toEqual([]);
+      expect(again.session.transcript().filter(({ event }) => event.type === "handoff-declined")).toHaveLength(1);
+      await again.session.close();
+    }
+  });
+
   test("a plan's yes says what the list starts ahead of the approval, read before the list is acted on", async () => {
     const order: string[] = [];
     let release = () => {};

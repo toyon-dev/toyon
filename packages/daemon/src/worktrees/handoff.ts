@@ -10,9 +10,7 @@
 // survives a restart and leaves with the origin. Who hears of a landing is one list on the hearer's
 // own record, its `watches`, beside the `from.origin` of the worktree a piece became.
 
-import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   AgentEvent,
   AttachmentInput,
@@ -29,8 +27,17 @@ import type {
 } from "@toyon/shared";
 import { DEFAULT_PERMISSION_MODE, HANDOFF_TOOL, isBusy, pieceDoc } from "@toyon/shared";
 import type { AttachmentStore } from "../agent/attachments.ts";
+import {
+  effectiveFate,
+  heldUnshown,
+  listFile,
+  openHandoff,
+  openPlanCard,
+  type Proposed,
+  pressedOnSentBack,
+} from "../agent/handoffLog.ts";
 import type { McpTool, McpToolResult, ToolProvider } from "../agent/mcp.ts";
-import { listDoc, planEdited, writePlanDocNow } from "../agent/planDoc.ts";
+import { listDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import {
   handedPrompt,
   handoffActedPrompt,
@@ -83,7 +90,6 @@ export interface HandoffDeps {
   archivedTitle: (worktreeId: string) => string | undefined;
 }
 
-type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
 type PieceLanded = Extract<AgentEvent, { type: "piece-landed" }>;
 
 /** A landing as another worktree's chat is told of it. `to` is the worktree told: a landing in
@@ -251,18 +257,6 @@ const SHOWN_AWAY =
 const SHOWN_HERE =
   "Handed to the person as a card. This worktree holds no work yet, so the card leads with doing it here; they decide. Finish your turn.";
 
-type PlanCard = Extract<AgentEvent, { type: "agent-permission" }>;
-
-/** the plan card open on a chat, if one is: an `agent-permission` with a plan and no end yet */
-export function openPlanCard(entries: readonly TranscriptEntry[]): PlanCard | null {
-  const open = new Map<string, PlanCard>();
-  for (const { event } of entries) {
-    if (event.type === "agent-permission" && event.plan) open.set(event.id, event);
-    else if (event.type === "agent-ask-end") open.delete(event.id);
-  }
-  return [...open.values()].at(-1) ?? null;
-}
-
 /** The text of a plan's section, as the plan a piece read off the plan starts from: the heading
  * line and everything under it up to the next heading of the same or a higher level. The heading
  * is matched loosely, since the model quotes it from memory: case and punctuation aside, the
@@ -306,78 +300,6 @@ export function sectionText(markdown: string, heading: string): string | null {
     return text.length > PLAN_MAX ? text.slice(0, PLAN_MAX) : text;
   }
   return null;
-}
-
-/** the plan text as a list remembers it, for the stale check: trimmed, so a trailing newline the
- * editor adds is no move */
-export function hashText(text: string): string {
-  return createHash("sha1").update(text.trim()).digest("hex").slice(0, 16);
-}
-
-/** the held list still waiting for a plan card: one shown as Toyon's own card keeps `held` on its
- * event but belongs to no card, so it is not this */
-export function heldUnshown(entries: readonly TranscriptEntry[]): Proposed | null {
-  const shown = new Set<string>();
-  for (const { event } of entries) if (event.type === "handoff-shown") shown.add(event.id);
-  return openHandoff(entries).find((p) => p.held && !shown.has(p.id)) ?? null;
-}
-
-/** the proposals on a transcript nothing has closed, newest last */
-export function openHandoff(entries: readonly TranscriptEntry[]): Proposed[] {
-  const open = new Map<string, Proposed>();
-  for (const { event } of entries) {
-    if (event.type === "handoff-proposed") open.set(event.id, event);
-    else if (event.type === "handoff-go" || event.type === "handoff" || event.type === "handoff-declined")
-      open.delete(event.id);
-  }
-  return [...open.values()];
-}
-
-/** The file a list sits on, as the transcript names it: the page Toyon wrote when the list was
- * proposed as its own card or shown as one after its turn, else the plan of the card a held list
- * rode beside, which is the only place a held list's file is named. A sibling's pointer reads
- * the whole picture there. */
-export function listFile(entries: readonly TranscriptEntry[], id: string): string | undefined {
-  let file: string | undefined;
-  for (const { event } of entries) {
-    if ((event.type === "handoff-proposed" || event.type === "handoff-shown") && event.id === id && event.plan) {
-      file = event.plan;
-    } else if (event.type === "agent-permission" && event.handoff === id && event.plan) file = event.plan;
-  }
-  return file;
-}
-
-/** where the piece stands as go is pressed: the last fate the person set, else the agent's */
-export function effectiveFate(entries: readonly TranscriptEntry[], proposal: Proposed, piece: Piece): PieceFate {
-  let fate: PieceFate = piece.fate;
-  for (const { event } of entries) {
-    if (event.type === "handoff-fate" && event.id === proposal.id && event.pieceId === piece.id) fate = event.fate;
-  }
-  return fate;
-}
-
-/** The fates the person pressed on the last list, by piece title, when that list went back with
- * its plan: a held list the no took with it, or one Toyon read again because the plan moved.
- * The next list is that plan's next draft, so a piece with the same title is the same piece and
- * the person's word on it stands; a list they answered as a card (not now) was an answer, and
- * nothing carries from it. */
-export function pressedOnSentBack(entries: readonly TranscriptEntry[]): Map<string, PieceFate> {
-  const pressed = new Map<string, PieceFate>();
-  const last = entries.findLast(({ event }) => event.type === "handoff-proposed")?.event;
-  if (last?.type !== "handoff-proposed" || !last.held) return pressed;
-  let back = false;
-  for (const { event } of entries) {
-    if (event.type === "handoff-shown" && event.id === last.id) return pressed;
-    if (event.type === "handoff-declined" && event.id === last.id) back = !event.outcome;
-  }
-  if (!back) return pressed;
-  for (const { event } of entries) {
-    if (event.type === "handoff-fate" && event.id === last.id) {
-      const title = last.pieces.find((p) => p.id === event.pieceId)?.title;
-      if (title) pressed.set(title.toLowerCase(), event.fate);
-    }
-  }
-  return pressed;
 }
 
 /** why a piece cannot become `fate` as proposed, or null when it can */
@@ -435,7 +357,6 @@ export class HandoffService implements ToolProvider {
     d.hub.on("planUnsplit", (worktreeId, markdown, planPath) =>
       fireAndForget(worktreeId, this.read(worktreeId, markdown, planPath), "pieces read off the plan"),
     );
-    d.hub.on("treeChanged", (worktreeId) => fireAndForget(worktreeId, this.stale(worktreeId), "pieces stale"));
     d.hub.on("landed", (worktreeId, mark) =>
       fireAndForget(worktreeId, this.landed(worktreeId, mark), "pieces after landing"),
     );
@@ -513,8 +434,6 @@ export class HandoffService implements ToolProvider {
     worktreeId: string,
     raw: RawPiece[],
     by: "agent" | "person" | "toyon" = "agent",
-    /** a Toyon-read list: the hash of the plan text it was read from */
-    read?: string,
   ): Promise<McpToolResult> {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt) throw new UserError("that chat is gone");
@@ -661,7 +580,6 @@ export class HandoffService implements ToolProvider {
       ...(held ? { held: true } : {}),
       ...(plan ? { plan } : {}),
       ...(by === "toyon" ? { by: "toyon" as const } : {}),
-      ...(by === "toyon" && read ? { read } : {}),
       ts: Date.now(),
     };
     agent.note(proposal);
@@ -958,8 +876,7 @@ export class HandoffService implements ToolProvider {
     await this.proposeRead(wt, markdown, found);
   }
 
-  /** The pieces read off a plan as a held list on the chat, the plan's text hashed onto the list
-   * for the stale check. A piece's text is its section of the plan, verbatim, when the heading it
+  /** The pieces read off a plan as a held list on the chat. A piece's text is its section of the plan, verbatim, when the heading it
    * names is its alone; a section two parts share (rows of one table, say) or none at all is the
    * model's own plan for the part, never the whole plan and never one section twice. An `after`
    * the model made up (a sibling piece's name, which is no branch yet) is dropped rather than
@@ -976,52 +893,13 @@ export class HandoffService implements ToolProvider {
       const after = p.where === "worktree" && p.after && known(p.after) ? p.after : undefined;
       return { title: p.title, plan, where: p.where, ...(after ? { after } : {}) };
     });
-    const r = await this.propose(wt.id, raw, "toyon", hashText(markdown));
+    const r = await this.propose(wt.id, raw, "toyon");
     if (r.isError) {
       log.warn(wt.id, `the list read off the plan was refused: ${r.text}`);
       return null;
     }
     const agent = this.d.runtime.agentFor(wt.id);
     return agent ? (openHandoff(agent.transcript()).find((p) => p.by === "toyon") ?? null) : null;
-  }
-
-  /** The plan file moved under an open held list: mark the list stale, and a list Toyon read is
-   * read again from the file as it stands. The agent's own list is only marked, since the agent
-   * hands over again when it re-plans. Run on every tree
-   * change of a watched worktree, so the gates come first: a held list exists only in plan mode,
-   * and one already shown as Toyon's own card belongs to no plan card. Everything it needs is on
-   * the transcript, so a restart changes nothing. */
-  async stale(worktreeId: string): Promise<void> {
-    const wt = this.d.state.worktree(worktreeId);
-    if (wt?.mode !== "plan") return;
-    const agent = this.d.runtime.agentFor(worktreeId);
-    if (!agent) return;
-    const entries = agent.transcript();
-    const open = heldUnshown(entries);
-    if (!open) return;
-    if (entries.some(({ event }) => event.type === "handoff-stale" && event.id === open.id)) return;
-    const card = openPlanCard(entries);
-    if (!card?.plan || !card.detail) return;
-    let markdown: string;
-    try {
-      markdown = readFileSync(join(wt.path, card.plan), "utf8");
-    } catch (e) {
-      log.warn(worktreeId, `could not read ${card.plan} to see whether the plan moved`, e);
-      return;
-    }
-    // a Toyon-read list is measured against the text it was read from; the agent's against the
-    // plan it proposed, which is the card's text
-    const moved = open.read ? hashText(markdown) !== open.read : planEdited(wt.path, card.plan, card.detail);
-    if (!moved) return;
-    agent.note({ type: "handoff-stale", id: open.id, ts: Date.now() });
-    if (open.by !== "toyon") return;
-    const found = await this.d.reader(wt, markdown);
-    if (!found || found.length < 2) return;
-    if (openPlanCard(agent.transcript())?.id !== card.id) return;
-    // the fates pressed follow the titles onto the list read again, as onto any list after one
-    // sent back (propose)
-    agent.note({ type: "handoff-declined", id: open.id, reason: "the plan changed; read again", ts: Date.now() });
-    await this.proposeRead(wt, markdown, found);
   }
 
   /** The verb: the person wants part of this work done in a new worktree of project `repoId`,

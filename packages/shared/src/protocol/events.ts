@@ -494,7 +494,7 @@ export type AgentEvent =
       ts: number;
     }
   /** the agent handed Toyon the pieces of its plan. `held`: proposed in plan mode, so the list
-   * shows beside the next plan card of the turn (`agent-permission.pieces`) and the person answers
+   * shows beside the next plan card of the turn (`agent-permission.handoff`) and the person answers
    * it with the plan; without it the proposal is Toyon's own card at once. Open until a
    * `handoff-go`, `handoff` or `handoff-declined` with the same id. `plan` is the file the section
    * sits on: the agent's plan when held, else the page Toyon wrote for the list. */
@@ -507,17 +507,10 @@ export type AgentEvent =
       plan?: string;
       /** read off the plan by Toyon on the quick model, when the agent handed nothing over */
       by?: "toyon";
-      /** a Toyon-read list: a hash of the plan text it was read from, which a later change to
-       * the file is measured against (the card's own text is the agent's proposal, which a list
-       * read again has already moved past) */
-      read?: string;
       ts: number;
     }
   /** a held proposal whose turn ended with no plan card: Toyon's own card from here */
   | { type: "handoff-shown"; id: string; plan?: string; ts: number }
-  /** the plan file moved under an open list: the rows were read off a plan that is no longer
-   * the one on disk. A list Toyon read is read again after this; the agent's is only marked. */
-  | { type: "handoff-stale"; id: string; ts: number }
   /** the person moved a piece; the last one per piece stands when go is pressed */
   | { type: "handoff-fate"; id: string; pieceId: string; fate: PieceFate; ts: number }
   /** the plan was approved, or go pressed: the card closes here and Toyon acts. `note` is what

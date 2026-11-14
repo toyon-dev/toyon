@@ -285,9 +285,6 @@ export function PiecePage({
     <p className="editor-piece-line hint">
       {deciding(item) ? (
         <>
-          {/* the rows were read off a plan that is no longer the one on disk: said first, since
-                the sentence after it is about rows that may no longer match the text */}
-          {item.stale && "The plan changed since these were read. "}
           {fateSentence(piece, fate, wait)}
           {others.length > 0 && (
             <>

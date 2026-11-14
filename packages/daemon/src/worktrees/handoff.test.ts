@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, PieceOutcome, RepoInfo } from "@toyon/shared";
@@ -9,7 +9,7 @@ import { planReader, registered, settle, until, useWorld, w } from "../../test/h
 import { excludePlans, listDoc, writePlanDocNow } from "../agent/planDoc.ts";
 import { StateStore } from "../core/state.ts";
 import { GIT } from "../git/exec.ts";
-import { listFile, PIECES_MAX, type RawPiece, sectionText } from "./handoff.ts";
+import { PIECES_MAX, type RawPiece, sectionText } from "./handoff.ts";
 
 // A plan's pieces across worktrees: the tool's answers to the agent, the list's state on the
 // origin's transcript, what go makes, queues and sends, and the word back when a sibling lands.
@@ -1010,7 +1010,6 @@ describe("read off the plan", () => {
     await until(() => recorded(a.id, "handoff-proposed").length === 1);
     expect(lastProposal(a.id).pieces[1]).toMatchObject({ title: "The composer", fate: "worktree" });
     expect(lastProposal(a.id).pieces[1]!.after).toBeUndefined();
-    expect(lastProposal(a.id).read).toMatch(/^[0-9a-f]{16}$/);
   });
 
   test("a plan card with no list: the pieces are read off the plan and held beside it, the briefs cut from the sections", async () => {
@@ -1047,57 +1046,6 @@ describe("read off the plan", () => {
     await settle();
     expect(recorded(a.id, "handoff-proposed")).toHaveLength(1);
     expect(lastProposal(a.id).by).toBeUndefined();
-  });
-
-  test("the plan moving under a list marks it stale; one Toyon read is read again with the fates pressed carried by title", async () => {
-    const repoId = await registered();
-    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
-    mkdirSync(join(a.path, ".toyon/plans"), { recursive: true });
-    writeFileSync(join(a.path, ".toyon/plans/1.md"), PLAN);
-    planReader.fn = () => TWO;
-    cardOn(a.id, ".toyon/plans/1.md");
-    w.hub.emit("planUnsplit", a.id, PLAN, ".toyon/plans/1.md");
-    await until(() => recorded(a.id, "handoff-proposed").length === 1);
-    const first = lastProposal(a.id);
-    w.handoff.fate(a.id, first.id, "p2", "skip");
-    // the file as it stands is the plan: no mark
-    w.hub.emit("treeChanged", a.id);
-    await settle();
-    expect(recorded(a.id, "handoff-stale")).toHaveLength(0);
-    // the plan grows a third part: the mark, then the list read again, the skip carried over
-    const grown = `${PLAN}\n## 3. Docs (sibling worktree)\n\nWrite docs.\n`;
-    writeFileSync(join(a.path, ".toyon/plans/1.md"), grown);
-    planReader.fn = () => [...TWO, { title: "Docs", section: "3. Docs", where: "worktree" as const }];
-    w.hub.emit("treeChanged", a.id);
-    await until(() => recorded(a.id, "handoff-proposed").length === 2);
-    expect(recorded(a.id, "handoff-stale")).toMatchObject([{ id: first.id }]);
-    expect(recorded(a.id, "handoff-declined")).toMatchObject([
-      { id: first.id, reason: "the plan changed; read again" },
-    ]);
-    const again = lastProposal(a.id);
-    expect(again).toMatchObject({ by: "toyon", held: true });
-    expect(again.pieces.map((p) => p.title)).toEqual(["The rail", "The composer", "Docs"]);
-    expect(recorded(a.id, "handoff-fate").at(-1)).toMatchObject({ id: again.id, pieceId: "p2", fate: "skip" });
-    // marked once: another change to the file is not a second mark on the same list
-    w.hub.emit("treeChanged", a.id);
-    await settle();
-    expect(recorded(a.id, "handoff-stale")).toHaveLength(1);
-  });
-
-  test("the agent's own list is only marked stale: the agent hands over again if it re-plans", async () => {
-    const repoId = await registered();
-    const a = await w.worktrees.create(repoId, "task", { title: "Rail", mode: "plan" });
-    mkdirSync(join(a.path, ".toyon/plans"), { recursive: true });
-    writeFileSync(join(a.path, ".toyon/plans/1.md"), PLAN);
-    await call(a.id, piece());
-    cardOn(a.id, ".toyon/plans/1.md");
-    writeFileSync(join(a.path, ".toyon/plans/1.md"), `${PLAN}\nmore\n`);
-    planReader.fn = () => TWO;
-    w.hub.emit("treeChanged", a.id);
-    await until(() => recorded(a.id, "handoff-stale").length === 1);
-    await settle();
-    expect(recorded(a.id, "handoff-proposed")).toHaveLength(1);
-    expect(recorded(a.id, "handoff-declined")).toHaveLength(0);
   });
 
   test("not now with words tells the agent once its turn ends", async () => {
@@ -1367,33 +1315,6 @@ describe("read off the plan", () => {
   });
 });
 
-describe("listFile", () => {
-  const at = (seq: number, event: AgentEvent) => ({ seq, event });
-  const pieces: never[] = [];
-  test("Toyon's own card names the page it wrote; a held list names the agent's plan until it is shown", () => {
-    const own = at(1, { type: "handoff-proposed", id: "l1", pieces, mode: "ask", plan: ".toyon/plans/1.md", ts: 1 });
-    expect(listFile([own], "l1")).toBe(".toyon/plans/1.md");
-    // read off the plan in plan mode: the file is the plan, which holds no plan of its own
-    const read = at(2, {
-      type: "handoff-proposed",
-      id: "l2",
-      pieces,
-      mode: "plan",
-      held: true,
-      plan: ".toyon/plans/2.md",
-      by: "toyon",
-      ts: 2,
-    });
-    expect(listFile([own, read], "l2")).toBe(".toyon/plans/2.md");
-    // shown as Toyon's own card after its turn: the page written then is the file from here
-    const shown = at(3, { type: "handoff-shown", id: "l2", plan: ".toyon/plans/3.md", ts: 3 });
-    expect(listFile([own, read, shown], "l2")).toBe(".toyon/plans/3.md");
-    // the agent's own held list names no file until it is shown
-    const held = at(4, { type: "handoff-proposed", id: "l3", pieces, mode: "plan", held: true, ts: 4 });
-    expect(listFile([held], "l3")).toBeUndefined();
-  });
-});
-
 describe("chains", () => {
   test("a piece after another on the list waits for that one's worktree: made at go, then at each landing in turn", async () => {
     const repoId = await registered();
@@ -1569,24 +1490,5 @@ describe("another project", () => {
     agentOf(a.id).mcpTools = false;
     await w.handoff.ask(a.id, acp.id, "fix the form");
     expect(lastProposal(a.id).pieces[0]).toMatchObject({ title: "Fix the form", project: { id: acp.id } });
-  });
-});
-
-describe("listFile", () => {
-  test("a held list answered with a plan card names the card's plan, since nothing on the list does", () => {
-    const entries = [
-      { type: "handoff-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 },
-      {
-        type: "agent-permission",
-        id: "k1",
-        title: "Approve Plan",
-        plan: ".toyon/plans/3.md",
-        handoff: "l1",
-        choices: [],
-        ts: 2,
-      },
-    ].map((event, seq) => ({ seq, event: event as AgentEvent }));
-    expect(listFile(entries, "l1")).toBe(".toyon/plans/3.md");
-    expect(listFile(entries, "l2")).toBeUndefined();
   });
 });

@@ -7,6 +7,7 @@
 // sends one once the agent is at rest.
 
 import type { AgentEvent } from "@toyon/shared";
+import { answeredWithPlan, type Proposed, proposedList } from "./handoffLog.ts";
 import {
   handoffActedPrompt,
   handoffDeclinedContext,
@@ -17,7 +18,6 @@ import {
 import { isMessage, type TranscriptEntry } from "./transcript.ts";
 
 type Landed = Extract<AgentEvent, { type: "piece-landed" }>;
-type Proposed = Extract<AgentEvent, { type: "handoff-proposed" }>;
 type Acted = Extract<AgentEvent, { type: "handoff" }>;
 type Declined = Extract<AgentEvent, { type: "handoff-declined" }>;
 type Woke = Parameters<typeof pieceWakePrompt>[0][number];
@@ -43,10 +43,9 @@ function newsIn(entries: readonly TranscriptEntry[], start: number, end: number)
       continue;
     }
     if (event.type !== "handoff" && event.type !== "handoff-declined") continue;
-    const list = entries.findLast((e) => e.event.type === "handoff-proposed" && e.event.id === event.id)?.event;
-    if (list?.type !== "handoff-proposed") continue;
-    // a held list never shown as Toyon's own card was the plan card's to answer
-    const withPlan = !!list.held && !entries.some((e) => e.event.type === "handoff-shown" && e.event.id === event.id);
+    const list = proposedList(entries, event.id);
+    if (!list) continue;
+    const withPlan = answeredWithPlan(entries, list);
     if (event.type === "handoff-declined") {
       out.push({ kind: "declined", list, event, withPlan });
       continue;

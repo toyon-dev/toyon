@@ -270,9 +270,6 @@ export type ChatItem =
       companion?: string;
       /** read off the plan by Toyon, when the agent handed nothing over */
       by?: "toyon";
-      /** the plan file moved under the list: the rows were read off a plan that is no longer the
-       * one on disk */
-      stale?: true;
       state: "held" | "proposed" | "going" | "done" | "declined";
       outcomes: PieceOutcome[];
       later: Array<{ pieceId: string; worktreeId?: string; title?: string; reason?: string }>;
@@ -3949,11 +3946,6 @@ function applyEvent(items: ChatItem[], event: AgentEvent, seq?: number): ChatIte
           ts: event.ts,
         },
       ];
-    }
-    case "handoff-stale": {
-      const idx = handoffIndex(items, event.id, ["held", "proposed"]);
-      if (idx === -1) return items;
-      return items.with(idx, { ...(items[idx] as HandoffCard), stale: true });
     }
     case "handoff-shown": {
       const idx = handoffIndex(items, event.id, ["held", "proposed"]);

@@ -9,7 +9,8 @@
     position: absolute;
     /* a parent whose top is hung over (the phone's tabs over a transcript) says by how much */
     top: calc(8px + var(--log-cover, 0px));
-    right: 20px;
+    /* and one whose right edge is taken by more than a scrollbar says by how much */
+    right: calc(20px + var(--find-cover, 0px));
     display: flex;
     align-items: center;
     gap: 2px;

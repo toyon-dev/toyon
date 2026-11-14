@@ -144,6 +144,58 @@
     opacity: 0.5;
   }
 
+  /* ---- where it changed ----
+     The marks again, down the right edge and outside the scroll box, each where it stands in the
+     whole document (DocumentOverview.tsx): the strip the diff pane draws beside its code, in its
+     width and its two columns, what went on the left and what came on the right. It stands inside
+     the page's own side padding, as the outline does on the other side, so it covers no text. */
+  .document-overview {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 30px;
+    /* a finger on it drags the viewport, and the page does not pan under it */
+    touch-action: none;
+  }
+  /* the strip's viewport is the document's scrollbar, so the box's own would be a second slider
+     for the same scroll, drawn under the marks */
+  .document:has(~ .document-overview) {
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  /* the find box stands clear of the strip as it does of a scrollbar */
+  .document-overview:not([hidden]) ~ .find {
+    --find-cover: 16px;
+  }
+  /* a mark is looked at and never pressed: the press is the strip's, wherever it lands */
+  .document-overview-mark {
+    position: absolute;
+    width: 50%;
+    pointer-events: none;
+  }
+  .document-overview-gone {
+    left: 0;
+    background: var(--diff-del-overview);
+  }
+  .document-overview-came {
+    right: 0;
+    background: var(--diff-add-overview);
+  }
+  /* the part of the document on screen, in a scrollbar's weights: over the marks, and clear
+     enough that they read through it */
+  .document-overview-view {
+    position: absolute;
+    inset-inline: 0;
+    background: color-mix(in srgb, var(--surface2) 40%, transparent);
+    :where([data-hover]) &:hover {
+      background: color-mix(in srgb, var(--surface2) 60%, transparent);
+    }
+    .document-overview:active > & {
+      background: color-mix(in srgb, var(--element1) 70%, transparent);
+    }
+  }
+
   /* As it was beside as it is: one grid, a row per block, so a block and its other self share a
      top edge and the two sides are one scroll. Two measures, sharing one pair of side pads, with
      the rule between them down the middle of the gap. */

@@ -73,6 +73,10 @@
      chat log and the diff pane read the one value. */
     --diff-add-word: #6fae5f17;
     --diff-del-word: #c07f6a17;
+    /* and at the weight a change carries on the strip that maps a file's changes down the edge of
+     what is read, 15px a side (themes.ts, overviewTint) */
+    --diff-add-overview: #6fae5fb3;
+    --diff-del-overview: #c07f6ab3;
     /* The text ladder: text0 is what you read, text1 what you scan (labels, filenames, controls at
      rest), text2 what you skip (hints, comments, the tool log, anything switched off).
 

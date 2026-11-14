@@ -965,6 +965,13 @@ export function syntaxOf(theme: Theme): Record<ThemeSyntaxToken, string> {
   };
 }
 
+/** A change on the strip that maps a whole file's changes down the edge of what is read. The line
+ * tint again, at a weight that carries on a band 15px wide: the tint's own alpha is set for a line
+ * of text and vanishes there. Both surfaces that draw the strip read it from here. */
+export function overviewTint(lineTint: string): string {
+  return hex8(lineTint, 0.7);
+}
+
 export function themeToCssVars(theme: Theme): Record<string, string> {
   const out: Record<string, string> = {};
   for (const k of themeColorKeys) out[cssVarName(k)] = theme.colors[k];
@@ -986,6 +993,8 @@ export function themeToCssVars(theme: Theme): Record<string, string> {
   out["--shadow"] = theme.kind === "dark" ? "#00000066" : "#0000002e";
   out["--diff-add-word"] = wordTint(theme.colors.diffAdd);
   out["--diff-del-word"] = wordTint(theme.colors.diffDel);
+  out["--diff-add-overview"] = overviewTint(theme.colors.diffAdd);
+  out["--diff-del-overview"] = overviewTint(theme.colors.diffDel);
   return out;
 }
 

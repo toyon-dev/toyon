@@ -2,6 +2,7 @@ import { matchChord } from "@toyon/shared";
 import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cx } from "./cx.ts";
 import { DocumentFind } from "./DocumentFind.tsx";
+import { DocumentOverview } from "./DocumentOverview.tsx";
 import { diffDocument } from "./documentDiff.ts";
 import { Float } from "./Float.tsx";
 import { isFind } from "./find.ts";
@@ -50,7 +51,8 @@ const JUMP_AIR = 16;
  * markdown and scrolling with it, and stays out of the outline: a line of Toyon's own on a text
  * that is the agent's. `before` is the same document as it was, rendered the same way: with one,
  * the page is marked with what came and what went since (documentDiff.ts), in one column or,
- * with `split`, as it was beside as it is.
+ * with `split`, as it was beside as it is, and where it changed is mapped down the right edge
+ * (DocumentOverview.tsx).
  */
 export function Document({
   html,
@@ -186,6 +188,7 @@ export function Document({
           dangerouslySetInnerHTML={{ __html: page }}
         />
       </div>
+      {before !== undefined && <DocumentOverview root={ref} body={body} page={page} />}
       {find && <DocumentFind root={ref} body={body} seed={find.seed} seq={find.seq} onClose={closeFind} />}
       <Outline heads={heads} at={at} onJump={jump} />
     </>

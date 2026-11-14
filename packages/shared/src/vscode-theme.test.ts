@@ -105,6 +105,8 @@ describe("color helpers", () => {
     expect(v["--diff-add"]).toBe("#b8bb261f");
     // the word weight is the line tint's own alpha scaled, so a theme names one and gets both
     expect(v["--diff-add-word"]).toBe("#b8bb2611");
+    // and the weight a change carries on the strip down the edge of what is read
+    expect(v["--diff-add-overview"]).toBe("#b8bb26b3");
     expect(v["--accent"]).toBe(gruvboxDarkSoft.colors.orange); // no accent named: its orange
     // the fault paints whole rows, so it steps off the accent: red here, orange where a theme
     // selects in something of its own
@@ -123,9 +125,9 @@ describe("color helpers", () => {
     expect(v["--link"]).toBe(gruvboxDarkSoft.colors.blue);
     expect(themeToCssVars(toyonDark)["--link"]).toBe("#83a9cf");
     expect(themeToCssVars({ ...gruvboxDarkSoft, link: "steelblue" })["--link"]).toBe(gruvboxDarkSoft.colors.blue);
-    // + accent, fault, link, the two sunken tones, scrim, shadow, a word weight per diff tint, the
-    // three inks (the text ladder held still), and the seven syntax colours
-    expect(Object.keys(v).length).toBe(themeColorKeys.length + 19);
+    // + accent, fault, link, the two sunken tones, scrim, shadow, a word weight and a strip weight
+    // per diff tint, the three inks (the text ladder held still), and the seven syntax colours
+    expect(Object.keys(v).length).toBe(themeColorKeys.length + 21);
   });
 });
 

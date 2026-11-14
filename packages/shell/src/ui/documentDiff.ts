@@ -15,8 +15,8 @@ type Row = Op | { k: "edit"; o: number; n: number };
 /** the classes a mark wears (document.css): on a block, a row or an item that came or went whole,
  * and on the `ins` or `del` around words inside one that stayed. Markdown's own strikethrough is
  * a bare `del`, and is not a mark. */
-const CAME = "document-came";
-const GONE = "document-gone";
+export const CAME = "document-came";
+export const GONE = "document-gone";
 
 /** past this many cells the table that aligns two lists is not built: the lists are read as one
  * stretch gone and one come, which is what a rewrite that large is */

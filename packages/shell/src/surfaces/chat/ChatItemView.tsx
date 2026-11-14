@@ -1267,7 +1267,7 @@ export const ChatItemView = memo(function ChatItemView({
                   the person's word, the description what they read before saying it, and in one
                   ink the bubble had no first line */}
               {answerStack(said.questions, said.answers).map((s, i) => (
-                <div key={said.questions[i]?.id ?? i}>
+                <div key={said.questions[i]?.id ?? i} className="msg-pick">
                   {s.pick}
                   {s.descriptions.map((d, j) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list, built whole from the record

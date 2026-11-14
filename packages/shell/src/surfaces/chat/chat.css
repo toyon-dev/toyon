@@ -386,6 +386,12 @@
     & .msg-pick-desc {
       color: var(--ink1);
     }
+    /* one question's answer from the next, by the prose's own paragraph gap (.md p): a typed note
+       ends an entry in the pick's ink, and with no room under it the note read as the heading of
+       the question after it. */
+    & .msg-pick + .msg-pick {
+      margin-top: 8px;
+    }
   }
 
   /* a message the agent does not have yet: the sent bubble's box, the whole row a rung down the

@@ -42,7 +42,7 @@ import {
   setAwsAuthRefresh,
 } from "../awsAuth.ts";
 import { heldUnshown, isListEvent, ownCards } from "../handoffLog.ts";
-import { agentModeFor, modeAfterPlan, orderPlanOptions } from "../modes.ts";
+import { agentModeFor, clearsContext, modeAfterPlan, orderPlanOptions } from "../modes.ts";
 import { carried, isNews, newsToSend, sentence } from "../news.ts";
 import { markOrigins } from "../origins.ts";
 import { formatOutput } from "../output.ts";
@@ -125,6 +125,8 @@ export interface AcpSessionDeps {
   stopGraceMs?: number;
   /** how long a call's input is held for the rest of it before it is read as whole */
   inputHoldMs?: number;
+  /** how long a message waits for the fresh conversation a plan's yes asked for to report itself */
+  swapWaitMs?: number;
   /** where Claude Code keeps its session logs, for the end of a command sent to the background
    * (background.ts); its own default when absent */
   claudeConfigDir?: string;
@@ -233,6 +235,10 @@ const STOP_GRACE_MS = 5_000;
  * all, so a half-written input rarely reaches the row; short enough that a command already running
  * does not read as one still being written. */
 const INPUT_HOLD_MS = 1000;
+/** How long a message waits for the fresh conversation a clear-context yes starts. The adapter
+ * has it up in under a second and says so; this is for one that never says, and by then the old
+ * conversation is long gone, so the message lands in the new one or is handed back. */
+const SWAP_WAIT_MS = 15_000;
 
 /** a turn the drain loop is on (see `turn` on the session) */
 interface Turn {
@@ -414,6 +420,18 @@ export class AcpSession implements AgentAdapter {
   /** ask cards waiting on a person, by ask id. The agent's request stays open on the wire until
    * one of these settles, and that is what blocks its turn. */
   private asks = new Map<string, PendingAsk>();
+  /** What keeps a message out of the running turn (steer), or null. A plan card is up: its yes
+   * may drop the conversation it is asked in, and Claude's adapter carries nothing across that
+   * was put into the old one except the mark that the turn owes the message an answer, which the
+   * fresh conversation never gives, so the prompt never returns (wire.ts,
+   * clearContextStrandsSteers). `swapping` is that yes given: the hold stays until the adapter
+   * says the fresh context is up, the turn ends, or `swapWaitMs` passes with neither. */
+  private planHold: {
+    done: Promise<void>;
+    release: () => void;
+    swapping: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null = null;
   /** the turn's reply so far, scanned for the pictures it names (scanPictures), and the targets
    * already copied */
   private replyText = "";
@@ -877,9 +895,15 @@ export class AcpSession implements AgentAdapter {
    * person's own bubble, in the place they sent it. */
   private async steer(item: QueueItem) {
     item.recorded ??= await this.record(item);
+    // recorded where it was sent, and sent once nothing can drop the conversation it would join
+    while (this.planHold) await this.planHold.done;
+    // closed meanwhile: nothing may start a turn, and the message is on the transcript already
+    if (this.stopped) return;
     const live = this.live;
-    // writing the attachments is a window the turn can settle in, and then this is a plain message
-    if (!live || !(this.running || this.own) || this.turn?.stopping) return this.enqueue(item);
+    // writing the attachments and waiting out a plan card are windows the turn can settle in, and
+    // then this is a plain message. Read off the turn's bracket, not the drain loop: a turn that
+    // has just closed is still the loop's, and the loop takes the message next from the queue.
+    if (!live || !(this.turn?.open || this.own) || this.turn?.stopping) return this.enqueue(item);
     // unanswered from the moment it goes out: a stop can land before the agent replies
     this.steered.push(item);
     this.steerMark = this.streamingId;
@@ -941,6 +965,38 @@ export class AcpSession implements AgentAdapter {
     const at = this.steered.indexOf(item);
     if (at >= 0) this.steered.splice(at, 1);
     return at >= 0;
+  }
+
+  /** a plan card went up: what would steer waits for its answer (planHold) */
+  private holdForPlan() {
+    if (this.planHold) return;
+    let release = () => {};
+    const done = new Promise<void>((r) => {
+      release = r;
+    });
+    this.planHold = { done, release, swapping: false, timer: null };
+  }
+
+  /** The plan card's yes dropped the conversation: the hold stays for the fresh one. Bounded,
+   * since the adapter's word that it is up is a usage figure and not a promise. */
+  private holdForSwap() {
+    const hold = this.planHold;
+    if (!hold) return;
+    hold.swapping = true;
+    hold.timer = setTimeout(() => {
+      if (this.planHold !== hold) return;
+      log.warn(this.d.worktreeId, "no word of the fresh context; what waited for it goes now");
+      this.releasePlanHold();
+    }, this.d.swapWaitMs ?? SWAP_WAIT_MS);
+    hold.timer.unref?.();
+  }
+
+  private releasePlanHold() {
+    const hold = this.planHold;
+    if (!hold) return;
+    this.planHold = null;
+    if (hold.timer) clearTimeout(hold.timer);
+    hold.release();
   }
 
   /** Interrupt the running turn. Context up to the interrupt persists in the agent's session, and
@@ -1108,6 +1164,8 @@ export class AcpSession implements AgentAdapter {
    * handed over for a plan card that never came is the person's to answer anyway. */
   private turnOver(stopReason: string, by?: StoppedBy) {
     this.emit({ type: "turn-end", stopReason, ...(by ? { by } : {}), ts: Date.now() });
+    // the swap this turn was waiting on is moot: what waited for it finds no turn and goes next
+    if (this.planHold?.swapping) this.releasePlanHold();
     this.showHeld();
   }
 
@@ -1657,6 +1715,11 @@ export class AcpSession implements AgentAdapter {
       const limits = parseRateLimit(params.update._meta, Date.now());
       if (limits) this.d.onLimits?.(this.conn.spec.id, limits);
     }
+    // an empty context is the adapter's word that the fresh conversation is up and the turn is
+    // on it: what waited for the swap joins the turn there
+    if (params.update.sessionUpdate === "usage_update" && params.update.used === 0 && this.planHold?.swapping) {
+      this.releasePlanHold();
+    }
     // the agent changed mode on its own: remember, so the next turn's applyMode compares against
     // what it is in, not what we last asked for. Into its plan mode (Claude's EnterPlanMode tool
     // does this), the record follows: the chip and the rail say plan while it holds, and the next
@@ -1835,6 +1898,7 @@ export class AcpSession implements AgentAdapter {
     // no list for this plan: Toyon may read one off it, which lands as a held list while the card
     // is up and is answered with it (a late list, below)
     if (plan && planPath && !handoff && detail.trim()) this.d.onPlanUnsplit?.(detail, planPath);
+    if (plan) this.holdForPlan();
     return this.openAsk<acp.RequestPermissionResponse>(
       (id) => ({
         type: "agent-permission",
@@ -1854,12 +1918,18 @@ export class AcpSession implements AgentAdapter {
         if (!choice) {
           // no answer: a list Toyon read for this card goes with it, the agent's own stays held
           if (plan) this.dropReadList();
+          if (plan) this.releasePlanHold();
           return { outcome: { outcome: "cancelled" } };
         }
         // approving a plan is also choosing how the work after it runs: Claude's options say
         // whether edits are auto-accepted or approved one by one, and the worktree's mode follows
         const res: acp.RequestPermissionResponse = { outcome: { outcome: "selected", optionId: choice.id } };
         const approved = choice.kind === "allow_once" || choice.kind === "allow_always";
+        // a yes into a fresh conversation keeps the hold until that conversation is up; any other
+        // answer leaves the agent where it is, and what waited under the card goes with it
+        const clears = plan && approved && clearsContext(choice.id);
+        if (clears) this.holdForSwap();
+        else if (plan) this.releasePlanHold();
         if (plan && approved) this.d.setMode?.(modeAfterPlan(choice.name));
         // after the mode, so the act reads the mode the work runs in. The list is the one held
         // as the card is answered, not as it went up: one handed over late, while the card was
@@ -1869,6 +1939,17 @@ export class AcpSession implements AgentAdapter {
         // read before the list is acted on: the go closes it, and the worktrees take seconds
         const says = decided && approved ? this.d.handoffSays?.(decided.id) : undefined;
         if (decided) this.d.onHandoff?.(decided.id, approved);
+        // The fresh conversation is told only to build the plan as proposed, so both words below
+        // matter more there, and neither may go ahead of the answer: the conversation they would
+        // land in is the one being dropped. They are recorded now and steer once the hold lets go.
+        if (clears) {
+          const say = async () => {
+            if (planPath) await this.sayPlanEdited(detail, planPath);
+            if (says) await this.sayHandoffActed(says);
+          };
+          fireAndForget(this.d.worktreeId, say(), "what goes with a clear-context yes");
+          return res;
+        }
         // the yes said yes to the file, which may no longer be the plan the agent holds
         if (plan && approved && planPath) {
           return this.sayPlanEdited(detail, planPath)
@@ -1999,7 +2080,12 @@ export class AcpSession implements AgentAdapter {
         // the card is closed here and open on the wire until the resolve: what goes before it
         // reaches the agent while its request is still pending
         const res = respond(outcome, reply);
-        resolve(before ? before().then(() => res) : res);
+        // unless the answer drops the conversation it would reach (planHold): then it follows the
+        // answer, into the fresh one, and waiting on it here would hold the answer back for good
+        if (before && this.planHold?.swapping) {
+          fireAndForget(this.d.worktreeId, before(), "what followed a clear-context yes");
+          resolve(res);
+        } else resolve(before ? before().then(() => res) : res);
       };
       const onAbort = () => settle("cancelled");
       signal?.addEventListener("abort", onAbort, { once: true });

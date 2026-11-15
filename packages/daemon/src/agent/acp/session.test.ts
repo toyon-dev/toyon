@@ -5341,4 +5341,191 @@ describe("AcpSession handoff", () => {
     expect(said).toEqual([]);
     await w.session.close();
   });
+
+  const CLEAR_OPTIONS = [
+    { optionId: "exit-plan-auto", name: "Yes, and auto-accept edits", kind: "allow_always" as const },
+    {
+      optionId: "exit-plan-clear-auto",
+      name: "Yes, clear context and auto-accept edits",
+      kind: "allow_always" as const,
+    },
+    { optionId: "cancel", name: "No, keep planning", kind: "reject_once" as const },
+  ];
+  /** Claude's adapter at a plan card, as far as a client can tell. A yes that clears the context
+   * drops the conversation the card was asked in and builds in a fresh one under the same prompt:
+   * a message taken into the old one is lost and the prompt never returns for it, one that
+   * arrives while the fresh one is being made is refused, and the fresh one reports an empty
+   * context once it is up (`quiet` is an adapter that never does). Once the prompt has returned
+   * a steer is handed back. `fresh` is how many steers had arrived by the time the fresh
+   * conversation could take one. */
+  function clearing(opts: { quiet?: boolean; workMs?: number } = {}) {
+    const at = { stranded: false, fresh: 0 };
+    let turns = 0;
+    const fake: FakeAgent = fakeAgent(
+      async (p, client) => {
+        fake.steerOutcome = "injected";
+        if (++turns === 1) {
+          // typed by hand: the request loses its response type when the options come from a variable
+          const picked = (await client.request(acp.methods.client.session.requestPermission, {
+            sessionId: p.sessionId,
+            toolCall: {
+              toolCallId: "t1",
+              title: "Approve Plan",
+              kind: "switch_mode",
+              content: [{ type: "content", content: { type: "text", text: "# the plan" } }],
+            },
+            options: CLEAR_OPTIONS,
+          })) as acp.RequestPermissionResponse;
+          const id = picked.outcome.outcome === "selected" ? picked.outcome.optionId : "";
+          if (id.startsWith("exit-plan-clear-")) {
+            at.stranded = fake.steers.length > 0;
+            fake.steerError = true;
+            await Bun.sleep(10);
+            fake.steerError = false;
+            at.fresh = fake.steers.length;
+            if (!opts.quiet) {
+              await client.notify(acp.methods.client.session.update, {
+                sessionId: p.sessionId,
+                update: { sessionUpdate: "usage_update", used: 0, size: 1000 },
+              });
+            }
+          }
+          await Bun.sleep(opts.workMs ?? 20);
+        }
+        await client.notify(acp.methods.client.session.update, {
+          sessionId: p.sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "built" } },
+        });
+        if (at.stranded) return new Promise<acp.PromptResponse>(() => {});
+        fake.steerOutcome = "promptRequired";
+        return { stopReason: "end_turn" };
+      },
+      { steering: true },
+    );
+    return { fake, at };
+  }
+  const texts = (steers: FakeAgent["steers"]) =>
+    steers.map((s) => (s.prompt[0]?.type === "text" ? s.prompt[0].text : ""));
+  const ends = (events: AgentEvent[]) => events.filter((e) => e.type === "turn-end");
+
+  test("a plan's yes into a fresh context ends its turn once, and what the list starts is said there", async () => {
+    const { fake, at } = clearing();
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      handoffSays: () => "Do your own piece, and only that.",
+      onHandoff: acts(() => w.session, []),
+    });
+    w.session.send("plan it");
+    w.session.note(held);
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit-plan-clear-auto" });
+    await w.idle();
+    // nothing went into the conversation the yes dropped, so the prompt came back
+    expect(at.stranded).toBe(false);
+    expect(ends(w.events)).toEqual([expect.objectContaining({ stopReason: "end_turn" })]);
+    expect(w.session.status).toBe("idle");
+    // Toyon's row sits where the yes was pressed; the agent got the words once it could keep them
+    expect(at.fresh).toBe(0);
+    expect(texts(fake.steers)).toEqual(["Do your own piece, and only that."]);
+    const types = w.types();
+    expect(types.indexOf("fix-asked")).toBeGreaterThan(types.indexOf("agent-ask-end"));
+    expect(types.indexOf("fix-asked")).toBeLessThan(types.indexOf("usage"));
+    // the turn is over on both sides: the next message is a turn of its own, not a steer
+    w.session.send("and then?");
+    await w.idle();
+    expect(fake.steers).toHaveLength(1);
+    expect(fake.prompts).toHaveLength(2);
+    expect(types.length).toBeLessThan(w.types().length);
+    expect(w.types().filter((t) => t === "turn-start")).toHaveLength(2);
+    expect(ends(w.events)).toHaveLength(2);
+    await w.session.close();
+  });
+
+  test("words typed beside a clear-context yes follow it into the fresh context", async () => {
+    const { fake, at } = clearing();
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, {
+      kind: "choice",
+      choiceId: "exit-plan-clear-auto",
+      note: "also cover the parked case",
+    });
+    await w.idle();
+    expect(at.stranded).toBe(false);
+    expect(at.fresh).toBe(0);
+    expect(texts(fake.steers)).toEqual(["also cover the parked case"]);
+    expect(ends(w.events)).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a message under an open plan card waits for the answer, and goes with a plain yes", async () => {
+    const { fake } = clearing();
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.send("Fix what the hook complains about.", {
+      asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
+    });
+    await waitFor(() => w.types().includes("fix-asked"));
+    await Bun.sleep(10);
+    // on the chat, and not yet with the agent: the card's answer may drop where it would land
+    expect(openAsk(w.events)).toBeTruthy();
+    expect(fake.steers).toHaveLength(0);
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit-plan-auto" });
+    await w.idle();
+    expect(texts(fake.steers)).toEqual(["Fix what the hook complains about."]);
+    expect(ends(w.events)).toHaveLength(1);
+    expect(fake.prompts).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a message under an open plan card crosses a clear-context yes into the fresh context", async () => {
+    const { fake, at } = clearing();
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.send("Fix what the hook complains about.", {
+      asked: { kind: "hook", why: "the pre-commit hook refused the commit" },
+    });
+    await waitFor(() => w.types().includes("fix-asked"));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit-plan-clear-auto" });
+    await w.idle();
+    expect(at.stranded).toBe(false);
+    expect(at.fresh).toBe(0);
+    expect(texts(fake.steers)).toEqual(["Fix what the hook complains about."]);
+    expect(ends(w.events)).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("an adapter that never reports the fresh context gets what waited for it after a bounded wait", async () => {
+    const { fake, at } = clearing({ quiet: true, workMs: 120 });
+    const w = world(fake, claudeSpec, 60_000, undefined, { swapWaitMs: 40 });
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit-plan-clear-auto", note: "and the tests" });
+    await w.idle();
+    expect(at.stranded).toBe(false);
+    expect(at.fresh).toBe(0);
+    expect(texts(fake.steers)).toEqual(["and the tests"]);
+    expect(fake.prompts).toHaveLength(1);
+    expect(ends(w.events)).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a turn that ends before the fresh context reports sends what waited as the next turn", async () => {
+    const { fake, at } = clearing({ quiet: true });
+    const w = world(fake);
+    w.session.send("plan it");
+    await waitFor(() => !!openAsk(w.events));
+    w.session.answer(card(w.events).id, { kind: "choice", choiceId: "exit-plan-clear-auto", note: "and the tests" });
+    await waitFor(() => fake.prompts.length === 2);
+    await w.idle();
+    expect(at.stranded).toBe(false);
+    // offered to the turn as it ended, handed back, and sent as a prompt of its own
+    expect(fake.prompts[1]!.prompt.some((b) => b.type === "text" && b.text.includes("and the tests"))).toBe(true);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
+    expect(ends(w.events)).toHaveLength(2);
+    expect(w.session.status).toBe("idle");
+    await w.session.close();
+  });
 });

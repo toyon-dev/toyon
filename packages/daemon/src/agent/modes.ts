@@ -33,9 +33,16 @@ export function modeAfterPlan(optionName: string): PermissionMode {
 export function orderPlanOptions<T extends { optionId: string }>(options: readonly T[]): T[] {
   const rank = (id: string) => {
     if (id === "exit-plan-default") return 1;
-    if (id.startsWith("exit-plan-clear-")) return 2;
+    if (clearsContext(id)) return 2;
     if (id.startsWith("exit-plan-")) return 0;
     return 3;
   };
   return [...options].sort((a, b) => rank(a.optionId) - rank(b.optionId));
+}
+
+/** A plan's yes that also drops the conversation the plan was written in: the adapter ends the
+ * cycle the card was asked in and builds the plan in a fresh one, under the same prompt. The ids
+ * are claude-agent-acp's, as above. */
+export function clearsContext(optionId: string): boolean {
+  return optionId.startsWith("exit-plan-clear-");
 }

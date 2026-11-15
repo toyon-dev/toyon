@@ -276,6 +276,55 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     }
   }, 300_000);
 
+  test("a plan approved into a fresh context ends its turn, and what was said beside the yes reaches it", async () => {
+    const record: { mode: PermissionMode } = { mode: "plan" };
+    const { t, wt, events, session, settle, said } = world(BUILTIN_AGENTS, {
+      mode: () => record.mode,
+      setMode: (m) => {
+        record.mode = m;
+      },
+    });
+    try {
+      session.send(
+        "Plan how to add a file named README.md containing the single word hello. Keep the plan to two short lines, then exit plan mode so I can approve it.",
+      );
+      for (let i = 0; i < 1800 && !events.some((e) => e.type === "agent-permission"); i++) await Bun.sleep(100);
+      const card = events.find((e) => e.type === "agent-permission") as Extract<
+        AgentEvent,
+        { type: "agent-permission" }
+      >;
+      expect(card, `no plan card; the agent said: ${said()}`).toBeDefined();
+      const clear = card.choices.find((c) => c.id.startsWith("exit-plan-clear-"));
+      expect(clear, `no clear-context yes among ${card.choices.map((c) => c.id).join(" ")}`).toBeDefined();
+      // words beside the pick go to the agent as a message with the answer, the way Toyon's own
+      // word on a pieces list does: the adapter drops the context that message would land in
+      session.answer(card.id, {
+        kind: "choice",
+        choiceId: clear!.id,
+        note: "Put the word steered on a second line of that file as well.",
+      });
+      await settle();
+      const tail = events
+        .slice(-12)
+        .map((e) => e.type)
+        .join(" ");
+      expect(session.status, `the turn never ended; last events: ${tail}`).toBe("idle");
+      expect(events.filter((e) => e.type === "turn-end")).toEqual([
+        expect.objectContaining({ type: "turn-end", stopReason: "end_turn" }),
+      ]);
+      expect(readFileSync(join(wt, "README.md"), "utf8").trim().split("\n")).toEqual(["hello", "steered"]);
+      // the turn is over on both sides: the next message is a turn of its own, not a steer
+      session.send("Reply with only the word: done. Use no tools.");
+      await settle();
+      expect(session.status).toBe("idle");
+      expect(events.filter((e) => e.type === "turn-start")).toHaveLength(2);
+      expect(events.filter((e) => e.type === "turn-end")).toHaveLength(2);
+    } finally {
+      await session.close();
+      t.cleanup();
+    }
+  }, 600_000);
+
   test("/mcp lists Toyon's own server and reconnects it, answered by the adapter without the model", async () => {
     let port = 0;
     const toyon = new ToyonMcp({

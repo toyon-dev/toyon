@@ -229,6 +229,26 @@ const CLAUDE: AdapterWire = {
       upstream: "Not asked: the echo's uuid on the first update of the answer would retire the guess.",
       open: true,
     },
+    clearContextStrandsSteers: {
+      gap:
+        "A plan approved with a clear-context option ends the cycle the card was asked in and starts a fresh " +
+        "conversation under the same prompt (`continuePlanInFreshContext`). A message steered into the old " +
+        "conversation and not yet read is not carried over, but the mark it left on the turn " +
+        "(`Turn.steeredEchoes`) is: the fresh conversation never echoes that uuid, so no idle settles the " +
+        "turn and `session/prompt` never returns. A steer that arrives while the fresh conversation is being " +
+        "made is refused (`session has ended`) or answered `promptRequired`.",
+      here:
+        "session.ts holds every message that would steer while a plan card is up (`planHold`), and past a " +
+        "clear-context yes until the adapter's `usage_update` with `used: 0`, which it sends once the turn " +
+        "is on the fresh conversation; the turn's end or `SWAP_WAIT_MS` lets go without it. What rides a " +
+        "plan's yes (the edited plan, the pieces list, words beside the pick) follows that answer instead " +
+        "of going ahead of it. No flag: the hold costs nothing where no answer drops a conversation.",
+      upstream:
+        "Owed to agentclientprotocol/claude-agent-acp: the restart re-pushes the turn's unread steers into " +
+        "the fresh input behind the continuation message, or drops their marks, and `steer` waits out a " +
+        "restart in flight. Then the swap half of the hold can go; the card half stays cheap.",
+      open: true,
+    },
     textBurstAfterTools: {
       gap:
         "After a tool result, Fable 5.1 and Opus 5.5 open a thinking block, stay silent for as long as the " +

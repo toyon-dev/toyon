@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentModeFor, modeAfterPlan, orderPlanOptions } from "./modes.ts";
+import { agentModeFor, clearsContext, modeAfterPlan, orderPlanOptions } from "./modes.ts";
 import type { AgentSpec } from "./registry.ts";
 
 const base: AgentSpec = {
@@ -62,5 +62,15 @@ describe("orderPlanOptions", () => {
   test("another agent's ids keep the order they came in", () => {
     const sent = [{ optionId: "yes" }, { optionId: "no" }];
     expect(orderPlanOptions(sent)).toEqual(sent);
+  });
+});
+
+describe("clearsContext", () => {
+  test("only the adapter's clear-context yes drops the conversation the plan was written in", () => {
+    expect(clearsContext("exit-plan-clear-auto")).toBe(true);
+    expect(clearsContext("exit-plan-clear-default")).toBe(true);
+    expect(clearsContext("exit-plan-auto")).toBe(false);
+    expect(clearsContext("exit-plan-default")).toBe(false);
+    expect(clearsContext("yes")).toBe(false);
   });
 });

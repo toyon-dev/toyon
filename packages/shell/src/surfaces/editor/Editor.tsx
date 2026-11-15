@@ -326,7 +326,7 @@ export default function Editor({
   numbers: boolean;
   /** whether a long line folds at the pane's edge, or runs on and the pane scrolls sideways */
   wrap: boolean;
-  /** whether the diff draws the old text beside the new, given the room, or in one column */
+  /** whether the diff draws the old text beside the new, or in one column */
   split: boolean;
   theme: Theme;
   sync: EditorSync;
@@ -494,11 +494,12 @@ export default function Editor({
       diffEditor = monaco.editor.createDiffEditor(el, {
         ...options,
         originalEditable: false,
-        // a split too narrow for two readable columns falls back to one, and comes back as the
-        // room does: the head's switch says what was asked for, the width says what is drawn
+        // the pane asks for two columns only where it measured the room, and Monaco's own fold
+        // stands behind that for the frames a resize is ahead of the pane. Monaco folds at its
+        // breakpoint and under, the pane under SPLIT_MIN, so the breakpoint is one less.
         renderSideBySide: splitRef.current,
         useInlineViewWhenSpaceIsLimited: true,
-        renderSideBySideInlineBreakpoint: SPLIT_MIN,
+        renderSideBySideInlineBreakpoint: SPLIT_MIN - 1,
         // a change within one line reads on that line: added text highlighted, removed text struck
         // through in place, instead of the whole old line drawn again above the new one
         experimental: { useTrueInlineView: true },

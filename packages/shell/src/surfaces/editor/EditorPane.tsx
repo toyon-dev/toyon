@@ -276,8 +276,11 @@ export function EditorPane({
   };
   const [split, setSplit] = useSplit();
   const bodyRef = useRef<HTMLDivElement>(null);
-  // the page folds to one column where Monaco folds its own, by the same number
+  // two columns are drawn only in a body wide enough for both. The seat in the head, the page and
+  // Monaco all read this one answer, so the head never names a layout the body is not showing: a
+  // split asked for in a narrow pane reads inline, and a press on split there makes the room.
   const roomy = useAtLeast(bodyRef, SPLIT_MIN);
+  const columns = split && roomy && !onScreen;
   // whether the split shut the chat dock for its room: the chat comes back when the split is
   // turned off or the pane closes, and only then. A chat the person opened again meanwhile is
   // theirs to keep, and one they shut themselves is not the split's to reopen.
@@ -424,9 +427,10 @@ export function EditorPane({
           {/* a phone's screen is one column wide whatever is asked */}
           {diffable && (
             <DiffSeats
-              at={diffOn ? (split && !onScreen ? "split" : "inline") : "file"}
+              at={diffOn ? (columns ? "split" : "inline") : "file"}
               onPick={onDiffSeat}
               columns={!onScreen}
+              narrow={split && !roomy}
             />
           )}
           {/* not a view of the text, so outside the cluster: it sends the page to the preview */}
@@ -513,7 +517,7 @@ export function EditorPane({
             text={disk.after}
             before={markable ? disk.before : undefined}
             marks={marks}
-            split={split && roomy && !onScreen}
+            split={columns}
             path={path}
             worktreeId={worktreeId}
             // a copy only git holds, or a file from outside, has no bytes on disk for its images to be served from
@@ -539,7 +543,7 @@ export function EditorPane({
                 readOnly={history || !disk.writable || onScreen}
                 numbers={!onScreen}
                 wrap={wrap}
-                split={split}
+                split={columns}
                 theme={theme}
                 sync={sync}
                 // the editor knows the lines; whose file they are, and at which commit, is the

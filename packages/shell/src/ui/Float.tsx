@@ -10,7 +10,7 @@ import {
 } from "react";
 import { cx } from "./cx.ts";
 import "./float.css";
-import { type DismissReason, floats } from "./floats.ts";
+import { type DismissReason, floats, labelTakes } from "./floats.ts";
 import { useOnChange } from "./hooks.ts";
 import { type Placement, place, type Rect, widthFor } from "./place.ts";
 
@@ -102,6 +102,7 @@ export function Float({
   boxRef,
   handle,
   children,
+  onClick,
   ...rest
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -208,7 +209,16 @@ export function Float({
   });
 
   return (
-    <div ref={ref} className={cx("float", className)} {...rest}>
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the handler acts on nothing; it keeps a click in the box from a label around it, and a key pressed on a control arrives as that same click
+    <div
+      ref={ref}
+      className={cx("float", className)}
+      {...rest}
+      onClick={(e) => {
+        if (e.target instanceof Element && labelTakes(e.currentTarget, e.target)) e.preventDefault();
+        onClick?.(e);
+      }}
+    >
       {children}
     </div>
   );

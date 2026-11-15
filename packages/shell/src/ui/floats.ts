@@ -56,6 +56,25 @@ export function controlOf(target: EventTarget | null): Element | null {
   return el?.closest?.(CONTROL) ?? el ?? null;
 }
 
+/** what a click does by its own default, which cancelling the click would take away: a link
+ * followed, a box ticked, a label of the float's own pressing its control */
+const OWN_DEFAULT = "a[href], input, select, textarea, label";
+
+/**
+ * Whether a click in a float has to be cancelled to keep it from a `<label>` the float is rendered
+ * inside (a form row's chip). The box stays where React renders it, so for the browser a click in
+ * it is a click on that label, which presses the label's control: the chip the box opened from. A
+ * press on the box's padding closed it that way, and a row that closed the box as it was picked
+ * opened it again, since a row already out of the document is no longer a button to the browser.
+ * Cancelling the click is the one thing that stops a label. A control with a default of its own
+ * keeps it: the label leaves that one alone already.
+ */
+export function labelTakes(box: Element, target: Element): boolean {
+  if (!box.parentElement?.closest("label")) return false;
+  const own = target.closest(OWN_DEFAULT);
+  return !own || !box.contains(own);
+}
+
 /** a float whose box holds the press, or whose trigger does, or that a pressed control names */
 function holds(e: Entry, target: Node): boolean {
   if (e.box.contains(target)) return true;

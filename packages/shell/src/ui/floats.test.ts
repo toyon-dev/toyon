@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createFloats, dismissedBy, type Entry, parentOf } from "./floats.ts";
+import { JSDOM } from "jsdom";
+import { createFloats, dismissedBy, type Entry, labelTakes, parentOf } from "./floats.ts";
 
 /** The stack reads three things off a node: whether it contains another, what control a press
  * landed on, and what an element says it controls. Fakes for those hold the rules without a DOM. */
@@ -286,5 +287,43 @@ describe("the keyboard and the preview", () => {
     h.fire("win:blur", {});
     h.flush();
     expect(closed).toEqual([]);
+  });
+});
+
+describe("a float rendered inside a label", () => {
+  const page = (html: string) => {
+    const doc = new JSDOM(html).window.document;
+    const at = (sel: string) => doc.querySelector(sel) as Element;
+    return { box: at(".float"), at };
+  };
+  const row = `
+    <label class="form-row">
+      <button id="chip">merge commit</button>
+      <div class="float">
+        <div id="pad"><input id="field" /></div>
+        <button id="row"><span id="name">rebase</span></button>
+        <a id="link" href="/docs">docs</a>
+        <label id="own"><input type="checkbox" /><span id="word">keep</span></label>
+      </div>
+    </label>`;
+
+  test("a click on a row or on the box's own padding is kept from the label", () => {
+    const { box, at } = page(row);
+    expect(labelTakes(box, at("#row"))).toBe(true);
+    expect(labelTakes(box, at("#name"))).toBe(true);
+    expect(labelTakes(box, at("#pad"))).toBe(true);
+    expect(labelTakes(box, box)).toBe(true);
+  });
+
+  test("a control whose click does something by default keeps its click", () => {
+    const { box, at } = page(row);
+    expect(labelTakes(box, at("#field"))).toBe(false);
+    expect(labelTakes(box, at("#link"))).toBe(false);
+    expect(labelTakes(box, at("#word"))).toBe(false);
+  });
+
+  test("a float under no label cancels nothing", () => {
+    const { box, at } = page(`<div><div class="float"><button id="row">rebase</button></div></div>`);
+    expect(labelTakes(box, at("#row"))).toBe(false);
   });
 });

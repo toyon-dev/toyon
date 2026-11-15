@@ -2,6 +2,34 @@
 
 What changed in each release of Toyon, newest first.
 
+## 0.26.0 (2026-11-15)
+
+Landing defaults to rebase, stop ends the turn the moment you press it, and the composer completes file paths with tab.
+
+### New
+- Typing a path that starts with ~/ or / in the composer lists matching paths, and tab or enter takes the highlighted row; up and down move it with ghost text following. After a ! command, tab completes relative paths from the worktree the command runs in. A path outside the worktree that exists is underlined in the draft and the sent bubble, and pressing it opens it.
+- Archived worktrees with unlanded work show a followup marker in the rail, with a command and a key to jump to them.
+- Rendered markdown diffs have the same overview strip down the right edge as the code view, removed on the left half and added on the right. A press moves there, a drag scrolls, and the wheel works over it.
+- A plan built in parts can be started by its own landing: handoff treats a worktree's own landing as the wake for the message waiting on it.
+
+### Changed
+- Landing on the here and push routes uses rebase when the repo's settings name no method: a fast-forward with no merge commit. The PR route still follows what the repo allows on GitHub. The setup view shows rebase for an unset repo and keeps merge when you pick it.
+- Pressing stop ends the turn at once. A stopped agent no longer reads as an error, and the next message starts right away on the same agent process. An agent that does not acknowledge within five seconds is dropped.
+- The rail orders its sections active, drafts, archived, discovered, the order a worktree ages, with the worktrees Toyon did not make last. A draft no longer blocks archive, and the archive press no longer asks about it.
+- The agent keeps working after it offers a handoff card, on anything that does not depend on your answer. The running handoff row reads "splitting off work" while its list is being typed, and a piece sent into an already open chat reads started, queued, sent, not started or not sent on the sender's side, with a relay icon.
+- The ahead count in the rail, the context line and the landed mark counts changes main lacks rather than commits, so a branch squashed on GitHub reads as level instead of ahead by one.
+- Comment colours in Toyon Dark and Toyon Light are darker or lighter to reach about 3.4:1 on their grounds, and the chat's code blocks follow.
+- The top bar's right-hand buttons sit closer together, in the order phone, branch tab, settings, zen. The files, changes and history tabs read at the same size as the rail rows beside them. Archived rows say landed instead of merged everywhere.
+- Each answer in a reply to a multi-question card sits a paragraph apart from the last.
+
+### Fixed
+- A turn could stay open after the agent went idle, so the chat read as working for hours.
+- Handoff news could be lost when Toyon's message was recorded before yours, a piece waiting on another in the same go showed a blank where its title belonged, and a handoff decline was recorded again on every boot. A piece moved to here before approval said it started right away when it still waited for a branch to land.
+- A new line in the diff pane carried the word tint over the whole line as well as the line band.
+- Clicking a choice inside a float, such as the land or file chips, left the float open.
+- On an archived page with a file open from its history, the full height toggle looked pressed while the pane still split the column with the chat.
+- The archive press could pick a sleeping landed row far down the rail; it now takes only a row that shows as landed.
+
 ## 0.25.0 (2026-11-13)
 
 The Claude adapter moves to the current release, and a handoff now closes its loop: the row that sent a piece hears when it lands, and an agent can stop or message a sibling chat.

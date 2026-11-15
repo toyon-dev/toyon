@@ -22,7 +22,7 @@ Each feature with how to reach it. The short list and the automatic features are
 | Usage | The ring in the chat box shows how full the context is and your Claude plan usage. |
 | Agent, model and effort | Chips in the chat box. In a new chat the model chip lists every agent's models, and picking one picks its agent. "default agent" in the command palette sets the agent new chats start with. |
 | Background commands | A command the agent runs in the background shows its live output at the bottom of the chat. |
-| Split off work | `/handoff`. A piece can wait for another branch to land before it starts. See [agents.md](agents.md#handoff). |
+| Split off work | `/handoff`. The task can wait for another branch to land before it starts. See [agents.md](agents.md#handoff). |
 | Copy code | Code blocks have a copy button. |
 
 ## Code
@@ -51,7 +51,7 @@ Each feature with how to reach it. The short list and the automatic features are
 | Land with uncommitted changes | Land commits them first, with the written message or one you typed. |
 | Sync with main | The sync button merges main into the chat's branch. Uncommitted changes are stashed and put back. If the agent is working, the sync runs when the turn ends. A conflict is sent to the agent to resolve. |
 | Pull requests | On the `pr` route the button reads "create pr" until a pull request exists. After that, land merges it and "update" pushes new commits. |
-| Pull request status | A line above the chat box shows where the pull request stands. "checks running", "checks failed" and "preview up" are links. |
+| Pull request status | A line above the chat box shows the pull request's status. "checks running", "checks failed" and "preview up" are links. |
 | Review comments | Press the comment count above the chat box. Comments are listed by file, with replies. "add to chat" puts a thread in your message. |
 | Deploy preview | A button in the changes panel opens the pull request's deploy preview from Amplify, Netlify, Vercel, Cloudflare Pages or Render. |
 | Open a branch or pull request | <kbd>⌘⇧G</kbd> opens one as a chat. |
@@ -85,7 +85,6 @@ Each feature with how to reach it. The short list and the automatic features are
 | Back and forward | <kbd>⌘[</kbd> and <kbd>⌘]</kbd>. |
 | Full window | <kbd>⌘.</kbd> shows the preview alone. |
 | Pick an element | <kbd>⌘E</kbd> and <kbd>⌘I</kbd>. See [using.md](using.md#ask-for-a-change). |
-| Design | <kbd>⌘D</kbd>. See [using.md](using.md#check-the-change). |
 
 ## App
 

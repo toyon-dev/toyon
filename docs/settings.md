@@ -122,7 +122,7 @@ A `run` command must stay in the foreground and listen on `$PORT`. How it reload
 - Each command gets its own `$PORT`.
 - Each command gets the addresses of the others: `<NAME>_URL` and `VITE_<NAME>_URL`, plus `API_URL` for a command named `api`. An address stays the same for the copy's life, whether the command runs in the copy, on main or at a remote.
 - Toyon's guess adds the port flag: `--port $PORT --strictPort` for Vite, `--port $PORT` for Astro.
-- If a server starts on a different port, the preview finds it and the process log shows which flag to add. If it never listens, the preview shows an error.
+- If a server starts on a different port, Toyon detects the port and the process log shows which flag to add. If it never listens, the preview shows an error.
 
 ## Sleep
 
@@ -130,7 +130,7 @@ A copy's servers start when you open it.
 
 - A copy unopened for two hours stops its servers. On a deployed machine it is five minutes. It is sooner when the machine is low on memory.
 - The servers restart when you open the copy or its preview.
-- The chat and the agent keep running. One exception: a question from the agent that nobody answered in that time expires. It is back in the chat box when you reopen the copy, and your answer still reaches the agent.
+- The chat and the agent keep running. One exception: a question from the agent that nobody answered in that time expires. It is back in the chat box when you reopen the copy, and your answer is still sent to the agent.
 - To change the delay, set `TOYON_PROC_SLEEP_MS` in milliseconds. Set it to `off` to keep the servers running.
 
 Toyon itself exits after 30 minutes with no window or preview open and nothing running. The next `toyon` or Dock launch starts it again.
@@ -141,7 +141,7 @@ Toyon itself exits after 30 minutes with no window or preview open and nothing r
 
 On a Mac, Toyon also prevents idle sleep while it is in use: an agent is mid-turn, a command is running, or Toyon is open from another device.
 
-- After a phone disconnects, or while a question waits that a phone could answer, the Mac stays awake 30 minutes more.
+- After a phone disconnects, or while a question is open that could be answered from a phone, the Mac stays awake 30 minutes more.
 - Closing the lid still sleeps the Mac.
 - "keep awake" in Toyon's settings has three values: "while in use" (the default), "always" (as long as Toyon runs, on battery too) and "off".
 - To turn it off regardless of the setting, set `TOYON_KEEP_AWAKE=off`.

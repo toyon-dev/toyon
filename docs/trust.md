@@ -15,13 +15,13 @@ Agents run in a sandbox and can write only inside their copy of the project. Thi
 - Every request from the app and the CLI carries a per-machine token, stored in `~/.toyon/token`.
 - Nothing is exposed to your network.
 
-Remote access does not change where Toyon listens. A reverse proxy on the same machine (Caddy, `tailscale serve`, or Fly's proxy on a Fly machine) accepts one hostname, over https only. A preview reached through that hostname also needs a cookie that Toyon's page is given. The dev server behind the preview never sees the cookie. See [remote.md](remote.md).
+Remote access does not change where Toyon listens. A reverse proxy on the same machine (Caddy, `tailscale serve`, or Fly's proxy on a Fly machine) accepts one hostname, over https only. A preview reached through that hostname also needs a cookie that Toyon's page is given. The dev server behind the preview never receives the cookie. See [remote.md](remote.md).
 
 The log, `~/.toyon/daemon.log`, is readable only by your user and never contains the token. Past about 10 MB it is rotated at the next start, and one older file is kept.
 
 ## Sandbox
 
-Every process a shell command starts runs in an OS sandbox: Seatbelt on macOS, bubblewrap on Linux. It can write to the copy's worktree, its git metadata, the temp directories and the package-manager caches. It cannot write anywhere else.
+Every process a shell command starts runs in an OS sandbox: Seatbelt on macOS, bubblewrap on Linux. It can write to the copy, its git metadata, the temp directories and the package-manager caches. It cannot write anywhere else.
 
 | Agent | Sandbox |
 |---|---|
@@ -33,7 +33,7 @@ File tools do not go through the shell. A permission policy applies the same wri
 
 ### Files an agent cannot edit
 
-An agent cannot change its sandbox or another agent's. These paths in the worktree are blocked:
+An agent cannot change its sandbox or another agent's. These paths in the copy are blocked:
 
 | Agent | Blocked paths |
 |---|---|
@@ -51,7 +51,7 @@ Each chat has a permission mode: auto, ask or plan. The mode is per chat, so one
 
 ## Pushing
 
-A copy's commits are written to the main repository's `.git`, so the sandbox has to allow writes there. The sandbox cannot tell a commit from a push.
+A copy's commits are written to the main repository's `.git`, so the sandbox has to allow writes there. The sandbox cannot distinguish a commit from a push.
 
 - **Claude Code and OpenCode.** `git push`, branch deletion, `git worktree` and `gh pr` are refused by rules in the configuration Toyon writes. The rules are checked before a command runs.
 - **Codex.** There are no such rules.
@@ -74,9 +74,9 @@ Access:
 Limits:
 
 - `worktrees` only reads. The agent could read the same information from disk.
-- `handoff` only proposes. Nothing starts until you approve. A worktree created from it starts in the proposing chat's permission mode.
+- `handoff` only proposes. Nothing starts until you approve. A chat started from it uses the proposing chat's permission mode.
 - `own` starts a command in the copy. It is refused in plan mode.
-- `stop` interrupts the running turn of a worktree made from one of the chat's own pieces, and no other. It changes no files and removes nothing. The stopped chat records which chat asked and why.
+- `stop` interrupts the running turn of a chat started from one of the calling chat's tasks. It cannot stop any other chat. It changes no files and removes nothing. The stopped chat shows which chat asked and why.
 
 ## Managed machines
 

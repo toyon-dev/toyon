@@ -1,6 +1,6 @@
 # Contributing
 
-Toyon is early, and there is more worth doing than there are hands. The most useful thing right now is an issue: what you ran, what broke, and what your project is built with, especially anything that is not a Node app. Pull requests are welcome too; `bun run check` is the bar.
+Toyon is early. The most useful contribution is an issue: what you ran, what broke, and what your project is built with, especially if it is not a Node app. Pull requests are welcome. Run `bun run check` before you open one.
 
 ## Development
 
@@ -11,9 +11,9 @@ bun run shell:dev       # shell UI dev server with HMR
 bun run check           # typecheck, lint, tests, bridge size gate
 ```
 
-Settings carry a "mono face" row for the type work: the chat's code, the editor and the terminal read in a candidate typeface instead of the system stack, so a face is judged in the running shell rather than on a specimen page. The files come from the Toyon Mono project's own server, `tools/serve.py 8765` in that checkout; with it down a pick falls back to system. The choice is this browser's alone.
+Settings has a "mono face" row for type work. It sets the chat's code, the editor and the terminal in a candidate typeface in place of the system stack, so you can judge a face in the running shell. The files are served by the Toyon Mono project's server, `tools/serve.py 8765` in that checkout. If the server is down, the pick falls back to the system stack. The choice is stored in this browser only.
 
-`check` is the bar for every commit, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, which is what `npm publish` ships. A release's notes are a section at the top of `CHANGELOG.md`, written before `bun run version`, which refuses without one; the package carries the file and Toyon shows it after it updates itself.
+Every commit must pass `check`, and CI runs it on every pull request. `bun run pack` assembles the npm package under `packages/cli/dist`, and `npm publish` ships that folder. Release notes are a section at the top of `CHANGELOG.md`. Write it before `bun run version`, which refuses to run without one. The package includes the file, and Toyon shows it after it updates itself.
 
 ## How it fits together
 
@@ -30,8 +30,8 @@ The packages are `daemon` (the Bun server), `shell` (the React UI), `bridge` (th
 
 ## Toyon in Toyon
 
-This repo carries a `.toyon/settings.json`, so you can open it as a project in Toyon and get a working Toyon in the preview. The `daemon` command runs a nested daemon on the port the supervisor hands it, with its own state under `~/.toyon-dev/<worktree>`, and `web` previews the Vite shell against it. The nested daemon links the agent adapters from `~/.toyon/agents` while the versions match, so a new worktree's preview takes a message at once; a worktree that moves an adapter pin fetches its own copy.
+This repo has a `.toyon/settings.json`, so you can open it as a project in Toyon and get a working Toyon in the preview. The `daemon` command runs a nested daemon on the port it is given, with its state under `~/.toyon-dev/<worktree>`. `web` previews the Vite shell against it. The nested daemon links the agent adapters from `~/.toyon/agents` while the versions match, so a new copy's preview can take a message at once. A copy that changes an adapter pin downloads that adapter itself.
 
-The daemon is marked `"from": "copy"`, so every worktree runs its own rather than reaching main's: the dev script ties the nested daemon's state dir and token to the worktree it runs in, and the Vite server reads that token from the same state dir and writes it into the page, which is why the preview opens straight in. A worktree that only touches the shell still pays for a daemon of its own until the script can share main's.
+The daemon is marked `"from": "copy"`, so every copy runs its own daemon and none uses main's. The dev script ties the nested daemon's state dir and token to the copy it runs in. The Vite server reads that token from the same state dir and writes it into the page, so the preview opens signed in. A copy that only changes the shell still runs its own daemon, until the script can share main's.
 
-To look at what a user gets, the daemon serving the built shell, run `bun run build` in the worktree and open the nested daemon's own port, printed in the `daemon` command's tab; that origin has never held its token, so take the `#token=` link printed there and open the URL with that fragment once.
+To see what a user gets, which is the daemon serving the built shell, run `bun run build` in the copy and open the nested daemon's port, printed in the `daemon` command's tab. That origin does not have the token yet, so open the `#token=` link printed there once.

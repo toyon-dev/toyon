@@ -68,7 +68,7 @@ In the app:
 
 - The update chip is not shown.
 - A disabled menu row reads "managed by your organization".
-- The chat's sign-in card leaves out the plan login and says why.
+- The chat's sign-in card leaves out the plan login and shows why.
 - The settings card (<kbd>⌘,</kbd>) has one line that lists what is turned off.
 
 ## Verify the policy
@@ -93,7 +93,7 @@ A file that cannot be read is a failing line. Everything the policy controls is 
 FAIL policy   /etc/toyon/policy.json: not valid JSON (everything it governs is off)
 ```
 
-If the running Toyon started before the file changed, `toyon doctor` adds a failing `daemon` line that says to run `toyon restart`.
+If the running Toyon started before the file changed, `toyon doctor` reports a failing `daemon` line. Run `toyon restart` to apply the file.
 
 ## Limits
 

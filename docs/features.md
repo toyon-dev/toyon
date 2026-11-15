@@ -7,7 +7,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 |  |  |
 |---|---|
 | [Point at the page](using.md#ask-for-a-change) | Click an element in the preview to add it to your message or open its code. |
-| [Split off work](agents.md#handoff) | A piece of the work goes to a chat of its own. Its agent starts at once, or when a branch the piece waits for lands. |
+| [Split off work](agents.md#handoff) | Part of the work goes to a new chat. Its agent starts at once, or when the branch it waits for lands. |
 | [Combine chats](shortcuts.md#chats) | Several chats' branches are merged into one chat, with their transcripts. |
 | [Themes](shortcuts.md#app) | Light and dark, Toyon's themes, and the themes of your VS Code, Cursor or Windsurf extensions. |
 | [Phone and other devices](phone.md) | Open Toyon from your phone or another computer. |
@@ -24,7 +24,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 |---|---|
 | Commit messages | After each finished turn with changes, Toyon writes a one-sentence recap and a commit message. `/check` writes them again, and takes a note for the message. |
 | Chat titles | Each chat gets a short title for its task, and its branch is named from the title. |
-| Main kept up to date | Toyon fetches origin and fast-forwards main when main is behind and has no uncommitted changes. Otherwise it leaves main alone and says why. |
+| Main kept up to date | Toyon fetches origin and fast-forwards main when main is behind and has no uncommitted changes. Otherwise it leaves main alone and shows why. |
 | Pull request found | Toyon finds the branch's pull request on GitHub when a turn ends, when the window comes back, and every three minutes while one is open. |
 | Merged pull request | A pull request merged on GitHub marks its chat as landed, and local main is updated. |
 | Failures sent to the agent | A failed check is sent to the agent once. A hook refusal or a conflict during a commit, a land or a sync is sent to the agent as a request to fix it. |

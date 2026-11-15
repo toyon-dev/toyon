@@ -33,7 +33,7 @@ If the command has no folder in it (`npm run dev`), or only a file in the projec
 | Field | What it does |
 |---|---|
 | `paths` | Globs from the project root. If a copy changes a matching file, it runs its own instance of the command. Lockfiles, `.env` files, compose files and migration folders also count, for every command with files to watch. |
-| `"from": "trunk"` | The command always runs once on main, whatever `paths` says. With no files to watch, a copy gets its own instance only when you or the agent ask for one. Use it for a database container that holds a database per copy. |
+| `"from": "trunk"` | The command always runs once on main, whatever `paths` lists. With no files to watch, a copy gets its own instance only when you or the agent ask for one. Use it for a database container that has a database per copy. |
 | `"from": "copy"` | The command runs in every copy. |
 
 If main has uncommitted changes, or main's command has stopped, every copy that uses it shows a warning on the chip and on the command's terminal tab. The agent is told too.
@@ -73,7 +73,7 @@ If the project has a `DATABASE_URL` in an env file or a compose file in the root
 
 Every command, setup step, teardown step and terminal gets two variables:
 
-| Variable | What it holds |
+| Variable | Value |
 |---|---|
 | `TOYON_WORKTREE` | The copy's id. Empty in the main checkout. `app${TOYON_WORKTREE:+_$TOYON_WORKTREE}` is `app` on main and `app_<id>` in a copy. |
 | `TOYON_ROOT` | The path of the main checkout, for copying files git does not track. |
@@ -106,9 +106,9 @@ Each copy gets a database created from a template. The database is dropped when 
 }
 ```
 
-- Creating the database takes as long, and as much disk, as the template is big. Keep the template seed-sized, not a production dump.
+- Creating the database takes as long, and as much disk, as the template is big. Keep the template seed-sized. Do not use a production dump.
 - Postgres refuses to copy a database that has open connections, so close every connection to the template first.
-- `setup` does not see variables set in `cmd`, so the migration step sets `DATABASE_URL` again.
+- `setup` does not get the variables set in `cmd`, so the migration step sets `DATABASE_URL` again.
 
 ### Neon
 

@@ -6,35 +6,28 @@ Each copy runs on your own machine, and the next one is pre-warmed. Works with C
 
 [toyon.dev](https://toyon.dev) · [Docs](https://toyon.dev/docs/) · [How it works](#how-it-works) · [Install](#install) · [Under the hood](#under-the-hood) · [Trust](#trust) · [Uninstall](#uninstall) · [Changelog](https://github.com/toyon-dev/toyon/blob/main/CHANGELOG.md)
 
-![Toyon with four chats on a plant shop, each changing its own copy. The desk opens a code, a phone signs in with it and starts a copy of its own, both screens follow that chat, and both end on the last copy with its Wildflowers filter pressed, ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
+![Toyon with four chats on a plant shop, each changing its own copy. A pairing code opens on the desktop, a phone signs in with it and starts a new copy, and both screens show that chat. Both end on the last copy with its Wildflowers filter pressed, ready to land](https://raw.githubusercontent.com/toyon-dev/toyon/main/docs/images/toyon.gif)
 
 ## Why
 
-A diff says what changed, not whether the page still looks right. A preview link at the end of a run shows you the result after the agent has stopped, too late to steer it. And with more than one agent going it gets worse: terminal splits, copies of the repo made by hand, dev servers fighting over a port.
+You can read a diff and still not know whether the page looks right. A preview link at the end of a run arrives after the agent has stopped, when it is too late to steer. With more than one agent it gets worse: terminal splits, copies of the repo made by hand, dev servers colliding on one port.
 
 In Toyon you point at a button in the page and ask for it to be bigger, watch it change while the agent works, and keep the change when it looks right.
 
 ## How it works
 
-- Every idea gets its own running copy of your project.
-- You judge the work by using the app first, then read the change.
-- Watch and steer while it works, or leave and come back to it later.
-- Kick off more work or check in remotely from your phone.
-- Nothing is kept until you press land.
+- Each chat works on its own copy of your project: a branch and a git worktree, with your dependencies and `.env` files. The copy's app runs in the preview beside the chat.
+- Chats never work on main. Your first message in a project starts a copy, and uncommitted changes on main can be moved into it.
+- Try the change in the preview, then read its diff. Point at an element on the page to add it to your message or to open its line in the editor.
+- Send a message while the agent is working to steer it. You can also close the window and come back later.
+- Pair your phone to start a chat, steer one that is running, or check your app on a phone screen.
+- To keep a change, press land. Land merges the chat's branch into main on your machine. It can push main or open a pull request instead. If the settings have a `check` command, it must pass first.
+- One Toyon runs every project you open. The dot beside each chat shows whether its app is running or it is waiting for you.
+- Toyon keeps one spare copy per project set up in advance, so the next chat starts faster.
 
-Each copy is a branch and a git worktree with your dependencies and `.env` files; one spare per project is kept warm.
+Toyon is built for web apps. A project without a page still works. The chat is shown where the preview would be.
 
-One rule sits under all of it: no work happens on main. Main has no chat; your first message in a project starts a copy, and the files you have uncommitted in your checkout can move into that copy with it. Your checkout stays where your editor and terminal already are, runs the servers the copies share, and changes only when you press land. Most of what Toyon does without asking follows from that rule: the spare it keeps warm, the copy it starts for a message, the files it carries over, the servers it stops when nobody is looking, and the push it refuses to let an agent make.
-
-Point at anything on the page to talk about it or open the line that draws it, and the design pane maps it to your tokens and components. What the agent is told about the page, and the keys, are in [docs/preview.md](https://github.com/toyon-dev/toyon/blob/main/docs/preview.md).
-
-One Toyon holds every project you open, and the list of chats shows which one needs you.
-
-When your check passes, land merges into main on your machine by default, or pushes, or creates a pull request.
-
-Built for web apps. A project without a page still works; the chat takes the middle instead of the preview.
-
-How to use it is in [docs/using.md](https://github.com/toyon-dev/toyon/blob/main/docs/using.md). Every feature and shortcut is in [docs/features.md](https://github.com/toyon-dev/toyon/blob/main/docs/features.md).
+How to use it is in [docs/using.md](https://github.com/toyon-dev/toyon/blob/main/docs/using.md). The picker and what the agent is told about your page are in [docs/preview.md](https://github.com/toyon-dev/toyon/blob/main/docs/preview.md). Every feature and shortcut is in [docs/features.md](https://github.com/toyon-dev/toyon/blob/main/docs/features.md).
 
 ## Install
 
@@ -52,22 +45,28 @@ npm i -g toyon
 toyon ~/projects/app
 ```
 
-`toyon .` opens the folder you are in and `toyon --help` lists the rest. The install button in the top bar makes Toyon an app of its own in Chrome, Arc, Brave or Edge, with a Dock icon and no browser bar; from then on `toyon .` opens that. A global install keeps itself updated; `TOYON_UPDATES=off` stops it. Started with npx, Toyon offers the global install above the chat box once it has answered you. Run outside a project, Toyon opens with none: describe a new one in a sentence, or give the project picker a git URL to clone. `toyon https://github.com/you/app` opens it with that repository ready to clone into the folder you are in; a link to a branch, a file or a pull request on GitHub, GitLab or Codeberg is read back to its repository. `toyon send "fix the flaky test"` from a terminal inside a project sends that message into Toyon the way the chat box would: a new worktree from the main checkout, a take-over of a worktree Toyon does not run, or the chat of one it does; an agent running in that terminal can run it too, and `--carry` moves main's uncommitted changes along.
+- `toyon .` opens the current folder, and `toyon --help` lists every command.
+- Toyon opens in a browser tab. To install it as an app, press the install button in the top bar. This works in Chrome, Arc, Brave and Edge. After that, `toyon .` opens the app.
+- A global install updates itself. To disable updates, use `TOYON_UPDATES=off`.
+- If you started with npx, Toyon offers the global install above the chat box.
+- Run `toyon` outside a project to start a new one. Describe it in a sentence, or paste a git URL into the project picker to clone it.
+- `toyon https://github.com/you/app` opens Toyon ready to clone that repository into the current folder. Links to a branch, a file or a pull request on GitHub, GitLab or Codeberg work too.
+- `toyon send "fix the flaky test"` sends a message about the current folder, as the chat box would. From the main checkout it starts a new copy, and `--carry` moves main's uncommitted changes into it. From a copy it goes to that chat. An agent running in that terminal can use it too.
 
 You need:
 
 - macOS or Linux. Windows through WSL2 is not supported yet.
-- git and Node 18 or newer. Bun comes with the package.
-- An account for the agent you pick: a Claude plan or an Anthropic API key for Claude Code, a ChatGPT plan or an OpenAI API key for Codex, or any provider OpenCode signs into.
-- On Linux, bubblewrap and socat for the agents' sandbox (`sudo apt install bubblewrap socat`). `toyon doctor` checks both and prints the AppArmor profile Ubuntu 24.04 and later ask for.
+- git and Node 18 or newer.
+- An active Claude Code, Codex or OpenCode account.
+- On Linux, bubblewrap and socat for the agents' sandbox: `sudo apt install bubblewrap socat`. `toyon doctor` checks both and prints the AppArmor profile that Ubuntu 24.04 and later need.
 
-Each agent signs in from the chat. Claude Code and Codex install on first start; OpenCode is a larger download with no subagents, effort levels or steering mid-turn. What each one reads and can do is in [docs/agents.md](https://github.com/toyon-dev/toyon/blob/main/docs/agents.md). Requirements, updating and uninstalling are in [docs/install.md](https://github.com/toyon-dev/toyon/blob/main/docs/install.md), and every command is in [docs/commands.md](https://github.com/toyon-dev/toyon/blob/main/docs/commands.md).
+Sign in to your agent from the chat. Claude Code and Codex install on first start. OpenCode is a larger download and has no subagents, effort levels or steering mid-turn. What each agent reads and can do is in [docs/agents.md](https://github.com/toyon-dev/toyon/blob/main/docs/agents.md). Requirements, updating and uninstalling are in [docs/install.md](https://github.com/toyon-dev/toyon/blob/main/docs/install.md). Every command is in [docs/commands.md](https://github.com/toyon-dev/toyon/blob/main/docs/commands.md).
 
 ## How is this different from what you use now?
 
 | Coming from | What stays | What changes |
 |---|---|---|
-| Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and nothing lands until you press |
+| Claude Code or Codex in a terminal | The same agent under your login, with your permission rules, hooks, slash commands and MCP servers | Each chat gets its own copy of the project with the app running, and main changes only when you land |
 | Cursor, Zed or VS Code | Your editor and your checkout; every change lands on disk where your editor already is | The running app is the centre of every chat, wired to its source |
 | Lovable, v0 or Bolt | The loop: a chat and the page it changes, and pointing at an element to talk about it | Your own project on your machine, with your database, Docker and private packages; each chat is a branch in your repository |
 | Conductor or Superset | Many agents at once, each on its own copy | Built around the app instead of the agents; MIT, no account, no telemetry, lands on your machine without GitHub |
@@ -104,7 +103,12 @@ Every setting is in [docs/settings.md](https://github.com/toyon-dev/toyon/blob/m
 
 ## Your own server
 
-Toyon can also run on a box you open from your phone, or on your own Fly account with the laptop closed. This moves Toyon and its copies off your laptop; it does not publish your app. There is no hosted Toyon service, and your code and keys are never sent to Toyon. `toyon remote` puts a box on your own domain behind Caddy or on your Tailscale tailnet, `toyon deploy fly up` builds a machine on your Fly account and prints the link, and the Dockerfile in the package runs on any host with a disk and a port range. A Fly machine measured about $4-6 a month in ordinary use, plus whatever your agents spend, and its first chat can sign in with your Claude plan. A phone or a second machine pairs by opening the address and being let in from Toyon's window.
+Toyon can also run on a server that you open from your phone, or on your own Fly account with the laptop closed. Toyon and its copies run there. Your app is not published. There is no hosted Toyon service, and your code and keys are never sent to Toyon.
+
+- `toyon remote` sets Toyon up on your own domain behind Caddy, or on your Tailscale tailnet.
+- `toyon deploy fly up` builds a machine on your Fly account and prints the link. A Fly machine measured about $4-6 a month in ordinary use, plus what your agents spend. Its first chat can sign in with your Claude plan.
+- The Dockerfile in the package runs on any host with a disk and a port range.
+- To pair a phone or a second computer, open the address on it, then press let in on the card in Toyon.
 
 These routes are new. How to set each one up, and what it has been checked with, is in [docs/remote.md](https://github.com/toyon-dev/toyon/blob/main/docs/remote.md). Pairing a phone is in [docs/phone.md](https://github.com/toyon-dev/toyon/blob/main/docs/phone.md).
 
@@ -142,7 +146,7 @@ Toyon sends no telemetry. It checks for updates every six hours. To disable it, 
 
 ## Help build it
 
-Toyon is early, and there is more worth doing than there are hands. The most useful thing right now is an issue: what you ran, what broke, and what your project is built with, especially anything that is not a Node app. Pull requests are welcome too; [CONTRIBUTING.md](https://github.com/toyon-dev/toyon/blob/main/CONTRIBUTING.md) has the setup. Run `bun run check` before you open one.
+Toyon is early. The most useful contribution is an issue: what you ran, what broke, and what your project is built with, especially if it is not a Node app. Pull requests are welcome. [CONTRIBUTING.md](https://github.com/toyon-dev/toyon/blob/main/CONTRIBUTING.md) has the setup. Run `bun run check` before you open one.
 
 ## License
 

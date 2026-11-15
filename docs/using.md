@@ -41,7 +41,6 @@ The preview shows the copy's app. Your dev server reloads it as the agent writes
 
 - **Find what changed on the page.** Hover a file in the changes list to outline everything it draws on the current page. Hover a line in a diff to outline its element. If nothing is outlined, the change is on another page.
 - **Open the code.** Press <kbd>⌘I</kbd> and click an element to open its line in the editor. Hold <kbd>⌥</kbd> while clicking to swap <kbd>⌘E</kbd> and <kbd>⌘I</kbd>.
-- **See the design.** Press <kbd>⌘D</kbd> for the design pane. It lists the copy's tokens, components and class families. Hover a row to outline its matches on the page; click it to open its source.
 - **Fix it yourself.** Browse the files, edit a file or a diff, and run a terminal.
 - **Debug the page.** Open your browser's devtools on the preview. They work in the installed app too.
 - **Check it on a phone.** Pair your phone to open the chat and the preview there. See [phone.md](phone.md).

@@ -42,7 +42,7 @@ A Fly machine is listed in Toyon on the laptop that deployed it. Pair your phone
 
 ## Requests
 
-- Every device pairs the same way: it opens the address, asks for access, and shows two words. Toyon shows the same two words and a button.
+- Every device pairs the same way. Open the address on the device and request access. The device shows two words, and Toyon shows the same two words and a button.
 - The access token is sent to the device only when you press let in.
 - Unexpected requests are shown too, with the address they came from.
 - A request unanswered for five minutes is dropped.

@@ -98,7 +98,7 @@ The Dockerfile for the Fly machine is in the package under `cloud/`. It runs on 
 
 | Setting | What it is |
 | --- | --- |
-| `TOYON_PUBLIC_HOST` | The hostname your host answers for, such as `toyon.example.com`. Required. |
+| `TOYON_PUBLIC_HOST` | Your host's public hostname, such as `toyon.example.com`. Required. |
 | `TOYON_PREVIEWS` | Where previews are served. `https://toyon.example.com:{port}` when the host forwards ports 10001-10008; this is the default. `https://w{id}.toyon.example.com` behind your own wildcard domain. |
 | `TOYON_TOKEN` | A long random string. The link is `https://<host>/#token=<it>`. |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Keys for the agents. |
@@ -114,7 +114,7 @@ A host with one public port needs your own wildcard domain and the `w{id}` form.
 - Anyone with the link has shell access to the machine. Do not share it.
 - Toyon still listens on loopback only. A reverse proxy on the same machine accepts one hostname, over https only. On Fly, Fly's proxy does this.
 - A name typed without `https://` is redirected to https. The token in the link stays in the browser during the redirect.
-- A preview reached through the hostname also needs a cookie that Toyon's page is given. The dev server behind the preview never sees that cookie.
+- A preview reached through the hostname also needs a cookie that Toyon's page is given. The dev server behind the preview never receives that cookie.
 
 See [trust.md](trust.md) for the sandbox, the tokens and the network traffic.
 

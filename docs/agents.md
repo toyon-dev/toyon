@@ -25,58 +25,60 @@ Toyon gives each agent four tools over MCP.
 
 | Tool | What it does |
 |---|---|
-| [`worktrees`](#worktrees) | Lists the project's other worktrees. |
-| [`handoff`](#handoff) | Proposes splitting work into pieces, each for a worktree. |
+| [`worktrees`](#worktrees) | Lists the project's other chats. |
+| [`handoff`](#handoff) | Proposes splitting work into tasks, each for a chat. |
 | [`own`](#own) | Starts the copy's own instance of a shared command. |
-| [`stop`](#stop) | Stops the turn of a worktree made from one of the chat's pieces. |
+| [`stop`](#stop) | Stops the turn of a chat started from one of this chat's tasks. |
 
 An agent gets the tools if it announces HTTP MCP support when a session starts. Claude Code and Codex do. Who can call the tools is in [trust.md](trust.md).
 
 ### `worktrees`
 
-Lists the project's other worktrees, open and archived. For each one it returns the title, the branch, the path of the chat on disk, and the first message sent there.
+Lists the project's other chats, open and archived. For each one it returns the title, the branch, the path of the chat on disk, and the first message sent there.
 
-With a query, it returns only the worktrees whose title, branch or chat mention it. An agent asked about a ticket can find the worktree that worked on it without knowing the branch.
+With a query, it returns only the chats whose title, branch or messages mention it. An agent asked about a ticket can find the chat that worked on it without knowing the branch.
 
 ### `handoff`
 
-Splits planned work into pieces. The agent gives you a list, and each piece goes to one of:
+Splits planned work into tasks. The agent gives you a list, and each task goes to one of:
 
-- this worktree,
-- a new worktree, in this project or in another open project,
-- an open worktree that is already working on that part.
+- this chat,
+- a new chat, in this project or in another open project,
+- an open chat that is already working on that part.
+
+A new chat works on a new copy of the project. The app calls it a worktree.
 
 Before you approve:
 
-- In plan mode, the list is at the top of the plan, one line per piece. You can read each piece and move it.
+- In plan mode, the list is at the top of the plan, one line per task. You can read each task and move it.
 - Outside plan mode, the list is a card in the chat.
 - The list shows any other project involved and the permission mode.
 - Nothing starts until you approve.
 
 After you approve:
 
-- A new worktree starts with the piece as its approved plan. Its first message says who wrote it.
-- Its agent starts at once, unless the piece waits for a branch. Its dev servers start the first time you open it.
-- A piece sent to an open worktree arrives as a message that says which worktree sent it. When that worktree next lands, the chat that sent the piece shows what landed and its agent starts, as below.
-- When a worktree made from a piece lands, the chat that proposed the piece shows what landed. The first time, its agent starts: it is told what landed and where the other chat is on disk, and replies with what it did about it.
+- A new chat starts with the task as its approved plan. Its first message names the chat that wrote it.
+- Its agent starts at once, unless the task waits for a branch. Its dev servers start the first time you open it.
+- A task sent to an open chat arrives as a message that names the chat that sent it. When that chat next lands, the chat that sent the task shows what landed and its agent starts, as below.
+- When a chat started from a task lands, the chat that proposed the task shows what landed. The first time, its agent starts: it is told what landed and where the other chat is on disk, and replies with what it did about it.
 
-A piece can wait for a branch to land before it starts:
+A task can wait for a branch to land before it starts:
 
-- A piece for a new worktree can wait, and so can a piece kept in this worktree. A piece sent to an open worktree cannot.
-- It waits for another open worktree of this project, for another piece on the list, or for this worktree. A piece that waits for another piece waits for the worktree that piece starts.
-- Before you approve, the piece says which branch it waits for. You can move it to this worktree or skip it. A piece moved to this worktree still waits.
-- After you approve, the chat lists a piece for a new worktree as queued. A line under the chat box says which branch it waits for.
-- When the branch lands, the new worktree starts from main, with the piece as its plan. The chat that proposed it shows the new worktree. A pull request counts once it is merged.
-- The new worktree's agent is not told what landed. If the same branch lands again, the agent is told with its next message.
-- A piece kept in this worktree starts when the branch lands. The agent is told which branch landed, what it put on main and where that chat is on disk, and does the piece.
-- Pieces kept in this worktree that wait for this worktree start one per landing, in list order.
-- If the branch has landed when you approve, the piece starts at once.
-- If the worktree it waits for is archived or removed before it lands, a piece for a new worktree is dropped, with any piece that waited for it. The chat says why. A piece kept in this worktree stops waiting: the agent is told that the work is not on main, and does the piece only if it can be done without that work.
-- A piece waits for as long as the worktree it waits for is open. After you approve, you cannot start it early or cancel it. Archiving the worktree that proposed it drops it.
+- A task for a new chat can wait, and so can a task kept in this chat. A task sent to an open chat cannot.
+- It waits for another open chat of this project, for another task on the list, or for this chat. A task that waits for another task waits for the chat that task starts.
+- Before you approve, the list shows which branch the task waits for. You can move it to this chat or skip it. A task moved to this chat still waits.
+- After you approve, the chat lists a task for a new chat as queued. A line under the chat box shows which branch it waits for.
+- When the branch lands, the new chat starts from main, with the task as its plan. The chat that proposed it shows the new chat. A pull request counts once it is merged.
+- The new chat's agent is not told what landed. If the same branch lands again, the agent is told with its next message.
+- A task kept in this chat starts when the branch lands. The agent is told which branch landed, what it put on main and where that chat is on disk, and does the task.
+- Tasks kept in this chat that wait for this chat start one per landing, in list order.
+- If the branch has landed when you approve, the task starts at once.
+- If the chat it waits for is archived or removed before it lands, a task for a new chat is dropped, with any task that waited for it. The chat shows why. A task kept in this chat stops waiting: the agent is told that the work is not on main, and does the task only if it can be done without that work.
+- A task waits for as long as the chat it waits for is open. After you approve, you cannot start it early or cancel it. Archiving the chat that proposed it drops it.
 
-`/handoff` does the same from your own message, without the tool. `/handoff fix the footer` hands that work to a new worktree in this project. Start with another open project's name to hand it to a worktree there.
+`/handoff` does the same from your own message, without the tool. `/handoff fix the footer` sends that work to a new chat in this project. Start with another open project's name to send it to a chat there.
 
-`/handoff` has no option for a wait. To make the work wait, name the branch in your message: `/handoff fix the footer once toyon/header lands`. The agent writes the piece, and the card reads "queue a worktree" when the piece waits. An agent without Toyon's tools cannot set a wait.
+`/handoff` has no option for a wait. To make the work wait, name the branch in your message: `/handoff fix the footer once toyon/header lands`. The agent writes the task, and the card reads "queue a worktree" when the task waits. An agent without Toyon's tools cannot set a wait.
 
 ### `own`
 
@@ -89,13 +91,13 @@ Starts the copy's own instance of a shared command. See [backends.md](backends.m
 
 ### `stop`
 
-Stops the running turn of a worktree that was made from a piece of this chat's work. It does what the stop button does, from the chat that handed the piece off.
+Stops the running turn of a chat that was started from one of this chat's tasks. It does what the stop button does, from the chat that proposed the task.
 
 - The agent calls it when you drop or pause that work. It gives a reason.
-- The stopped chat shows which chat stopped it and why. Its rail row rings, and its chat box offers to continue.
-- The worktree, its files and its chat stay. A message already queued there runs next, as after any stop.
-- It cannot stop a worktree a piece was sent into, or any other worktree. Stop those yourself.
-- It cannot archive a worktree.
+- The stopped chat shows which chat stopped it and why. Its row in the list of chats is marked unread, and its chat box offers to continue.
+- The chat and its copy stay. A message already queued there runs next, as after any stop.
+- It cannot stop a chat that a task was sent to, or any other chat. Stop those yourself.
+- It cannot archive a chat.
 
 ## Claude Code
 

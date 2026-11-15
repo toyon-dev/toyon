@@ -6,7 +6,7 @@ Every `toyon` command. `toyon --help` prints the same list.
 |---|---|
 | `toyon [path]` | Open the project at `path`, or the current folder. A path to a file opens that file. |
 | `toyon <git url>` | Open Toyon ready to clone that repository into the current folder. See [using.md](using.md#new-project). |
-| `toyon send [text]` | Send a message about the current folder. From the main checkout it starts a new copy; from a copy it goes to that chat; a worktree Toyon does not run is taken over. Takes the text, `--file <path>` or stdin. `--carry` moves main's uncommitted changes into the new copy. |
+| `toyon send [text]` | Send a message about the current folder. From the main checkout it starts a new copy; from a copy it goes to that chat; a git worktree made outside Toyon is taken over. Takes the text, `--file <path>` or stdin. `--carry` moves main's uncommitted changes into the new copy. |
 | `toyon start` | Start Toyon without opening it. |
 | `toyon stop` | Stop Toyon, and every dev server and agent it runs. |
 | `toyon restart` | Restart Toyon on the installed version. Open windows reconnect. |

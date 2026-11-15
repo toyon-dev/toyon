@@ -894,35 +894,11 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               <IconButton icon="close" label="Cancel" hint="esc" onClick={cancelGraft} />
             </div>
           )}
-          {/* Last, below every worktree row: the whole section is hidden in the strip (see
-              rail.css), so what appears when the panel opens pushes nothing anyone is aiming
-              at. The rows are divs, not .rail-item buttons, so a shift-click never drags one into
-              the graft selection. */}
-          {!graftMode && discovered.length > 0 && (
-            <>
-              <button
-                className="section-title section-row section-fold rail-disc-head"
-                aria-expanded={discOpen}
-                {...tip(
-                  `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
-                  undefined,
-                  { placement: tipSide },
-                )}
-                onClick={() => dispatch({ a: "toggle-discovered" })}
-                onKeyDown={(e) => headKey(e, discOpen, "toggle-discovered")}
-              >
-                <span className="rail-gut">
-                  <Icon name="caret" className={cx("icon-inline disc-caret", !discOpen && "shut")} />
-                </span>
-                <span className="rail-label">discovered</span>
-              </button>
-              {discOpen && discovered.map(railRow)}
-            </>
-          )}
-          {/* Under discovered, for the same reason: hidden in the strip, and nothing aimed at sits
-              below it. The archived rows whose box holds a draft come first, under their own
-              heading: a note is why someone set the row aside, so it is listed whole, with no
-              window. */}
+          {/* Below every worktree row: the folded sections are hidden in the strip (see rail.css), so
+              what appears when the panel opens pushes nothing anyone is aiming at. They read down
+              the way a worktree of Toyon's ages, set aside with a draft and then archived. The
+              archived rows whose box holds a draft come first, under their own heading: a note is
+              why someone set the row aside, so it is listed whole, with no window. */}
           {!graftMode && drafts.length > 0 && (
             <>
               <button
@@ -983,6 +959,30 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                   <span className="dot" />
                 </button>
               )}
+            </>
+          )}
+          {/* Last, under everything Toyon made: these worktrees are someone else's. The rows are
+              divs, not .rail-item buttons, so a shift-click never drags one into the graft
+              selection. */}
+          {!graftMode && discovered.length > 0 && (
+            <>
+              <button
+                className="section-title section-row section-fold rail-disc-head"
+                aria-expanded={discOpen}
+                {...tip(
+                  `${discovered.length} worktree${discovered.length === 1 ? "" : "s"} here that Toyon did not make`,
+                  undefined,
+                  { placement: tipSide },
+                )}
+                onClick={() => dispatch({ a: "toggle-discovered" })}
+                onKeyDown={(e) => headKey(e, discOpen, "toggle-discovered")}
+              >
+                <span className="rail-gut">
+                  <Icon name="caret" className={cx("icon-inline disc-caret", !discOpen && "shut")} />
+                </span>
+                <span className="rail-label">discovered</span>
+              </button>
+              {discOpen && discovered.map(railRow)}
             </>
           )}
         </div>

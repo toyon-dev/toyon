@@ -6,6 +6,7 @@ import { useSettled } from "../ui/hooks.ts";
 import { useStore } from "./context.tsx";
 import {
   activeWorktreeRepoId,
+  archivedDrafts,
   archivedPageOf,
   asksSetup,
   currentTheme,
@@ -70,6 +71,13 @@ export const useVisibleArchived = (): ArchivedWorktree[] =>
 /** has the archived section been opened in this project (collapsed by default) */
 export const useArchivedOpen = (): boolean =>
   useStore((s) => (s.activeRepoId ? (s.archivedOpen[s.activeRepoId] ?? false) : false));
+
+/** has the drafts section been opened in this project (collapsed by default) */
+export const useDraftsOpen = (): boolean =>
+  useStore((s) => (s.activeRepoId ? (s.draftsOpen[s.activeRepoId] ?? false) : false));
+
+/** the active project's archived worktrees that hold a draft, as `archivedDrafts` joins them */
+export const useArchivedDrafts = (): string => useStore(archivedDrafts);
 
 /** is the changes list's committed section open in this project (open by default) */
 export const useCommittedOpen = (): boolean => useStore((s) => !(s.activeRepoId && s.committedShut[s.activeRepoId]));

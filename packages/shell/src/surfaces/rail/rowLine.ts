@@ -179,15 +179,37 @@ export function leadLines(
   return [landed, origin].filter((l): l is string => !!l);
 }
 
+/** the note in an archived row's box: its words cut to a line, empty for a box that holds only
+ * an attachment, null for the row whose page is up with its box emptied */
+export type DraftNote = string | null;
+
+/**
+ * The archive in the rail's two sections, each in the archive's order: the rows whose box holds a
+ * draft, which is why someone set them aside, and the rest. A row is under drafts when `notes`
+ * names it, whatever the note says.
+ */
+export function archivedSections(
+  archived: readonly ArchivedWorktree[],
+  notes: ReadonlyMap<string, DraftNote>,
+): { drafts: readonly ArchivedWorktree[]; rest: readonly ArchivedWorktree[] } {
+  if (notes.size === 0) return { drafts: [], rest: archived };
+  const drafts: ArchivedWorktree[] = [];
+  const rest: ArchivedWorktree[] = [];
+  for (const a of archived) (notes.has(a.id) ? drafts : rest).push(a);
+  return { drafts, rest };
+}
+
 /**
  * The lines under an archived row's state: the first message sent there, which the record keeps so
  * a row can say what the work was, then what it landed. The last recap would say where the last
  * turn left it, which is not the same thing over a long session; what was asked is true of the
- * whole of it, and what landed is what came of it.
+ * whole of it, and what landed is what came of it. A row kept for the draft in its box leads with
+ * that: the note is why the row is still listed, ahead of what the work was.
  */
-export function archivedLines(a: ArchivedWorktree): string[] {
+export function archivedLines(a: ArchivedWorktree, note?: DraftNote): string[] {
   const p = a.prompt ? clipLine(a.prompt) : "";
-  return [...(p ? [p] : []), ...landedLines(a.lands)];
+  const draft = note === undefined || note === null ? undefined : `draft: ${note || "attachment only"}`;
+  return [...(draft ? [draft] : []), ...(p ? [p] : []), ...landedLines(a.lands)];
 }
 
 /**

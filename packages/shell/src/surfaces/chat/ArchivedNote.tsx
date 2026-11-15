@@ -16,13 +16,14 @@ export function ArchivedNote({ item }: { item: ArchivedWorktree }) {
   const sock = useSock();
   const clientId = useStore((s) => s.clientId);
   // the sentence beside the word fits one line, the way the landed row's does, and the note under
-  // it says only what the word does not: what was kept, and that the box below restores as well.
+  // it says only what the word does not: what was kept, that the box below restores as well, and
+  // that a note left in it without sending moves the row to the rail's drafts section.
   // That the directory and branch are gone is what archived means; what restoring does is what
   // the offer's word means.
   const kept = item.uncommitted ? "its chat, commits and uncommitted changes" : "its chat and commits";
   const cost = item.cost !== undefined ? `; the session cost ${dollars(item.cost)}` : "";
   const note = item.restorable
-    ? `Toyon kept ${kept}${cost}. A message sent below restores it first.`
+    ? `Toyon kept ${kept}${cost}. A message sent below restores it first; a draft left there lists it under drafts.`
     : `Its commits were not kept, so there is nothing to restore${cost}; its row's menu on the rail can delete it.`;
   const ago = useAgo(item.archivedAt);
   // what it landed, ahead of what was kept: the landed rows above say it too, but far up a long

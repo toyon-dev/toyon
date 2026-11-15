@@ -15,9 +15,11 @@ import { archiveWorktrees, discoveredItems, shipOp, worktreeItems } from "../../
 import { useDispatch, useSock, useStore, useStoreInstance, useUrls } from "../../state/context.tsx";
 import {
   useActiveId,
+  useArchivedDrafts,
   useArchivedOpen,
   useArchivedPage,
   useDiscoveredOpen,
+  useDraftsOpen,
   useOffline,
   useTouch,
   useTowardCentre,
@@ -25,7 +27,7 @@ import {
   useVisibleDiscovered,
   useVisibleWorktrees,
 } from "../../state/selectors.ts";
-import { asksSetup, backFace, bornFrom, guestOf, isDrafted, trunkOf } from "../../state/store.ts";
+import { asksSetup, backFace, bornFrom, guestOf, trunkOf } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/Icon.tsx";
 import { useContextMenu, useMenu } from "../../ui/menu.ts";
@@ -43,10 +45,12 @@ import { treeKey } from "../../ui/treeNav.ts";
 import {
   archivedFigures,
   archivedLines,
+  archivedSections,
   archivedWindow,
   bornLine,
   cardFigures,
   cardLines,
+  type DraftNote,
   FOUND_LINE,
   guestLine,
   leadLines,
@@ -111,8 +115,18 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   const discOpen = useDiscoveredOpen();
   const archived = useVisibleArchived();
   const archOpen = useArchivedOpen();
+  // the archive in two sections: the rows set aside with a draft in their box, then the rest. The
+  // notes arrive as one string, so a keystroke in a live row's box re-renders nothing here.
+  const draftsKey = useArchivedDrafts();
+  const draftsOpen = useDraftsOpen();
+  const notes = useMemo(() => new Map<string, DraftNote>(draftsKey ? JSON.parse(draftsKey) : []), [draftsKey]);
+  const { drafts, rest } = useMemo(() => archivedSections(archived, notes), [archived, notes]);
   // ← closes a section's heading and → opens it, as they do a folder in the files tree
-  const headKey = (e: React.KeyboardEvent, open: boolean, a: "toggle-discovered" | "toggle-archived") => {
+  const headKey = (
+    e: React.KeyboardEvent,
+    open: boolean,
+    a: "toggle-discovered" | "toggle-drafts" | "toggle-archived",
+  ) => {
     if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
     e.preventDefault();
     if (treeKey([{ depth: 0, open }], 0, e.key)) dispatch({ a });
@@ -267,8 +281,6 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   });
 
   const deps = { sock, dispatch };
-  // read as a menu opens, not subscribed: the rail has no business re-rendering per keystroke
-  const drafted = (id: string) => isDrafted(store.getState(), id);
   const graftWith = (id: string) => {
     setGraftMode(true);
     // on the row you are on it means "graft others onto this": nothing to check yet
@@ -277,7 +289,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
   /** what a row can do: the long list for ours, the short one for a found worktree */
   const rowItems = (w: WorktreeStatus) =>
     isOwned(w)
-      ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos, drafted }, deps, {
+      ? worktreeItems(w, repoOf(w), { layout, shipping, frame, repos }, deps, {
           // no graft line on a guest: nothing on this rail is of its project
           ...(otherRepoOf(w) ? {} : { graft: graftWith }),
           hostname: host,
@@ -320,17 +332,18 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
     },
   });
 
-  /* the archive keeps its own count column, reserved list-wide the way the worktrees' are, and not
-     drawn at all when no archived row has a number to put in it */
-  const arch = archivedWindow(archived, archivedPage?.id ?? null);
-  const archCounts = arch.shown.some((a) => (a.dirty ?? 0) > 0);
+  /* the archive keeps its own count column, reserved across both of its sections the way the
+     worktrees' is list-wide, and not drawn at all when no archived row has a number to put in it */
+  const arch = archivedWindow(rest, archivedPage?.id ?? null);
+  const archCounts = drafts.some((a) => (a.dirty ?? 0) > 0) || arch.shown.some((a) => (a.dirty ?? 0) > 0);
 
   /** An archived worktree, kept with its chat. It runs nothing, so it reads a rung down like a found
    * row, and its dot's seat is blank rather than absent so its name starts where every other name
    * does. A click opens its page in the centre, and restore is there and in the menu, not on the
    * row: a row that restored on its own click was too easy to hit on the way past. One line on both
-   * frames, since the archive only grows and the rest is on the page. */
-  const archivedRow = (a: ArchivedWorktree) => (
+   * frames, since the archive only grows and the rest is on the page. `section` is the rows drawn
+   * with it, the list its arrows walk. */
+  const archivedRow = (a: ArchivedWorktree, section: readonly ArchivedWorktree[]) => (
     <button
       key={a.id}
       type="button"
@@ -343,7 +356,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       {...tip(archivedState(a), undefined, {
         placement: tipSide,
         card: true,
-        detail: archivedLines(a),
+        detail: archivedLines(a, notes.get(a.id)),
         aside: archivedFigures(a),
       })}
       onClick={() => dispatch({ a: "open-archived", id: a.id })}
@@ -352,7 +365,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
       onKeyDown={(e) =>
         walkKey(
           e,
-          arch.shown.map((x) => x.id),
+          section.map((x) => x.id),
           a.id,
           "data-arch",
           (to) => dispatch({ a: "open-archived", id: to }),
@@ -906,15 +919,42 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
               {discOpen && discovered.map(railRow)}
             </>
           )}
-          {/* Under discovered, for the same reason: hidden in the strip, and nothing aimed at sits below it */}
-          {!graftMode && archived.length > 0 && (
+          {/* Under discovered, for the same reason: hidden in the strip, and nothing aimed at sits
+              below it. The archived rows whose box holds a draft come first, under their own
+              heading: a note is why someone set the row aside, so it is listed whole, with no
+              window. */}
+          {!graftMode && drafts.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="section-title section-row section-fold rail-disc-head"
+                aria-expanded={draftsOpen}
+                {...tip(
+                  drafts.length === 1
+                    ? "1 archived worktree with a draft in its box"
+                    : `${drafts.length} archived worktrees with a draft in their boxes`,
+                  undefined,
+                  { placement: tipSide },
+                )}
+                onClick={() => dispatch({ a: "toggle-drafts" })}
+                onKeyDown={(e) => headKey(e, draftsOpen, "toggle-drafts")}
+              >
+                <span className="rail-gut">
+                  <Icon name="caret" className={cx("icon-inline disc-caret", !draftsOpen && "shut")} />
+                </span>
+                <span className="rail-label">drafts</span>
+              </button>
+              {draftsOpen && drafts.map((a) => archivedRow(a, drafts))}
+            </>
+          )}
+          {!graftMode && rest.length > 0 && (
             <>
               <button
                 type="button"
                 className="section-title section-row section-fold rail-disc-head"
                 aria-expanded={archOpen}
                 {...tip(
-                  `${archived.length} archived worktree${archived.length === 1 ? "" : "s"}, kept with ${archived.length === 1 ? "its chat" : "their chats"}`,
+                  `${rest.length} archived worktree${rest.length === 1 ? "" : "s"}, kept with ${rest.length === 1 ? "its chat" : "their chats"}`,
                   undefined,
                   { placement: tipSide },
                 )}
@@ -926,7 +966,7 @@ export function Rail({ width, placement = "strip" }: { width?: number; placement
                 </span>
                 <span className="rail-label">archived</span>
               </button>
-              {archOpen && arch.shown.map(archivedRow)}
+              {archOpen && arch.shown.map((a) => archivedRow(a, arch.shown))}
               {/* the rest of the archive, in the palette that finds one by name: an archived row's
                   box with its seats blank, so the count starts where the names above it do */}
               {archOpen && arch.rest > 0 && activeRepoId && (

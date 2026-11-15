@@ -4,6 +4,7 @@ import {
   ARCHIVED_SHOWN,
   archivedFigures,
   archivedLines,
+  archivedSections,
   archivedWindow,
   bornLine,
   cardFigures,
@@ -335,6 +336,45 @@ describe("the line under an archived row's state", () => {
     ]);
     expect(archivedLines(arch({ lands: lands.slice(0, 1) }))).toEqual(["fix the update race."]);
   });
+
+  test("a draft in its box leads, ahead of what the work was", () => {
+    const a = arch({ prompt: "fix the update race" });
+    // the note arrives on one line already: the store cuts it as it lists the row
+    expect(archivedLines(a, "check the retry path")).toEqual(["draft: check the retry path", "fix the update race"]);
+    // a box holding only something attached has no words to show
+    expect(archivedLines(a, "")).toEqual(["draft: attachment only", "fix the update race"]);
+    // the page's row with its box emptied: listed under drafts still, with no note to lead with
+    expect(archivedLines(a, null)).toEqual(["fix the update race"]);
+    expect(archivedLines(arch(), "a note alone")).toEqual(["draft: a note alone"]);
+  });
+});
+
+describe("the archive in the rail's two sections", () => {
+  const rows = ["a", "b", "c", "d"].map((id) => arch({ id }));
+  const ids = (list: readonly { id: string }[]) => list.map((a) => a.id);
+
+  test("the rows a note names under drafts, the others under archived, each in the archive's order", () => {
+    const { drafts, rest } = archivedSections(
+      rows,
+      new Map([
+        ["d", "later"],
+        ["b", ""],
+        ["gone", "x"],
+      ]),
+    );
+    expect(ids(drafts)).toEqual(["b", "d"]);
+    expect(ids(rest)).toEqual(["a", "c"]);
+  });
+
+  test("a row named with no note is under drafts all the same", () => {
+    expect(ids(archivedSections(rows, new Map([["c", null]])).drafts)).toEqual(["c"]);
+  });
+
+  test("no notes: the list itself is the rest, so nothing downstream sees a new one", () => {
+    const { drafts, rest } = archivedSections(rows, new Map());
+    expect(drafts).toEqual([]);
+    expect(rest).toBe(rows);
+  });
 });
 
 describe("the foot of an archived row's card", () => {
@@ -346,6 +386,9 @@ describe("the foot of an archived row's card", () => {
     expect(archivedFigures(arch({ auto: "no changes, not opened in 2h" }))).toEqual(["no changes, 2h idle"]);
     expect(archivedFigures(arch({ cost: 2.35 }))).toEqual(["$2.35"]);
     expect(archivedFigures(arch({ auto, landed: true, cost: 2.35 }))).toEqual(["2h idle", "$2.35"]);
+    // a row that waited out a draft's week says the week
+    expect(archivedFigures(arch({ auto: "landed, not opened in 7d", landed: true }))).toEqual(["7d idle"]);
+    expect(archivedFigures(arch({ auto: "no changes, not opened in 7d" }))).toEqual(["no changes, 7d idle"]);
   });
 });
 

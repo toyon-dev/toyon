@@ -49,6 +49,7 @@ export function App() {
   const lastActive = useStore((s) => s.lastActive);
   const discoveredOpen = useStore((s) => s.discoveredOpen);
   const archivedOpen = useStore((s) => s.archivedOpen);
+  const draftsOpen = useStore((s) => s.draftsOpen);
   const committedShut = useStore((s) => s.committedShut);
   const turnOpen = useStore((s) => s.turnOpen);
   const treeOpen = useStore((s) => s.treeOpen);
@@ -306,6 +307,9 @@ export function App() {
   useEffect(() => {
     storage.set(STORAGE.archivedOpen, JSON.stringify(archivedOpen));
   }, [archivedOpen, storage]);
+  useEffect(() => {
+    storage.set(STORAGE.draftsOpen, JSON.stringify(draftsOpen));
+  }, [draftsOpen, storage]);
   // and a folded committed section, which would otherwise unfold over the work on every reload
   useEffect(() => {
     storage.set(STORAGE.committedShut, JSON.stringify(committedShut));

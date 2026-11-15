@@ -387,6 +387,7 @@ export function createMachine(init: MachineInit, env: MachineEnv): Machine {
       storedLastActive: storedLastActive(storage.get(STORAGE.lastActive)),
       storedDiscoveredOpen: storedSectionOpen(storage.get(STORAGE.discoveredOpen)),
       storedArchivedOpen: storedSectionOpen(storage.get(STORAGE.archivedOpen)),
+      storedDraftsOpen: storedSectionOpen(storage.get(STORAGE.draftsOpen)),
       storedCommittedShut: storedSectionOpen(storage.get(STORAGE.committedShut)),
       storedTurnOpen: storedSectionOpen(storage.get(STORAGE.turnOpen)),
       storedTreeOpen: storedTreeOpen(storage.get(STORAGE.treeOpen)),

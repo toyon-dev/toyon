@@ -26,6 +26,7 @@ import { isUploading, settledInputs, toInput } from "./pending.ts";
 import { snapshotOf } from "./snapshot.ts";
 import {
   type Action,
+  archivedDrafts,
   asksSetup,
   BACK_MS,
   backFace,
@@ -3279,6 +3280,17 @@ describe("discovered worktrees", () => {
     expect(run([helloR(wt("m1", "main"))], from).archivedOpen).toEqual({ r: true });
   });
 
+  test("the drafts section keeps its own open state, per project, with the same lifetime", () => {
+    const shut = run([helloR(wt("main", "main"))]);
+    expect(shut.draftsOpen.r).toBeUndefined();
+    const open = run([{ a: "toggle-drafts" }], shut);
+    expect(open.draftsOpen.r).toBe(true);
+    expect(open.archivedOpen.r).toBeUndefined();
+    expect(run([{ a: "toggle-drafts" }], open).draftsOpen.r).toBe(false);
+    const from = initialState({ clientId: ME, storedDraftsOpen: { r: true, gone: true } });
+    expect(run([helloR(wt("m1", "main"))], from).draftsOpen).toEqual({ r: true });
+  });
+
   test("the committed section folds per project, open until someone shuts it, and a forgotten project drops it", () => {
     const open = run([helloR(wt("main", "main"))]);
     expect(open.committedShut.r).toBeUndefined();
@@ -3394,6 +3406,45 @@ describe("an archived worktree's page", () => {
 
   test("only for an item the project on screen lists", () => {
     expect(run([{ a: "open-archived", id: "nope" }], listed()).archivedPage).toBeNull();
+  });
+
+  describe("the archived rows listed under drafts", () => {
+    const notes = (s: State): Array<[string, string | null]> => JSON.parse(archivedDrafts(s) || "[]");
+    const type = (id: string, text: string): Action => ({ a: "set-draft", id, text });
+
+    test("the active project's archived rows whose box holds a draft, each with its note on a line", () => {
+      expect(archivedDrafts(listed())).toBe("");
+      // a live row's draft and another project's archive are not the rail's drafts
+      const s = run(
+        [type("y", "  check the\n retry path "), type("a", "live"), archived("q", "z"), type("z", "theirs")],
+        listed(),
+      );
+      expect(notes(s)).toEqual([["y", "check the retry path"]]);
+      // in the archive's order, whichever was typed in first
+      expect(notes(run([type("x", "first row")], s)).map(([id]) => id)).toEqual(["x", "y"]);
+      // whitespace is no draft, as the daemon reads the box
+      expect(archivedDrafts(run([type("y", "  ")], s))).toBe("");
+    });
+
+    test("the same string while nothing about the notes changes, so the rail does not re-render", () => {
+      const s = run([type("y", "later")], listed());
+      expect(archivedDrafts(run([type("a", "typing in a live row")], s))).toBe(archivedDrafts(s));
+    });
+
+    test("the page's row keeps the section it was opened from until the page closes or another opens", () => {
+      // opened from archived: a note typed there does not move it under the pointer
+      const opened = run([{ a: "open-archived", id: "x" }, type("x", "check this")], listed());
+      expect(notes(opened)).toEqual([]);
+      expect(notes(run([{ a: "activate", id: "a" }], opened))).toEqual([["x", "check this"]]);
+      expect(notes(run([{ a: "open-archived", id: "y" }], opened))).toEqual([["x", "check this"]]);
+      // opened from drafts: emptied to retype, it stays, with no note to show
+      const drafted = run([{ a: "close-archived" }, { a: "open-archived", id: "x" }, type("x", "")], opened);
+      expect(notes(drafted)).toEqual([["x", null]]);
+      expect(notes(run([type("x", "check that")], drafted))).toEqual([["x", "check that"]]);
+      expect(notes(run([{ a: "close-archived" }], drafted))).toEqual([]);
+      // the page coming up again on the row it already shows keeps the reading it opened with
+      expect(notes(run([{ a: "open-archived", id: "x" }], drafted))).toEqual([["x", null]]);
+    });
   });
 
   test("choosing a row closes it, and so does escape's close", () => {

@@ -13,6 +13,8 @@ export const STORAGE = {
   discoveredOpen: "toyon-disc",
   /** which projects had the rail's archived section open, keyed by repo id */
   archivedOpen: "toyon-arch",
+  /** which projects had the rail's drafts section open, keyed by repo id */
+  draftsOpen: "toyon-drafts",
   /** which projects had the changes list's committed section folded, keyed by repo id */
   committedShut: "toyon-committed-shut",
   /** which projects had the changes list's last turn section open, keyed by repo id */
@@ -98,6 +100,7 @@ export const MACHINE_KEYS: readonly Key[] = [
   STORAGE.lastActive,
   STORAGE.discoveredOpen,
   STORAGE.archivedOpen,
+  STORAGE.draftsOpen,
   STORAGE.committedShut,
   STORAGE.turnOpen,
   STORAGE.treeOpen,

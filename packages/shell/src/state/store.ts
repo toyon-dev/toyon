@@ -102,6 +102,7 @@ import {
 } from "@toyon/shared";
 import { stoppedAsk, stoppedBy } from "../surfaces/chat/ask.ts";
 import { type PathKinds, pathKindsWith } from "../surfaces/chat/pathComplete.ts";
+import { clipLine } from "../surfaces/recap.ts";
 import { dotClass } from "../surfaces/util.ts";
 import { mergeLinks } from "./links.ts";
 import { type HeldFrame, type OutboxEntry, type Outgoing, outBoxId, outBoxOf } from "./outbox.ts";
@@ -828,6 +829,8 @@ export interface State {
   discoveredOpen: Record<string, boolean>;
   /** per repo: has the rail's archived section been opened; collapsed by default, like discovered */
   archivedOpen: Record<string, boolean>;
+  /** per repo: has the rail's drafts section been opened; collapsed by default, like archived */
+  draftsOpen: Record<string, boolean>;
   /** per repo: has the changes list's committed section been folded. Open is the default: what a
    * branch already holds is part of what is being read until someone says it is in the way. */
   committedShut: Record<string, boolean>;
@@ -854,6 +857,11 @@ export interface State {
    * shows what was kept before anything is brought back. Selecting a row closes it, and so does
    * the item leaving the list, which is what a restore or a delete does. */
   archivedPage: string | null;
+  /** whether the archived page's box held a draft as the page opened. The rail lists an archived
+   * row under drafts or under archived by its box, and the row whose page is up keeps the section
+   * it was opened from: a box emptied to retype a note would otherwise move the row from under the
+   * pointer. Read only while `archivedPage` is set. */
+  archivedPageDrafted: boolean;
   /** the worktree last selected in each repo: switching back to a project lands where you left it.
    * Persisted (App.tsx), so it survives a reload the same way the panel layout does. */
   lastActive: Record<string, string>;
@@ -1123,6 +1131,8 @@ export interface InitialOpts {
   storedDiscoveredOpen?: Record<string, boolean>;
   /** which projects had the archived section open, for the same reason */
   storedArchivedOpen?: Record<string, boolean>;
+  /** which projects had the drafts section open, for the same reason */
+  storedDraftsOpen?: Record<string, boolean>;
   /** which projects had the committed section folded, so it does not reopen on every reload */
   storedCommittedShut?: Record<string, boolean>;
   /** which projects had the last turn section open */
@@ -1150,6 +1160,7 @@ export function initialState(opts: InitialOpts): State {
     visibleDiscovered: [],
     discoveredOpen: opts.storedDiscoveredOpen ?? {},
     archivedOpen: opts.storedArchivedOpen ?? {},
+    draftsOpen: opts.storedDraftsOpen ?? {},
     committedShut: opts.storedCommittedShut ?? {},
     turnOpen: opts.storedTurnOpen ?? {},
     treeOpen: opts.storedTreeOpen ?? {},
@@ -1158,6 +1169,7 @@ export function initialState(opts: InitialOpts): State {
     chats: {},
     archived: {},
     archivedPage: null,
+    archivedPageDrafted: false,
     lastActive: opts.storedLastActive ?? {},
     pendingOpen: false,
     activeId: null,
@@ -1277,9 +1289,11 @@ export function localOf(s: State, id: string | null | undefined): WorktreeLocal 
 }
 
 /** written in: words, or something attached. The same reading the daemon takes of its box. */
-export function isDrafted(s: State, id: string): boolean {
-  const l = localOf(s, id);
-  return l.draft.trim() !== "" || l.attachments.length > 0;
+const holdsDraft = (l: WorktreeLocal): boolean => l.draft.trim() !== "" || l.attachments.length > 0;
+
+export function isDrafted(s: Pick<State, "local">, id: string): boolean {
+  const l = s.local[id];
+  return !!l && holdsDraft(l);
 }
 
 /** any row by id, owned or not. Reads only the rows, so the app menu and the palette can ask with
@@ -1385,10 +1399,13 @@ export function chatChordAction(s: State): Action {
 
 /** an archived worktree's page, over the row underneath: the file open there belongs to what was
  * on screen, and is not what the page is about (the draft follows the lead and goes by itself, see
- * withLauncher). Nothing for an id the active project's archive does not list. */
+ * withLauncher). Nothing for an id the active project's archive does not list. The rail section
+ * the row sits in is read here and held while the page is up; a page already up on this row keeps
+ * the reading it opened with. */
 function openArchivedPage(s: State, id: string): State {
   if (!s.activeRepoId || !s.archived[s.activeRepoId]?.some((a) => a.id === id)) return s;
-  return { ...s, archivedPage: id, notesPage: false, editor: null, screen: "chat" };
+  const archivedPageDrafted = s.archivedPage === id ? s.archivedPageDrafted : isDrafted(s, id);
+  return { ...s, archivedPage: id, archivedPageDrafted, notesPage: false, editor: null, screen: "chat" };
 }
 
 /** An archived worktree's page over its own project's landing row. One in another project
@@ -1711,6 +1728,26 @@ export function archivedPageOf(s: Pick<State, "archivedPage" | "activeRepoId" | 
   return s.archived[s.activeRepoId]?.find((a) => a.id === s.archivedPage) ?? null;
 }
 
+/** The active project's archived worktrees whose box holds a draft, each with its note cut to a
+ * line, as JSON of `[id, note]` pairs in the archive's order; empty when there are none. One
+ * string, so whoever subscribes re-renders when the set or a note changes and not on a keystroke
+ * anywhere else. The row whose page is up answers with the reading its page opened on, and its
+ * note is null while its box is empty: listed still, with no note to show. An empty string is a
+ * box that holds only an attachment. */
+export function archivedDrafts(
+  s: Pick<State, "activeRepoId" | "archived" | "archivedPage" | "archivedPageDrafted" | "local">,
+): string {
+  const list = s.activeRepoId ? s.archived[s.activeRepoId] : undefined;
+  if (!list) return "";
+  const notes: Array<[string, string | null]> = [];
+  for (const a of list) {
+    const now = isDrafted(s, a.id);
+    if (a.id === s.archivedPage ? !s.archivedPageDrafted : !now) continue;
+    notes.push([a.id, now ? clipLine(s.local[a.id]?.draft ?? "") : null]);
+  }
+  return notes.length ? JSON.stringify(notes) : "";
+}
+
 /** an archived worktree by id, whichever project's archive lists it */
 export function archivedById(s: Pick<State, "archived">, id: string): ArchivedWorktree | null {
   for (const items of Object.values(s.archived)) {
@@ -1942,6 +1979,8 @@ export type Action =
   | { a: "files-asked"; worktreeId: string; index: string; disk: string }
   /** open or close the active project's archived section */
   | { a: "toggle-archived" }
+  /** open or close the active project's drafts section */
+  | { a: "toggle-drafts" }
   /** `file`: the editor pane fills the column or holds the keyboard (ui/Pane.tsx, paneInHand), so
    * the file is what zen gives the window to */
   | { a: "toggle-zen"; file?: boolean }
@@ -2803,6 +2842,11 @@ function reduce(s: State, action: Action): State {
       if (!repoId) return s;
       return { ...s, archivedOpen: { ...s.archivedOpen, [repoId]: !s.archivedOpen[repoId] } };
     }
+    case "toggle-drafts": {
+      const repoId = s.activeRepoId;
+      if (!repoId) return s;
+      return { ...s, draftsOpen: { ...s.draftsOpen, [repoId]: !s.draftsOpen[repoId] } };
+    }
     case "toggle-committed": {
       const repoId = s.activeRepoId;
       if (!repoId) return s;
@@ -3161,6 +3205,7 @@ function onHello(s: State, msg: Extract<StoreServerMsg, { t: "hello" }>, recall:
     treeOpen: pruneByRow(s.treeOpen, rows),
     discoveredOpen: pruneByRepo(s.discoveredOpen, repos),
     archivedOpen: pruneByRepo(s.archivedOpen, repos),
+    draftsOpen: pruneByRepo(s.draftsOpen, repos),
     committedShut: pruneByRepo(s.committedShut, repos),
     turnOpen: pruneByRepo(s.turnOpen, repos),
     refs: pruneByRepo(s.refs, repos),

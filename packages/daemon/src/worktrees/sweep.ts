@@ -2,7 +2,7 @@
 // a message brings one back. The rule is shared (archiveRule.ts); this decides when to ask it, and
 // asks git only about the rows the facts it already has would let go.
 
-import { type ArchiveFacts, archiveReason } from "@toyon/shared";
+import { ARCHIVE_DRAFT_AFTER_MS, type ArchiveFacts, archiveReason } from "@toyon/shared";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
 import type { DraftStore } from "../drafts/store.ts";
@@ -18,6 +18,8 @@ export interface SweepDeps {
   worktrees: Pick<WorktreeService, "archiveWorktree" | "freshCounts">;
   /** how long nobody may have opened a worktree before it goes; null never archives */
   afterMs?: number | null;
+  /** how long nobody may have opened one whose box holds a draft */
+  draftAfterMs?: number;
   /** how often the rows are looked over; never less often than `afterMs` */
   everyMs?: number;
   now?: () => number;
@@ -119,6 +121,7 @@ export class ArchiveSweep {
       viewed: this.d.viewed,
       pending: this.d.busy,
       drafted: (id) => this.d.drafts.has(id),
+      draftAfterMs: this.d.draftAfterMs ?? ARCHIVE_DRAFT_AFTER_MS,
       counts,
     };
   }

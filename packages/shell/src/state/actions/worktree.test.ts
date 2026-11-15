@@ -51,7 +51,7 @@ describe("a worktree's actions", () => {
       defaultBranch: "main",
       config: { run: {}, land: { route: "pr" } },
     } as never;
-    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [], drafted: () => false };
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
     expect(word(worktreeItems(owned(), prRepo, state, deps, here))).toBe("create pr");
     const opened = owned({ worktree: { ...info, pr: { number: 7, url: "u", state: "open", at: 1 } } });
@@ -59,7 +59,7 @@ describe("a worktree's actions", () => {
     expect(word(worktreeItems(owned(), null, state, deps, here))).toBe("land");
   });
   test("a landed row offers no land, however far ahead a squash on GitHub left it counting", () => {
-    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [], drafted: () => false };
+    const state = { layout: defaultLayout, shipping: {}, frame: "desk" as const, repos: [] };
     const word = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "land")?.label;
     const landed = owned({ ahead: 1, worktree: { ...info, landed: true } });
     expect(word(worktreeItems(landed, null, state, deps, here))).toBeUndefined();
@@ -77,7 +77,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       deps,
       here,
@@ -106,7 +105,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       deps,
       { graft: () => {}, ...here },
@@ -141,7 +139,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       { sock: { send: (m: unknown) => sent.push(m) } as never, dispatch: () => {} },
       here,
@@ -154,13 +151,11 @@ describe("a worktree's actions", () => {
 
   test("the archive asks about whatever the sweep would have kept the row for, not git work alone", () => {
     const s = { layout: { ...defaultLayout, changes: true }, shipping: {}, frame: "desk" as const, repos: [] };
-    const word = (w: OwnedWorktree, drafted = false) =>
-      worktreeItems(w, null, { ...s, drafted: () => drafted }, deps, here)
+    const word = (w: OwnedWorktree) =>
+      worktreeItems(w, null, s, deps, here)
         .filter(isItem)
         .find((i) => i.id === "archive")?.label;
     expect(word(owned())).toBe("archive");
-    // words typed and not sent: the case a swipe on a clean row used to take away unasked
-    expect(word(owned(), true)).toBe("archive…");
     expect(word(owned({ agent: "working" }))).toBe("archive…");
     expect(word(owned({ queued: 1 }))).toBe("archive…");
     expect(word(owned({ worktree: { ...info, seenAt: 0 } }))).toBe("archive…");
@@ -182,19 +177,13 @@ describe("a worktree's actions", () => {
       },
     };
     try {
-      worktreeActions(
-        sock,
-        () => {},
-        () => true,
-      ).archive(owned());
-      expect(asked[0]).toStartWith('Archive worktree "feature"? Unsent text waits in its composer.');
+      worktreeActions(sock, () => {}).archive(owned({ dirty: 2 }));
+      expect(asked[0]).toStartWith('Archive worktree "feature"? It has uncommitted changes.');
       expect(asked[0]).toContain("The chat, its draft, the commits");
       expect(sent).toEqual([]);
-      worktreeActions(
-        sock,
-        () => {},
-        () => false,
-      ).archive(owned());
+      // a clean row goes unasked whatever its box holds: the press takes no reading of the draft,
+      // which the archive keeps and the rail lists the row by
+      worktreeActions(sock, () => {}).archive(owned());
       expect(asked).toHaveLength(1);
       expect(sent).toEqual([{ t: "archive-worktree", worktreeId: "w1" }]);
     } finally {
@@ -211,7 +200,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       deps,
       {
@@ -228,7 +216,6 @@ describe("a worktree's actions", () => {
       shipping: {},
       frame: "phone" as const,
       repos: [],
-      drafted: () => false,
     };
     const away = { hostname: "box.tail1234.ts.net" };
     const items = worktreeItems(
@@ -272,7 +259,6 @@ describe("a worktree's actions", () => {
       shipping: {},
       frame: "desk" as const,
       repos: [],
-      drafted: () => false,
     };
     const palette = { ...here, palette: true };
     const copies = (items: MenuEntry[]) => labels(items).slice(0, 6);
@@ -308,7 +294,6 @@ describe("a worktree's actions", () => {
       shipping: {},
       frame: "desk" as const,
       repos: [],
-      drafted: () => false,
     };
     const sent: unknown[] = [];
     const sock = { send: (m: unknown) => sent.push(m) } as never;
@@ -349,7 +334,6 @@ describe("a worktree's actions", () => {
         frame: "desk" as const,
         // two projects, so the handoff row is live and only the landing ops are off
         repos: [other, other],
-        drafted: () => false,
       },
       deps,
       here,
@@ -368,7 +352,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       deps,
       here,
@@ -382,7 +365,6 @@ describe("a worktree's actions", () => {
         shipping: {},
         frame: "desk" as const,
         repos: [],
-        drafted: () => false,
       },
       deps,
       here,
@@ -405,7 +387,6 @@ describe("a worktree's actions", () => {
       shipping: {},
       frame: "desk" as const,
       repos: [],
-      drafted: () => false,
     };
     const copy = owned();
     const items = worktreeItems(
@@ -447,7 +428,6 @@ describe("a worktree's actions", () => {
       shipping: {},
       frame: "desk" as const,
       repos: [],
-      drafted: () => false,
     };
     const row = (items: MenuEntry[]) => items.filter(isItem).find((i) => i.id === "handoff");
     const alone = row(worktreeItems(owned(), null, s, deps, here));

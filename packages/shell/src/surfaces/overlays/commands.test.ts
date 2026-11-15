@@ -58,7 +58,6 @@ describe("buildCommands", () => {
     knocks: [],
     tailscale: { state: "not-installed", name: null, line: "" },
     hostname: "localhost",
-    drafted: () => false,
   } as unknown as CommandState;
 
   // the rows are keyed by id, so an id twice leaves a stale row behind when the list changes

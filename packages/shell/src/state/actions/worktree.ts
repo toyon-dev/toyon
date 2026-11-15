@@ -46,18 +46,14 @@ export function shipOp(sock: DaemonSocket | null, dispatch: Dispatch, msg: Extra
   sock?.send(msg);
 }
 
-/** whether words or an attachment wait in a worktree's composer, read off the store when asked:
- * a menu is built as it opens, so the reading is taken then and nothing re-renders per keystroke */
-export type Drafted = (id: string) => boolean;
-
 /** What the row holds that its archive should ask about first, in the words the question uses,
  * or null: the one rule the daemon's sweep reads before archiving a row of its own accord, so a
  * press never takes away what the sweep would have kept. The daemon's "busy" is an agent not idle
- * or still owed something; here that is the status, a queue behind the turn, or a landing op out. */
-const heldOf = (w: OwnedWorktree, drafted: Drafted): string | null =>
+ * or still owed something; here that is the status, a queue behind the turn, or a landing op out.
+ * A draft in its box is not asked about: the archive keeps it, and the rail lists the row by it. */
+const heldOf = (w: OwnedWorktree): string | null =>
   heldBy(w.worktree, {
     pending: () => w.agent !== "idle" || (w.queued ?? 0) > 0 || !!w.shipping,
-    drafted,
     counts: () => ({ dirty: w.dirty, ahead: w.ahead }),
   });
 
@@ -78,7 +74,7 @@ export function markUnread(sock: DaemonSocket | null, dispatch: Dispatch, id: st
 
 /** confirm-then-send worktree actions: the rail's badges reach these directly, the menu and the
  * palette through `worktreeItems` */
-export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch, drafted: Drafted) {
+export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch) {
   return {
     rename(w: OwnedWorktree) {
       if (!canRename(w.worktree)) return;
@@ -101,7 +97,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch, d
     },
     archive(w: OwnedWorktree) {
       if (!canArchive(w.worktree)) return;
-      const held = heldOf(w, drafted);
+      const held = heldOf(w);
       // nothing held: the rail's archived section brings the chat back, so there is nothing to ask
       if (!held) return archiveWorktrees(sock, dispatch, [w.worktree.id]);
       const ok = window.confirm(
@@ -112,7 +108,7 @@ export function worktreeActions(sock: DaemonSocket | null, dispatch: Dispatch, d
   };
 }
 
-export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "repos"> & { drafted: Drafted };
+export type WorktreeItemState = Pick<State, "layout" | "shipping" | "frame" | "repos">;
 
 /** Everything a worktree of ours can do, in the order the rail's menu shows it; the palette reads
  * the same list with the title appended. `graft` is the rail's own multi-select, so only the rail
@@ -131,7 +127,7 @@ export function worktreeItems(
   ui: { graft?: (id: string) => void; hostname: string; palette?: boolean },
 ): MenuEntry[] {
   const id = w.worktree.id;
-  const acts = worktreeActions(sock, dispatch, s.drafted);
+  const acts = worktreeActions(sock, dispatch);
   // six groups, in the order they are reached for: what is going on now (stop, the changes
   // written), what it is (its branch and its directory), change it, ship it (sync, land, hand
   // on), run it, and remove on its own. The first group comes and goes with the row's state, so
@@ -270,7 +266,7 @@ export function worktreeItems(
   if (canArchive(w.worktree)) {
     gone.push({
       id: "archive",
-      label: heldOf(w, s.drafted) ? "archive…" : "archive",
+      label: heldOf(w) ? "archive…" : "archive",
       key: chord("wt-archive"),
       danger: true,
       onClick: () => acts.archive(w),

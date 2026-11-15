@@ -63,10 +63,18 @@ describe("ArchiveSweep", () => {
     expect(archived).toEqual([]);
   });
 
-  test("a draft in its box keeps it", async () => {
-    const { sweep, archived } = make([task("old", 1), ...newer], { drafts: { has: (id) => id === "old" } });
+  test("a draft in its box keeps it for a week unopened, then it goes with the draft's wait as its reason", async () => {
+    const drafts = { has: (id: string) => id === "old" };
+    const { sweep, archived } = make([task("old", 1), ...newer], { drafts });
     await sweep.sweep();
     expect(archived).toEqual([]);
+    const week = make([task("old", 1), ...newer], { drafts, now: () => 7 * 24 * HOUR });
+    await week.sweep.sweep();
+    expect(week.archived).toEqual([["old", "no changes, not opened in 7d"]]);
+    // the draft's wait is the sweep's to set, the way the plain one is
+    const quick = make([task("old", 1), ...newer], { drafts, draftAfterMs: 3 * HOUR });
+    await quick.sweep.sweep();
+    expect(quick.archived).toEqual([["old", "no changes, not opened in 3h"]]);
   });
 
   test("a row someone sends to while git is asked is kept: the rule runs again once git has answered", async () => {

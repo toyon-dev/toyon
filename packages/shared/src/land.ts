@@ -7,7 +7,7 @@ import type { PrState, RepoInfo, ShipOp, ToyonConfig, WorktreeInfo } from "./mod
 /** where a landed worktree's work ends up */
 export type LandRoute = "merge" | "push" | "pr";
 
-/** how the commits arrive on main: a merge commit, one squashed commit, or a fast-forward */
+/** how the commits arrive on main: a fast-forward, one squashed commit, or a merge commit */
 export type MergeMethod = "merge" | "squash" | "rebase";
 
 /** the routes as the setup pane lists them: named by where the work goes, so the word "merge" is
@@ -22,10 +22,11 @@ export const LAND_ROUTES: ReadonlyArray<{ id: LandRoute; name: string; descripti
   { id: "pr", name: "pull request", description: "the branch is pushed and a pull request opened on GitHub" },
 ];
 
+/** the local default reads first */
 export const MERGE_METHODS: ReadonlyArray<{ id: MergeMethod; name: string; description: string }> = [
-  { id: "merge", name: "merge commit", description: "the commits stay as they are, under one merge commit" },
-  { id: "squash", name: "squash", description: "the work becomes one commit on main" },
   { id: "rebase", name: "rebase", description: "the commits go on main as they are, no merge commit" },
+  { id: "squash", name: "squash", description: "the work becomes one commit on main" },
+  { id: "merge", name: "merge commit", description: "the commits stay as they are, under one merge commit" },
 ];
 
 /** on the PR route: who presses merge. Toyon's own word in the chat, or GitHub's auto-merge */
@@ -40,15 +41,34 @@ export const PR_MERGERS: ReadonlyArray<{ id: "you" | "github"; name: string; des
 ];
 
 export const DEFAULT_LAND_ROUTE: LandRoute = "merge";
-/** the local default; on GitHub the repo's own allowed methods decide when none is set */
-export const DEFAULT_MERGE_METHOD: MergeMethod = "merge";
+/** The local default: a landing takes main into the branch first, so the branch is a fast-forward
+ * of main by then and a merge commit over it would reconcile nothing. A repo that names no method
+ * is held to it less strictly than one that wrote `rebase`: a branch holding a merge lands under
+ * a merge commit rather than being refused. On GitHub the repo's own allowed methods decide when
+ * none is set. */
+export const DEFAULT_MERGE_METHOD: MergeMethod = "rebase";
 
 export interface LandPolicy {
   land: LandRoute;
   /** pr only: GitHub merges the PR itself once its rules allow */
   automerge: boolean;
-  /** unset means the local default locally, and the repo's allowed methods on GitHub */
+  /** unset means the local default locally (a fast-forward, or a merge commit for a branch that
+   * holds a merge), and the repo's allowed methods on GitHub */
   merge?: MergeMethod;
+}
+
+/** The method the setup pane writes for a pick, or nothing where the file says it by saying
+ * nothing. On a local route the default leaves the file, unless the file names it already: a
+ * written `rebase` refuses a branch that holds a merge where unset lands it under a merge commit,
+ * and saving the pane must not loosen that. On the PR route unset means the repo's allowed
+ * methods (the pick "default"), so any method picked there is written. */
+export function methodToWrite(
+  route: LandRoute,
+  pick: MergeMethod | "default",
+  onFile: MergeMethod | undefined,
+): MergeMethod | undefined {
+  if (pick === "default") return undefined;
+  return route !== "pr" && pick === DEFAULT_MERGE_METHOD && onFile !== pick ? undefined : pick;
 }
 
 /** the route and method a repo lands by, defaults filled in */

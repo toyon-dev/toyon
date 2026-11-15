@@ -56,6 +56,7 @@ import {
   stepRun,
   takeMainIn,
   UNWATCHED,
+  unsetMethod,
 } from "../git/land.ts";
 import { withFetchLock, withRepoLock } from "../git/lock.ts";
 import { rangeSubjects } from "../git/log.ts";
@@ -689,11 +690,12 @@ export class Ship {
     return withRepoLock(repo.path, async (): Promise<Landed> => {
       const committed = await this.commitIfDirty(wt, message);
       if (committed && !committed.ok) return { result: committed };
-      const method = policy.merge ?? DEFAULT_MERGE_METHOD;
-      const merged = own && method === "rebase" ? await requireLinear(wt.path, base) : null;
+      // only a repo that wrote `rebase` is held to it; unset lands such a branch under a merge
+      const merged = own && policy.merge === "rebase" ? await requireLinear(wt.path, base) : null;
       if (merged) return { result: merged };
       const taken = await takeMainIn(wt.path, base, own, w);
       if (!taken.ok) return { result: taken };
+      const method = policy.merge ?? (await unsetMethod(wt.path, base));
       // read before the landing moves main and the branch restarts from it
       const mark = await landingMark(wt.path, base);
       const squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
@@ -725,7 +727,8 @@ export class Ship {
   ): Promise<Landed> {
     const base = baseOf(repo);
     const own = hasOwnBranch(wt);
-    const method = policy.merge ?? DEFAULT_MERGE_METHOD;
+    // an unset method is settled per attempt, once the base is in: see unsetMethod
+    let method = policy.merge ?? DEFAULT_MERGE_METHOD;
     const committed = await this.commitIfDirty(wt, message);
     if (committed && !committed.ok) return { result: committed };
     // read before the fetch, the rebase and the method rewrite the branch: the commits it carried,
@@ -739,7 +742,7 @@ export class Ship {
     let already = false;
     // the squash message main received, when the method is squash: what the mark says landed
     let squash = "";
-    const merged = own && method === "rebase" ? await requireLinear(wt.path, base) : null;
+    const merged = own && policy.merge === "rebase" ? await requireLinear(wt.path, base) : null;
     if (merged) return { result: merged };
     for (let attempt = 0; ; attempt++) {
       const fetched = await this.fetchBase(wt, repo, w);
@@ -756,6 +759,7 @@ export class Ship {
         sha = (await commitOf(wt.path, base)) ?? "";
         break;
       }
+      method = policy.merge ?? (await unsetMethod(wt.path, base));
       squash = method === "squash" ? await squashMessage(wt.path, base, suggested, !!message?.trim()) : "";
       this.d.tree.invalidate(wt.id);
       const built = await landingCommit(wt.path, wt.branch, base, method, squash, own, w);

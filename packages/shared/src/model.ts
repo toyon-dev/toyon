@@ -9,8 +9,8 @@ export interface LandConfig {
   route?: "merge" | "push" | "pr";
   /** pr only: GitHub merges the PR itself once its rules (checks, reviewers) allow */
   automerge?: boolean;
-  /** how the commits arrive on main: a merge commit (the local default), one squashed commit, or
-   * the commits as they are. Unset on the PR route follows what the repo allows, squash first */
+  /** how the commits arrive on main: the commits as they are (the local default), one squashed
+   * commit, or a merge commit. Unset on the PR route follows what the repo allows, squash first */
   method?: "merge" | "squash" | "rebase";
 }
 

@@ -11,6 +11,7 @@ import {
   landPolicy,
   MERGE_METHODS,
   type MergeMethod,
+  methodToWrite,
   PR_MERGERS,
   type RepoInfo,
   type RunProc,
@@ -123,9 +124,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
   const edited = (): typeof repo.config => {
     const { check: _check, land: _land, teardown: _teardown, ...rest } = repo.config;
     const route = repo.remote ? land : DEFAULT_LAND_ROUTE;
-    // a merge commit is what a local route does unset, so picking it writes nothing; on the PR
-    // route unset means the repo's allowed methods, so any pick there is written
-    const method = merge === "default" || (route !== "pr" && merge === DEFAULT_MERGE_METHOD) ? undefined : merge;
+    const method = methodToWrite(route, merge, repo.config.land?.method);
     const landing = {
       ...(route !== DEFAULT_LAND_ROUTE ? { route } : {}),
       ...(route === "pr" && automerge ? { automerge: true } : {}),
@@ -310,7 +309,7 @@ export function Setup({ repo, onClose }: { repo: RepoInfo; onClose?: () => void 
         </FormRow>
       )}
 
-      {/* unset shows as what it does: a merge commit here. On GitHub unset follows the repo's own
+      {/* unset shows as what it does: a rebase here. On GitHub unset follows the repo's own
           allowed methods, which is none of the three, so there it is a row of its own. */}
       <FormRow
         label="merge"

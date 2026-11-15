@@ -61,8 +61,8 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     const { result } = await w.worktrees.land(wt.id, "add feature");
     expect(result.ok).toBe(true);
-    expect(result.message).toBe("committed and merged into main and pushed; main here pulled it");
-    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect(result.message).toBe("committed and rebased onto main and pushed; main here pulled it");
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("add feature");
     expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
     expect((await git(wt.path, "rev-parse", "HEAD")).out).toBe((await git(origin, "rev-parse", "main")).out);
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
@@ -74,7 +74,7 @@ describe("landing", () => {
     expect(again.result.ok).toBe(true);
     const subjects = (await git(origin, "log", "--first-parent", "--format=%s", "-n", "4")).out.split("\n");
     expect(subjects[1]).toBe("elsewhere");
-    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add more");
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("add more");
     undo();
     // origin that moves under every push is not raced for ever: the second rejection stops, with
     // the branch clean, committed and ready for the next press
@@ -87,7 +87,7 @@ describe("landing", () => {
     expect((await git(wt.path, "branch", "--show-current")).out).toBe(wt.branch);
     always();
     expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
-    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add a third");
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("add a third");
   });
 
   test("the push route needs nothing of the main checkout", async () => {
@@ -101,7 +101,7 @@ describe("landing", () => {
     const { result } = await w.worktrees.land(wt.id, "add feature");
     expect(result.ok).toBe(true);
     expect(result.message).toMatch(/main here was left where it is: main checkout is on 'elsewhere'/);
-    expect((await git(origin, "log", "-1", "--format=%s", "main^2")).out).toBe("add feature");
+    expect((await git(origin, "log", "-1", "--format=%s", "main")).out).toBe("add feature");
     expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
     expect(readFileSync(join(w.repo, "README.md"), "utf8")).toBe("edited on main\n");
     expect((await git(w.repo, "branch", "--show-current")).out).toBe("elsewhere");
@@ -113,6 +113,37 @@ describe("landing", () => {
     expect((await git(w.repo, "rev-parse", "main")).out).toBe((await git(origin, "rev-parse", "main")).out);
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
+  });
+
+  test("the push route with no method on file lands one commit as it is, and a branch that holds a merge under a merge commit", async () => {
+    const repoId = await registered();
+    const { origin, other } = await pushRoute(repoId);
+    const wt = await w.worktrees.create(repoId, "feature");
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "add feature");
+    const one = (await git(wt.path, "rev-parse", "HEAD")).out;
+    expect((await w.worktrees.land(wt.id)).result.ok).toBe(true);
+    // exactly the one commit, hash and all, and nothing over it
+    expect((await git(origin, "rev-parse", "main")).out).toBe(one);
+    expect((await git(origin, "log", "--format=%s", "-n", "3")).out.split("\n")).toEqual(["add feature", "init"]);
+    // origin moves, and the branch takes it in by a merge of its own
+    sh(other, "git", "pull", "-q", "origin", "main");
+    sh(other, "git", "commit", "-q", "--allow-empty", "-m", "elsewhere");
+    sh(other, "git", "push", "-q", "origin", "main");
+    writeFileSync(join(wt.path, "more.txt"), "y\n");
+    sh(wt.path, "git", "add", "-A");
+    sh(wt.path, "git", "commit", "-qm", "add more");
+    sh(wt.path, "git", "fetch", "-q", "origin", "main");
+    sh(wt.path, "git", "merge", "-q", "--no-edit", "origin/main");
+    const tip = (await git(wt.path, "rev-parse", "HEAD")).out;
+    const { result } = await w.worktrees.land(wt.id);
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe("merged into main and pushed; main here pulled it");
+    expect((await git(origin, "log", "-1", "--format=%P", "main")).out.split(" ")).toHaveLength(2);
+    expect((await git(origin, "log", "-1", "--format=%s", "main^1")).out).toBe("elsewhere");
+    expect((await git(origin, "rev-parse", "main^2")).out).toBe(tip);
+    expect(w.state.worktree(wt.id)).toMatchObject({ landed: true });
   });
 
   test("the push route by squash lands one commit with the suggested message, from toyon's own branch or an adopted one", async () => {
@@ -204,7 +235,6 @@ describe("landing", () => {
       "committing",
       "fetching origin/main",
       "rebasing onto origin/main",
-      "merging into origin/main",
       "pushing main",
     ]);
   });

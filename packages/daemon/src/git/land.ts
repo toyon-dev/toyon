@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import {
   baseIsRemote,
   baseOf,
+  DEFAULT_MERGE_METHOD,
   describeDuration,
   type MergeMethod,
   type PrState,
@@ -315,13 +316,26 @@ export async function takeMainIn(
  * too, on a main the method keeps to one line. Flattening it here would drop whatever the merge
  * resolved without a word, so the branch is refused and the rebase is asked for instead. */
 export async function requireLinear(worktreePath: string, base: string): Promise<ShipResult | null> {
-  const merges = await git(worktreePath, "rev-list", "--merges", "--count", `${base}..HEAD`);
-  if (!merges.ok || merges.out === "0") return null;
+  if (!(await holdsMerge(worktreePath, base))) return null;
   return {
     ok: false,
     conflict: "rebase",
     message: `the branch holds a merge commit, which landing by rebase would put on ${base}: ask the agent to rebase onto ${base} first`,
   };
+}
+
+/** The method a local landing goes by where the repo names none: a fast-forward, which is all a
+ * branch holding the base needs, and a merge commit for a branch that holds a merge. Nobody who
+ * chose no method chose to be refused, and that merge fast-forwarded would become the base's tip,
+ * with the branch as its first parent and the base's own line as the side one. Read once the base
+ * is taken in, which is where an adopted branch that was behind gets its merge. */
+export async function unsetMethod(worktreePath: string, base: string): Promise<MergeMethod> {
+  return (await holdsMerge(worktreePath, base)) ? "merge" : DEFAULT_MERGE_METHOD;
+}
+
+async function holdsMerge(worktreePath: string, base: string): Promise<boolean> {
+  const merges = await git(worktreePath, "rev-list", "--merges", "--count", `${base}..HEAD`);
+  return merges.ok && merges.out !== "0";
 }
 
 /** How the base comes into the branch: a rebase for a branch toyon owns, a merge for one it

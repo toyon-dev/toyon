@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_MERGE_METHOD,
+  describeLand,
   landedNow,
+  landPolicy,
   landWord,
+  MERGE_METHODS,
+  methodToWrite,
   movedPastLand,
   notLandedWhy,
   prPending,
@@ -141,5 +146,38 @@ describe("prPending", () => {
     expect(prPending({ pr: merged, lands: [{ ...land, pr: 7 }] })).toBe(false);
     expect(prPending({ pr: { ...merged, state: "closed" } })).toBe(false);
     expect(prPending({ lands: [land] })).toBe(false);
+  });
+});
+
+describe("the method a repo names, or does not", () => {
+  test("a local route with no method on file is a rebase, and reads first in the list", () => {
+    expect(DEFAULT_MERGE_METHOD).toBe("rebase");
+    expect(MERGE_METHODS[0]?.id).toBe(DEFAULT_MERGE_METHOD);
+    expect(landPolicy({}).merge).toBeUndefined();
+    expect(describeLand(landPolicy({}))).toBe("Commit and rebase onto main here");
+    expect(describeLand(landPolicy({ land: { route: "push" } }))).toBe(
+      "Commit, rebase onto main on origin and push it",
+    );
+    expect(describeLand(landPolicy({ land: { method: "merge" } }))).toBe("Commit and merge into main here");
+  });
+
+  test("the pane writes a pick that is not the default, and leaves the default off the file", () => {
+    expect(methodToWrite("merge", "rebase", undefined)).toBeUndefined();
+    expect(methodToWrite("push", "rebase", undefined)).toBeUndefined();
+    expect(methodToWrite("merge", "merge", undefined)).toBe("merge");
+    expect(methodToWrite("push", "squash", undefined)).toBe("squash");
+    // moving off a written method onto the default takes it off the file
+    expect(methodToWrite("merge", "rebase", "merge")).toBeUndefined();
+  });
+
+  test("a rebase the file names stays written: it refuses what unset would land under a merge commit", () => {
+    expect(methodToWrite("merge", "rebase", "rebase")).toBe("rebase");
+    expect(methodToWrite("push", "rebase", "rebase")).toBe("rebase");
+  });
+
+  test("on the PR route unset is the repo's allowed methods, so any method picked is written", () => {
+    expect(methodToWrite("pr", "default", "squash")).toBeUndefined();
+    expect(methodToWrite("pr", "rebase", undefined)).toBe("rebase");
+    expect(methodToWrite("pr", "merge", undefined)).toBe("merge");
   });
 });

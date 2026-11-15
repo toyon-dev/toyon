@@ -57,7 +57,7 @@ How commands are shared is in [backends.md](backends.md).
 ### `land`
 
 - `route`: `merge` merges into main on your machine and pushes nothing. This is the default. `push` merges, then pushes main. `pr` pushes the branch and opens a pull request on GitHub.
-- `method`: `merge` for a merge commit, `squash` for one commit, `rebase` to keep each commit. Default: a merge commit locally. On the `pr` route, whatever the repository allows, squash first.
+- `method`: `rebase` to keep each commit with no merge commit, `squash` for one commit, `merge` for a merge commit. Default on the `merge` and `push` routes: `rebase`, except that a branch holding a merge commit lands under a merge commit. With `rebase` written, that branch is refused until it is rebased. Default on the `pr` route: whatever the repository allows, squash first.
 - `automerge`: `pr` only. GitHub merges the pull request once its rules allow.
 
 The `pr` route needs the `gh` CLI, signed in. Without it, Toyon still pushes the branch and you open the pull request yourself. `toyon doctor` reports whether `gh` is installed and signed in.

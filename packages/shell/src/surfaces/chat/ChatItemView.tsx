@@ -515,7 +515,7 @@ function Fold({
  * (chat.css), so a long command shines as a hint of the line's width would. The shine rides a span
  * inside the one that truncates because the ellipsis is painted with the truncating box's fill,
  * and `.live-text` clears that fill to show its band. */
-function LiveHint({ text, live, className }: { text: string; live: boolean; className?: string }) {
+function LiveHint({ text, live }: { text: string; live: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -530,7 +530,7 @@ function LiveHint({ text, live, className }: { text: string; live: boolean; clas
     };
   }, [live]);
   return (
-    <span ref={ref} className={cx("tool-hint", className)}>
+    <span ref={ref} className="tool-hint">
       {live ? <span className="live-text">{text}</span> : text}
     </span>
   );
@@ -641,7 +641,7 @@ export const ThoughtRow = memo(function ThoughtRow({
         summary={
           <>
             <Icon name="bulb" className="tool-icon" />
-            <LiveHint className="thought-line" text={line} live={!!streaming} />
+            <LiveHint text={line} live={!!streaming} />
           </>
         }
       >

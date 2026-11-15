@@ -29,14 +29,20 @@ export function thoughtSteps(text: string): string[] {
   return steps;
 }
 
+/** a line that closes like a sentence: a summarised Claude thought is one sentence per step, and
+ * a sentence on the row is prose in a column of file names, not a headline */
+const SENTENCE = /[.!?]["')\]]*$/;
+
 /** A thought that is read as one line, or "". Codex's reasoning summaries are a headline per step
  * ("Inspecting module documentation"), sent whole, and a card folded around one line is a lid on
  * nothing: the line is the row. A column of headlines is read by its newest (thoughtSteps). Only
  * a finished thought is read this way, since one still arriving may be a paragraph's first words.
- * Backticks go, as the line prints as text and not as markdown. */
+ * A plain line that ends as a sentence does is a thought, not a headline, whatever its length:
+ * the row is a word or a headline, never a sentence cut at the ellipsis. Backticks go, as the
+ * line prints as text and not as markdown. */
 export function thoughtLine(text: string): string {
   const steps = thoughtSteps(text);
   if (steps.length) return steps.at(-1)!;
   const line = normalizeThoughtMarkdown(text).trim().replace(/`/g, "");
-  return line && !line.includes("\n") && line.length <= LINE ? line : "";
+  return line && !line.includes("\n") && line.length <= LINE && !SENTENCE.test(line) ? line : "";
 }

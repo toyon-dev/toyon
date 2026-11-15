@@ -21,6 +21,13 @@ describe("thoughtLine", () => {
     expect(thoughtLine(`${"a long thought ".repeat(10)}that runs on past the width of a line`)).toBe("");
     expect(thoughtLine("\n\n")).toBe("");
   });
+
+  test("a short sentence, as Claude's summarised thinking sends one per step, is not", () => {
+    expect(thoughtLine("That .env.example file got blocked too, so I'll move past it.\n\n")).toBe("");
+    expect(thoughtLine('Let me look at how the tools handle the "search" event.')).toBe("");
+    expect(thoughtLine("Is the adapter label-scoped?")).toBe("");
+    expect(thoughtLine("**Checking the label (k8s).**")).toBe("Checking the label (k8s).");
+  });
 });
 
 describe("thoughtSteps", () => {

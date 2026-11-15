@@ -61,8 +61,10 @@ export function fileItems(file: { href?: string }, ui: ChipUi = {}, kept?: Kept)
 
 /** the link a message was right-clicked on: a page out on the web, a file in this worktree, a file
  * linked outside it (which the daemon opens by its absolute path), a backticked path, which
- * has the file's menu and no click of its own, or a worktree of the project named by its branch */
+ * has the file's menu and no click of its own, a worktree of the project named by its branch, or
+ * the worktree's uncommitted set, which `@changes` names */
 export type ChatLink =
+  | { kind: "changes" }
   | { kind: "out"; href: string }
   | { kind: "file"; file: { path: string; line?: number; folder?: true } }
   | { kind: "outside"; href: string; path: string; line?: number; folder?: true }
@@ -84,6 +86,10 @@ export function linkOpener(link: ChatLink, worktreeId: string | null | undefined
   if (link.kind === "worktree") {
     const { id, archived } = link;
     return () => deps.dispatch(archived ? { a: "open-archived", id } : { a: "activate", id });
+  }
+  // the uncommitted set is the changes tab of the worktree the message stands in
+  if (link.kind === "changes") {
+    return worktreeId ? () => deps.dispatch({ a: "focus-changes", tab: "changes" }) : null;
   }
   // a folder outside the worktree has no place in Toyon, which shows only a worktree's folders,
   // so the press shows it where it sits; Finder opens on the daemon's screen, so from another
@@ -113,7 +119,7 @@ function revealPathOpener(path: string, { sock }: Deps): (() => void) | null {
  * its own: the reveal is what its press does, so it leads alone. A link that says it is a folder
  * is not offered as a file. */
 function fileLinkGroups(
-  link: Exclude<ChatLink, { kind: "out" | "worktree" }>,
+  link: Exclude<ChatLink, { kind: "out" | "worktree" | "changes" }>,
   worktreeId: string | null,
   deps: Deps,
 ): MenuItem[][] {
@@ -153,6 +159,24 @@ function worktreeGroups(link: Extract<ChatLink, { kind: "worktree" }>, deps: Dep
   ];
 }
 
+/** a link's own groups, wherever it stands: the open its press makes first, then what it names
+ * as text */
+function linkGroups(link: ChatLink, worktreeId: string | null, deps: Deps): MenuItem[][] {
+  if (link.kind === "out") return [linkItems(link.href)];
+  if (link.kind === "worktree") return worktreeGroups(link, deps);
+  if (link.kind === "changes") {
+    const open = linkOpener(link, worktreeId, deps);
+    return [open ? [{ id: "open", label: "show changes", onClick: open }] : []];
+  }
+  return fileLinkGroups(link, worktreeId, deps);
+}
+
+/** a reference in the draft, marked over the field: the menu the same words lead with once they
+ * are sent, and nothing about a message, since there is none yet */
+export function draftLinkItems(link: ChatLink, worktreeId: string | null, deps: Deps): MenuEntry[] {
+  return grouped(linkGroups(link, worktreeId, deps));
+}
+
 /** a fenced block the menu was opened on: its text alone, without the prose around it */
 export function codeItems(code: string | null | undefined): MenuItem[] {
   return code ? [{ id: "copy-code", label: "copy code", onClick: () => copyText(code) }] : [];
@@ -183,14 +207,7 @@ export function messageItems(
 ): MenuEntry[] | null {
   if (from === "touch" && !at.link && !at.code) return null;
   const { dispatch, sock } = deps;
-  const link = at.link;
-  const lead: MenuItem[][] = !link
-    ? []
-    : link.kind === "out"
-      ? [linkItems(link.href)]
-      : link.kind === "worktree"
-        ? worktreeGroups(link, deps)
-        : fileLinkGroups(link, worktreeId, deps);
+  const lead = at.link ? linkGroups(at.link, worktreeId, deps) : [];
   const copy: MenuItem[] = [{ id: "copy", label: "copy message", onClick: () => copyText(item.text) }];
   const again: MenuItem[] = [];
   if (item.kind === "user" && worktreeId) {

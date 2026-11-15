@@ -1,11 +1,9 @@
-import { Fragment, type MouseEvent, useEffect, useMemo } from "react";
-import type { Deps } from "../../state/actions/deps.ts";
+import { Fragment, useEffect, useMemo } from "react";
 import { listFiles } from "../../state/actions/file.ts";
 import { useSock, useStore, useStoreInstance } from "../../state/context.tsx";
 import { chatRepoOf, rowById } from "../../state/store.ts";
 import { tip } from "../../ui/Tooltip.tsx";
 import { collapseHome } from "../overlays/projectPicker.ts";
-import { openChatLink } from "./chatLink.ts";
 import { codeLink } from "./markdownGithub.ts";
 import { mentionableWorktrees, mentionIndex, mentionSpans, mentionTip, namedPaths } from "./mentions.ts";
 import { Painted } from "./Painted.tsx";
@@ -53,7 +51,7 @@ const KIND_OF: Record<string, PathKind> = { f: "file", d: "folder", n: "none" };
  * agent's prose gives one, the uncommitted set as a mark that opens the changes tab. A reference
  * is a link only when the worktree's file list holds it, so the mark says the agent has somewhere
  * to look and not that a sigil was typed. The links carry no handler of their own: the row they
- * sit in routes a press through `openMention`, as the agent's rows do through `openChatLink`. */
+ * sit in routes a press through `openChatLink`, as the agent's rows do. */
 export function MentionText({
   text,
   worktreeId,
@@ -238,20 +236,4 @@ export function MentionText({
       })}
     </>
   );
-}
-
-/** a press on a row holding `MentionText`: `@changes` shows the changes tab, and a worktree, a
- * file or a folder opens as it does in the agent's rows */
-export function openMention(
-  e: MouseEvent,
-  root: string | undefined | null,
-  worktreeId: string | null | undefined,
-  deps: Deps,
-) {
-  const target = e.target as Element;
-  if (target.closest("[data-changes]")) {
-    if (worktreeId) deps.dispatch({ a: "focus-changes", tab: "changes" });
-    return;
-  }
-  openChatLink(e, root, worktreeId, deps);
 }

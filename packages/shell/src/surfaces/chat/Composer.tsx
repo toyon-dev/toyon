@@ -38,7 +38,7 @@ import { installMsg } from "../../state/actions/agent.ts";
 import { copyText } from "../../state/actions/deps.ts";
 import { daemonHost, openedOnDaemonMachine } from "../../state/actions/editor.ts";
 import { listFiles, openFile, openPrComments } from "../../state/actions/file.ts";
-import { pathItems } from "../../state/actions/message.ts";
+import { draftLinkItems, pathItems } from "../../state/actions/message.ts";
 import { terminalItems } from "../../state/actions/proc.ts";
 import { archiveWorktrees, shipOp } from "../../state/actions/worktree.ts";
 import { spliceWords, takeBackQueued, toInput } from "../../state/attach.ts";
@@ -105,11 +105,12 @@ import { answerLines, answered as hasAnswer, stoppedAsk } from "./ask.ts";
 import { ComposerOffer } from "./ComposerOffer.tsx";
 import { cardLine, openCard } from "./cards.ts";
 import { caretAtPoint, takeCarried } from "./carried.ts";
+import { chatLink, openChatLink } from "./chatLink.ts";
 import { DraftChip } from "./DraftChip.tsx";
 import { GlobalInstallOffer } from "./GlobalInstallOffer.tsx";
 import { HandoffCard } from "./HandoffCard.tsx";
 import { hereWaits, openHandoff, ownParts } from "./handoff.ts";
-import { MentionText, openMention } from "./Mentions.tsx";
+import { MentionText } from "./Mentions.tsx";
 import {
   asBranches,
   filterCommands,
@@ -1910,13 +1911,19 @@ export function Composer({
           {/* the draft's `@` references, marked where they stand and opening what they name: the
               file list decides which words are references, so a sigil that names nothing shows
               nothing. Not in `!` mode, where a `@` is the shell's. Hidden from readers: the field
-              already reads the text, and the links are the pointer's. */}
+              already reads the text, and the links are the pointer's. A mark's menu is the one
+              its words lead with once sent; the field around it keeps the browser's, for paste
+              and spelling. */}
           {(id || outside) && shellCmd === null && (text.includes("@") || text.includes("/")) && (
             <div
+              {...cm.contextMenu((_from, target) => {
+                const link = chatLink(target, active?.worktree.path);
+                return link ? draftLinkItems(link, id, { sock, dispatch }) : [];
+              })}
               ref={marksRef}
               className="composer-ghost composer-marks"
               aria-hidden="true"
-              onClick={(e) => openMention(e, active?.worktree.path, id, { sock, dispatch })}
+              onClick={(e) => openChatLink(e, active?.worktree.path, id, { sock, dispatch })}
             >
               <MentionText text={text} worktreeId={id ?? boxId} root={active?.worktree.path} inField />
             </div>

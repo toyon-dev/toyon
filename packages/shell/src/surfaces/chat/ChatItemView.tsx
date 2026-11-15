@@ -51,7 +51,7 @@ import { HandedRow, NewsRow } from "./HandedRow.tsx";
 import { HandoffRow, PieceGoneRow, PieceLandedRow, PieceLaterRow } from "./HandoffRow.tsx";
 import { handoffPage, handoffSaid } from "./handoff.ts";
 import { SentImageChip } from "./ImageChip.tsx";
-import { MentionText, openMention } from "./Mentions.tsx";
+import { MentionText } from "./Mentions.tsx";
 import { useMarkdown } from "./markdown.ts";
 import { netOfCalls } from "./mergeDiffs.ts";
 import { Painted } from "./Painted.tsx";
@@ -1206,7 +1206,7 @@ export const ChatItemView = memo(function ChatItemView({
           {...cm.contextMenu((from, target) =>
             messageItems(item, worktreeId ?? null, deps, { link: chatLink(target, root) }, from),
           )}
-          onClick={(e) => openMention(e, root, worktreeId, deps)}
+          onClick={(e) => openChatLink(e, root, worktreeId, deps)}
         >
           {chips}
           <MentionText text={item.text} worktreeId={worktreeId} root={root} />

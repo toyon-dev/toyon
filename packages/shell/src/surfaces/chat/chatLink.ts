@@ -3,11 +3,12 @@ import type { Deps } from "../../state/actions/deps.ts";
 import { type ChatLink, linkOpener } from "../../state/actions/message.ts";
 import { outsidePath, relativeLink, worktreeLink } from "./markdownPaths.ts";
 
-/** the link at or around an element of a rendered message: a worktree of the project named by
- * its branch, the worktree file it names when the checkout root is known (by its absolute path,
+/** the link at or around an element of a rendered message: the uncommitted set `@changes` names,
+ * a worktree of the project named by its branch, the worktree file it names when the checkout root is known (by its absolute path,
  * or by one written from the root), a file elsewhere on the daemon's disk, or a page out; a backticked absolute path counts, as the path it names;
  * null when the element is in none of these */
 export function chatLink(target: Element, root: string | undefined | null): ChatLink | null {
+  if (target.closest("[data-changes]")) return { kind: "changes" };
   const row = target.closest("[data-worktree]");
   const id = row?.getAttribute("data-worktree");
   if (row && id) {
@@ -30,8 +31,8 @@ export function chatLink(target: Element, root: string | undefined | null): Chat
   return outside ? { kind: "outside", href, ...outside } : { kind: "out", href };
 }
 
-/** a press on a message: a worktree named in it opens its row (an archived one its page), the
- * file link under it opens in Toyon, and a link out is left to the browser when it opens beside
+/** a press on a message: a worktree named in it opens its row (an archived one its page),
+ * `@changes` shows the changes tab, the file link under it opens in Toyon, and a link out is left to the browser when it opens beside
  * the shell and held when it would not. The markup is the
  * row's, so the row routes the press rather than each link. The open itself is the link menu's
  * "open" row, so the two never drift. */

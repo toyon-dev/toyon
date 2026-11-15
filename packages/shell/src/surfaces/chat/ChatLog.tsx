@@ -32,6 +32,7 @@ import { elapsed, pickLabel } from "../util.ts";
 import { AttachmentSet } from "./AttachmentSet.tsx";
 import { ChatItemView, QUIET_AFTER, ThoughtRow, ToolRow } from "./ChatItemView.tsx";
 import { openCard } from "./cards.ts";
+import { openChatLink } from "./chatLink.ts";
 import { FileChip } from "./FileChip.tsx";
 import { FOOT } from "./foot.ts";
 import {
@@ -48,7 +49,7 @@ import {
   type ToolEntry,
 } from "./group.ts";
 import { ImageChip } from "./ImageChip.tsx";
-import { MentionText, openMention } from "./Mentions.tsx";
+import { MentionText } from "./Mentions.tsx";
 import { useMentionDots } from "./mentionDots.ts";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
@@ -152,7 +153,7 @@ function HeldRow({
   const items = useLocalField(entry.id, "attachments");
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
-    <div className="msg-user queued-msg" onClick={(e) => openMention(e, root, worktreeId, { sock, dispatch })}>
+    <div className="msg-user queued-msg" onClick={(e) => openChatLink(e, root, worktreeId, { sock, dispatch })}>
       <span className="queued-tag">
         <Icon name="clock" className="icon-inline" />
         {/* the one waiting row with something under way: the bytes are moving, so the word shines
@@ -600,7 +601,7 @@ export function ChatLog({
             element from the press to the first reply so the mark never restarts */}
         {id && sending?.message && (
           // biome-ignore lint/a11y/useKeyWithClickEvents: the links inside are the controls; the root only routes their clicks
-          <div className="msg-user" onClick={(e) => openMention(e, root, id, { sock, dispatch })}>
+          <div className="msg-user" onClick={(e) => openChatLink(e, root, id, { sock, dispatch })}>
             {sending.message.attachments && (
               <QueuedChips
                 items={sending.message.attachments}
@@ -687,7 +688,7 @@ export function ChatLog({
                 // biome-ignore lint/suspicious/noArrayIndexKey: the queue is messages in send order; position is the identity, and a removed entry closes the gap
                 key={`q-${i}`}
                 className="msg-user queued-msg"
-                onClick={(e) => openMention(e, root, id, { sock, dispatch })}
+                onClick={(e) => openChatLink(e, root, id, { sock, dispatch })}
               >
                 <span className="queued-tag">
                   <Icon name="clock" className="icon-inline" />

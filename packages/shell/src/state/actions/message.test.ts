@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isItem, type MenuEntry } from "../../ui/menu.ts";
 import type { Deps } from "./deps.ts";
-import { fileItems, imageItems, linkOpener, messageItems, pasteItems } from "./message.ts";
+import { draftLinkItems, fileItems, imageItems, linkOpener, messageItems, pasteItems } from "./message.ts";
 
 // A chip's menu is about the chip: what it holds goes onto the clipboard first, then the ways
 // to act on the chip itself, which depend on where it stands. A message's menu is about the
@@ -163,6 +163,49 @@ describe("message menus", () => {
     const link = { kind: "outside", href: "/Users/me/a.md", path: "/Users/me/a.md" } as const;
     const items = messageItems({ kind: "assistant", text: "see" }, "w", { sock, dispatch: () => {} }, { link });
     expect(ids(items)).toEqual(["open", "copy-path", "copy"]);
+  });
+
+  test("@changes leads with the changes tab, which is the open its press makes", () => {
+    const sent: unknown[] = [];
+    const d = { sock: null, dispatch: (a: unknown) => sent.push(a) };
+    const link = { kind: "changes" } as const;
+    const items = messageItems({ kind: "user", text: "review @changes" }, "w", d, { link });
+    expect(ids(items)).toEqual(["open", "copy", "draft"]);
+    press(items, "open");
+    expect(sent).toEqual([{ a: "focus-changes", tab: "changes" }]);
+    // a chat with no worktree has no changes tab to show
+    expect(ids(messageItems({ kind: "user", text: "review @changes" }, null, d, { link }))).toEqual(["copy"]);
+  });
+});
+
+describe("a reference in the draft", () => {
+  const onThisMachine = () =>
+    Object.defineProperty(globalThis, "location", { value: { hostname: "localhost" }, configurable: true });
+
+  test("has the menu its words lead with once sent, and nothing about a message", () => {
+    onThisMachine();
+    const sent: unknown[] = [];
+    const sock = { send: (m: unknown) => sent.push(m), urls: { host: "localhost" } } as unknown as Deps["sock"];
+    const d = { sock, dispatch: (a: unknown) => sent.push(a) };
+    const folder = { kind: "outside", href: "/Users/me/site/", path: "/Users/me/site", folder: true } as const;
+    expect(ids(draftLinkItems(folder, "w", d))).toEqual(["reveal", "copy-path"]);
+    expect(ids(draftLinkItems({ kind: "file", file: { path: "src/a.ts" } }, "w", d))).toEqual([
+      "open",
+      "reveal",
+      "copy-path",
+      "copy-file",
+    ]);
+    const row = { kind: "worktree", id: "r2", branch: "toyon/stay-awake", archived: false } as const;
+    expect(ids(draftLinkItems(row, "w", d))).toEqual(["open", "copy-branch"]);
+    expect(ids(draftLinkItems({ kind: "out", href: "https://example.com" }, "w", d))).toEqual([
+      "open-out",
+      "copy-link",
+    ]);
+    expect(ids(draftLinkItems({ kind: "changes" }, "w", d))).toEqual(["open"]);
+  });
+
+  test("a mark with nothing to offer answers with no rows, so the gesture is left to what is behind it", () => {
+    expect(draftLinkItems({ kind: "changes" }, null, deps)).toEqual([]);
   });
 });
 

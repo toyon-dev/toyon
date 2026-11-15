@@ -37,6 +37,17 @@ function press(text: string, fileRoot: string | null) {
   return { held, said, a };
 }
 
+describe("a press on a mark in the person's own words", () => {
+  test("@changes shows the changes tab of the worktree it stands in, and nothing with no worktree", () => {
+    const mark = dom('<span class="chat-mention" data-changes="">@changes</span>').firstElementChild;
+    const said: Action[] = [];
+    const e = { target: mark, preventDefault: () => {} };
+    openChatLink(e as never, root, "wt-1", { sock: null, dispatch: (action) => said.push(action) });
+    openChatLink(e as never, root, null, { sock: null, dispatch: (action) => said.push(action) });
+    expect(said).toEqual([{ a: "focus-changes", tab: "changes" }]);
+  });
+});
+
 describe("a press on a link in a reply", () => {
   test("opens a relative link as the worktree file, and never follows it", () => {
     const { held, said, a } = press("[Composer.tsx](packages/shell/src/Composer.tsx:12)", root);

@@ -2453,15 +2453,17 @@ function reduce(s: State, action: Action): State {
       // so above is the work touched more recently, and below is what has been left to sit, which
       // nothing short of an empty top half pulls into focus. On each side the same ladder: a row
       // waiting on an answer, since its agent is stuck until someone replies; then, archiving
-      // being tidying up, a row that is done too, landed with its agent at rest; then the rest of
-      // what the rail owes the person, a row unseen or working; then a row whose app is up, a task
-      // that is open and can be carried on. With nothing on either side, the lead, whose box
-      // starts the next worktree.
+      // being tidying up, a row that is done too, wearing the landed dot; then the rest of what
+      // the rail owes the person, a row unseen or working; then a row whose app is up, a task
+      // that is open and can be carried on. Every rung is a row with something live under it: a
+      // landed row gone to sleep is quiet, and it archives itself once nothing holds it, so one
+      // still on the rail is held by a draft or by edits and is not the next thing to tidy. With
+      // nothing on either side, the lead, whose box starts the next worktree.
       const from = s.visible.filter((w) => w.id === s.activeId || !hidden.archiving.includes(w.id));
       const at = from.findIndex((w) => w.id === s.activeId);
       const ladder: ((w: OwnedWorktree) => boolean)[] = [
         (w) => w.agent === "waiting",
-        (w) => canArchive(w.worktree) && !!w.worktree.landed && w.agent === "idle",
+        (w) => canArchive(w.worktree) && dotClass(w) === "landed",
         (w) => !!w.unseen,
         (w) => w.agent === "working",
         (w) => !isLead(w.worktree) && dotClass(w) === "running",

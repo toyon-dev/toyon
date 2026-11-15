@@ -56,12 +56,27 @@ Before you approve:
 After you approve:
 
 - A new worktree starts with the piece as its approved plan. Its first message says who wrote it.
-- Its agent starts at once. Its dev servers start the first time you open it.
+- Its agent starts at once, unless the piece waits for a branch. Its dev servers start the first time you open it.
 - A piece sent to an open worktree arrives as a message that says which worktree sent it. When that worktree next lands, the chat that sent the piece shows what landed and its agent starts, as below.
 - When a worktree made from a piece lands, the chat that proposed the piece shows what landed. The first time, its agent starts: it is told what landed and where the other chat is on disk, and replies with what it did about it.
-- A piece kept in this worktree can wait for this worktree to land. When you land, the agent starts on it. Several such pieces start one per landing, in list order. A pull request counts once it is merged.
+
+A piece can wait for a branch to land before it starts:
+
+- A piece for a new worktree can wait, and so can a piece kept in this worktree. A piece sent to an open worktree cannot.
+- It waits for another open worktree of this project, for another piece on the list, or for this worktree. A piece that waits for another piece waits for the worktree that piece starts.
+- Before you approve, the piece says which branch it waits for. You can move it to this worktree or skip it. A piece moved to this worktree still waits.
+- After you approve, the chat lists a piece for a new worktree as queued. A line under the chat box says which branch it waits for.
+- When the branch lands, the new worktree starts from main, with the piece as its plan. The chat that proposed it shows the new worktree. A pull request counts once it is merged.
+- The new worktree's agent is not told what landed. If the same branch lands again, the agent is told with its next message.
+- A piece kept in this worktree starts when the branch lands. The agent is told which branch landed, what it put on main and where that chat is on disk, and does the piece.
+- Pieces kept in this worktree that wait for this worktree start one per landing, in list order.
+- If the branch has landed when you approve, the piece starts at once.
+- If the worktree it waits for is archived or removed before it lands, a piece for a new worktree is dropped, with any piece that waited for it. The chat says why. A piece kept in this worktree stops waiting: the agent is told that the work is not on main, and does the piece only if it can be done without that work.
+- A piece waits for as long as the worktree it waits for is open. After you approve, you cannot start it early or cancel it. Archiving the worktree that proposed it drops it.
 
 `/handoff` does the same from your own message, without the tool. `/handoff fix the footer` hands that work to a new worktree in this project. Start with another open project's name to hand it to a worktree there.
+
+`/handoff` has no option for a wait. To make the work wait, name the branch in your message: `/handoff fix the footer once toyon/header lands`. The agent writes the piece, and the card reads "queue a worktree" when the piece waits. An agent without Toyon's tools cannot set a wait.
 
 ### `own`
 

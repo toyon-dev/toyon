@@ -7,7 +7,7 @@ What Toyon does beyond asking for a change and landing it, which is covered in [
 |  |  |
 |---|---|
 | [Point at the page](using.md#ask-for-a-change) | Click an element in the preview to add it to your message or open its code. |
-| [Split off work](agents.md#handoff) | A piece of the work goes to a chat of its own, and its agent starts at once. |
+| [Split off work](agents.md#handoff) | A piece of the work goes to a chat of its own. Its agent starts at once, or when a branch the piece waits for lands. |
 | [Combine chats](shortcuts.md#chats) | Several chats' branches are merged into one chat, with their transcripts. |
 | [Themes](shortcuts.md#app) | Light and dark, Toyon's themes, and the themes of your VS Code, Cursor or Windsurf extensions. |
 | [Phone and other devices](phone.md) | Open Toyon from your phone or another computer. |

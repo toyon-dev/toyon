@@ -18,7 +18,7 @@ import { matchBy } from "./proposals.ts";
 export interface StopDeps {
   state: StateStore;
   /** the worktree's agent, when one has been made for it */
-  agentFor: (worktreeId: string) => Pick<AgentAdapter, "status" | "stopping" | "queueLength" | "stop"> | undefined;
+  agentFor: (worktreeId: string) => Pick<AgentAdapter, "status" | "queueLength" | "stop"> | undefined;
 }
 
 /** a sentence for the stopped chat's row, not an account of the work */
@@ -105,7 +105,6 @@ export class StopTool implements ToolProvider {
     const name = `"${target.title}" (${target.branch})`;
     const agent = this.d.agentFor(target.id);
     if (!agent || !this.running(target)) return refused(`${name} is not running a turn; there is nothing to stop.`);
-    if (agent.stopping) return refused(`${name} is stopping already.`);
     const waiting = agent.queueLength;
     const project = target.repoId === wt.repoId ? undefined : this.d.state.repo(wt.repoId)?.name;
     if (!agent.stop({ origin: handedOrigin(wt, project), reason })) {

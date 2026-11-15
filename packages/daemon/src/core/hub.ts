@@ -24,9 +24,6 @@ export interface HubEvents {
   log: (worktreeId: string, proc: string, line: string, retract?: number) => void;
   agent: (worktreeId: string, seq: number, event: AgentEvent) => void;
   agentStatus: (worktreeId: string, status: AgentStatus) => void;
-  /** a stop was pressed on the worktree's turn, or the turn it was for has ended: the rows carry
-   * the flag, and nothing else moves, so only the rows frame listens */
-  agentStopping: (worktreeId: string) => void;
   /** a row held open past the turn (a command in the background, a wakeup booked) opened or
    * closed: the rows carry the count, and nothing else moves, so only the rows frame listens */
   agentHolding: (worktreeId: string) => void;

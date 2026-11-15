@@ -106,11 +106,9 @@ describe("the stop tool", () => {
         piece("b2", "a", { title: "Header two" }),
         row("d", { title: "Other work" }),
         piece("e", "d"),
-        piece("s", "a"),
       ],
-      ["b", "d", "e", "s"],
+      ["b", "d", "e"],
     );
-    agents.get("s")!.stopping = true;
     expect(refused("a", { worktree: "toyon/b" })).toBe("stop takes { worktree: string, reason: string }.");
     expect(refused("a", null)).toBe("stop takes { worktree: string, reason: string }.");
     expect(refused("nope", { worktree: "x", reason: "y" })).toBe("unknown worktree");
@@ -127,7 +125,7 @@ describe("the stop tool", () => {
       "was not made from a piece of this chat's work",
     );
     expect(refused("a", { worktree: "gone", reason: "y" })).toBe(
-      'No worktree made from this chat\'s pieces is called "gone". Those open: toyon/b, "Header one"; toyon/b2, "Header two"; toyon/s, "s".',
+      'No worktree made from this chat\'s pieces is called "gone". Those open: toyon/b, "Header one"; toyon/b2, "Header two".',
     );
     expect(refused("e", { worktree: "gone", reason: "y" })).toBe(
       "No open worktree was made from a piece of this chat's work, so there is nothing here to stop.",
@@ -138,7 +136,6 @@ describe("the stop tool", () => {
     expect(refused("a", { worktree: "toyon/b2", reason: "y" })).toBe(
       '"Header two" (toyon/b2) is not running a turn; there is nothing to stop.',
     );
-    expect(refused("a", { worktree: "toyon/s", reason: "y" })).toBe('"s" (toyon/s) is stopping already.');
     expect([...agents.values()].reduce((n, agent) => n + agent.stops, 0)).toBe(0);
   });
 });

@@ -386,7 +386,9 @@ const OPENCODE: AdapterWire = {
         "A provider that refuses the stream (the free tier's usage limit, at 1.19.5) is logged in OpenCode's own " +
         "log and nothing reaches the wire: no update, no error, and `session/prompt` never answers, so the turn " +
         "stays working until a stop.",
-      here: "Nothing yet: the row spins and the person presses stop. No flag.",
+      here:
+        "Nothing yet: the row spins and the person presses stop, which drops the process once the prompt " +
+        "has gone unanswered for STOP_GRACE_MS. No flag.",
       upstream:
         "Not asked; the prompt should fail with the provider's words, as Claude's and Codex's do. Probe whether " +
         "a keyed provider's refusal behaves the same before asking.",

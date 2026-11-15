@@ -176,7 +176,6 @@ describe("stateLabel", () => {
     expect(shipShown({ ...status("idle"), background: 1 } as WorktreeStatus, "commit")).toBe("commit");
     // the op's dot says the agent is idle, so a turn in flight keeps its own pulse
     expect(shipShown(status("working"), "commit")).toBeNull();
-    expect(shipShown({ ...status("working"), stopping: true } as WorktreeStatus, "land")).toBeNull();
     // a person being needed outranks an op that finishes on its own
     expect(shipShown(status("waiting"), "land")).toBeNull();
     expect(shipShown(status("error", proc("web", "running")), "land")).toBeNull();

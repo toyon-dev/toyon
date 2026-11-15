@@ -101,8 +101,6 @@ export interface AcpSessionDeps {
   setSessionId: (id: string) => void;
   onEvent: AgentEventListener;
   onStatus: AgentStatusListener;
-  /** `stopping` moved: on at a stop press, off when the turn it was for has ended */
-  onStopping?: () => void;
   /** `holding` moved: a row held open past the turn for something still going (a command sent
    * to the background, a wakeup booked) opened or closed */
   onHolding?: () => void;
@@ -123,6 +121,8 @@ export interface AcpSessionDeps {
   idleMs?: number;
   /** how long a turn the agent started on its own may go quiet before it is over */
   ownSettleMs?: number;
+  /** how long the agent has to let go of a stopped turn before its process is dropped */
+  stopGraceMs?: number;
   /** how long a call's input is held for the rest of it before it is read as whole */
   inputHoldMs?: number;
   /** where Claude Code keeps its session logs, for the end of a command sent to the background
@@ -221,10 +221,29 @@ const DEFAULT_IDLE_MS = Number(process.env.TOYON_AGENT_IDLE_MS) || 5 * 60_000;
  * call the wire carries nothing while the model reads the result, seconds on a long context; a
  * turn cut at that gap would come back as a second one, so the wait errs long. */
 const OWN_SETTLE_MS = 10_000;
+/** How long the agent has to let go of a stopped turn before its process is dropped. A cancel is
+ * a request, and an agent with nothing left to interrupt (a turn it had already finished and
+ * never closed) or a call that will not die answers it late or never: Claude's adapter gives up
+ * on its own after 30s, and a message sent after the stop waits the whole time. A cancel that
+ * works comes back in well under a second, so this is long enough that one never meets it, which
+ * matters because the drop takes with it what a clean cancel spares: the commands sent to the
+ * background and the wakeups booked. */
+const STOP_GRACE_MS = 5_000;
 /** Long enough for the field after the one that closed to stream in, a command's description above
  * all, so a half-written input rarely reaches the row; short enough that a command already running
  * does not read as one still being written. */
 const INPUT_HOLD_MS = 1000;
+
+/** a turn the drain loop is on (see `turn` on the session) */
+interface Turn {
+  started: boolean;
+  open: boolean;
+  stopping: boolean;
+  by?: StoppedBy;
+  giveUp?: ReturnType<typeof setTimeout>;
+}
+
+const freshTurn = (): Turn => ({ started: false, open: false, stopping: false });
 
 /** A turn the agent is running with no prompt out: the calls it has open, and the timer that ends
  * the turn once they are all answered and it has gone quiet */
@@ -312,13 +331,6 @@ interface QueueItem {
   /** Toyon's message for news the agent had not been told (news.ts): the news its text says, so
    * the sentences behind it leave that out */
   said?: ReadonlySet<AgentEvent>;
-  /** steered, then handed back to the queue by a stop: the agent can still go on past the cancel
-   * and pick the message up after all (a command still running holds the interrupt off, and the
-   * adapter forces the turn closed only after a floor), and its answer then belongs to the
-   * bubble already in the chat, so the copy leaves the queue rather than run again. Over once
-   * that turn has ended: from then on the copy is an ordinary queued message, and a later turn's
-   * stop says nothing about it. */
-  handedBack?: boolean;
 }
 
 /** a waiting message as the shell draws it and as a box takes it back */
@@ -362,12 +374,15 @@ export class AcpSession implements AgentAdapter {
   /** The turn the drain loop is on, from the loop starting until it is done, a fresh record for
    * each message it takes; null while no loop runs, which is what `running` reads. `open` is the
    * transcript's bracket: a turn-start written and its turn-end not yet, which every exit closes
-   * through endTurn. `stopping` is a stop pressed for this turn whose cancel has not come back:
-   * nothing steers into a turn that is going away, the prompt does not go out if the press came
-   * first, and the rows show the press as landed, since the status stays busy until the agent
-   * has in fact stopped. `by` is who asked for that stop when another chat's agent did, for the
-   * turn's end to carry. */
-  private turn: { open: boolean; stopping: boolean; by?: StoppedBy } | null = null;
+   * through endTurn; `started` is that turn-start having been written at all. `stopping` is a
+   * stop pressed for this turn whose cancel has not come back. The press is the turn's end for
+   * anyone reading the chat: the bracket closes there and the status stops saying working, and
+   * what is left is the agent letting go. Until it has, the loop stays on this record: nothing
+   * steers into a turn that is going away, the prompt does not go out if the press came first,
+   * a message sent meanwhile waits, and what the agent still sends for the turn is dropped.
+   * `by` is who asked for that stop when another chat's agent did, for the turn's end to carry.
+   * `giveUp` is the clock on the letting go (STOP_GRACE_MS), running while `stopping` is on. */
+  private turn: Turn | null = null;
   private stopped = false;
   /** landing ops out on the worktree: while any is, nothing starts a turn and nothing is steered
    * into one, and what is sent meanwhile waits in the queue. A count, since a sync that waited for
@@ -640,6 +655,8 @@ export class AcpSession implements AgentAdapter {
 
   private queueChanged() {
     this.onQueueChange?.();
+    // behind a stopped turn the queue is what the status reads (`busy`)
+    if (this.turn?.stopping) this.syncStatus();
   }
 
   unqueue(index: number, taken?: (message: QueuedMessage) => void) {
@@ -734,8 +751,12 @@ export class AcpSession implements AgentAdapter {
     return this.turn !== null;
   }
 
-  get stopping(): boolean {
-    return this.turn?.stopping ?? false;
+  /** what the status says with no card up. A stopped turn the agent has not let go of yet is
+   * over for whoever is looking, unless a message waits behind it: that one is as good as
+   * running, and the row says so from the moment it is sent. */
+  private get busy(): boolean {
+    if (this.own) return true;
+    return this.running && !(this.turn?.stopping && this.queue.length === 0);
   }
 
   /** rows held open past the turn for something still going under the agent: commands it sent
@@ -758,7 +779,21 @@ export class AcpSession implements AgentAdapter {
     const turn = this.turn;
     if (!turn || turn.stopping === on) return;
     turn.stopping = on;
-    this.d.onStopping?.();
+    if (turn.giveUp) clearTimeout(turn.giveUp);
+    turn.giveUp = undefined;
+    if (on) {
+      const graceMs = this.d.stopGraceMs ?? STOP_GRACE_MS;
+      turn.giveUp = setTimeout(() => {
+        turn.giveUp = undefined;
+        if (this.turn !== turn || !turn.stopping) return;
+        // the connection closing fails the prompt this turn is waiting on, which the drain loop
+        // reads as the stop having landed; the next message starts a process and resumes the session
+        log.warn(this.d.worktreeId, `the agent did not end its turn ${graceMs}ms after the stop`);
+        fireAndForget(this.d.worktreeId, this.dropConn("no answer to a stop"), "drop agent after stop");
+      }, graceMs);
+      // a sleeping timer must not keep a test (or a shutdown) waiting
+      turn.giveUp.unref?.();
+    }
   }
 
   /** A message from the person. One sent past an open card is their answer to it: the agent is
@@ -896,15 +931,9 @@ export class AcpSession implements AgentAdapter {
     if (this.live === live && wireFlags(live.conn.spec.id).cutCallUnreported) preempted(live.tools);
   }
 
-  /** Words or a call from the agent while a steer is unanswered: it is answering. Past a stop the
-   * same words mean the cancel has not taken yet and the agent is answering what the stop handed
-   * back, so the copies leave the queue rather than run again once the turn ends. Only while that
-   * turn is still ending: a later turn's words say nothing about a copy still waiting. */
+  /** words or a call from the agent while a steer is unanswered: it is answering */
   private answered() {
     this.steered = [];
-    if (!this.turn?.stopping || !this.queue.some((q) => q.handedBack)) return;
-    this.queue = this.queue.filter((q) => !q.handedBack);
-    this.queueChanged();
   }
 
   /** off the unanswered list; false when a stop has already moved it to the queue */
@@ -933,13 +962,18 @@ export class AcpSession implements AgentAdapter {
     // a stop already on its way is whoever pressed it first's: a second asker does not rename it
     if (by && this.turn && !this.turn.stopping) this.turn.by = by;
     this.setStopping(true);
-    // what the agent had not got to goes first, ahead of anything sent after it
+    // The press is where the turn ends in the chat, whatever the agent takes to let go. Before
+    // the status moves: the stop record is read off the transcript on the status edge. A press
+    // ahead of the turn-start has no bracket to close yet, and runTurn closes it as it opens.
+    this.endTurn("interrupted");
+    // What the agent had not got to goes first, ahead of anything sent after it. Each runs as a
+    // turn of its own once the agent has let go: anything it says about one meanwhile is dropped
+    // with the rest of the stopped turn, so the copy is what answers the bubble.
     if (this.steered.length > 0) {
-      for (const item of this.steered) item.handedBack = true;
       this.queue.unshift(...this.steered);
       this.steered = [];
       this.queueChanged();
-    }
+    } else this.syncStatus();
     const live = this.live;
     if (live) {
       fireAndForget(
@@ -974,7 +1008,7 @@ export class AcpSession implements AgentAdapter {
     this.endOwn("end_turn");
     // A wakeup it booked stays booked: the runtime fires it after this turn all the same, so the
     // row waits on through the turn, and the turn the fire starts is what ends it (trackOwn).
-    this.turn = { open: false, stopping: false };
+    this.turn = freshTurn();
     this.clearReaper();
     this.setStatus("working");
     let item: QueueItem | null = null;
@@ -988,22 +1022,21 @@ export class AcpSession implements AgentAdapter {
         if (!next) break;
         item = next;
         this.queueChanged();
-        const turn = { open: false, stopping: false };
+        const turn = freshTurn();
         this.turn = turn;
         try {
           await this.runTurn(item);
         } catch (e) {
           if (!turn.stopping) throw e;
-          // the cancel's own error ends the turn; a failure before the turn began (the attachment
+          // the cancel's own error, or the connection dropped under a stop that went unanswered:
+          // the press closed the turn already. A failure before the turn began (the attachment
           // copy) under a pending stop is not the stop's doing, and the message would otherwise
           // vanish without a word
-          if (turn.open) this.endTurn("interrupted");
-          else this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
+          if (!turn.started) this.emit({ type: "agent-error", message: this.describe(e), ts: Date.now() });
         }
-        // the stop was for that turn: what was queued behind it, or sent while its cancel settled,
-        // goes next without the status dropping to idle in between
+        // the stop was for that turn: what was queued behind it, or sent while the agent let go,
+        // goes next
         this.steered = [];
-        for (const q of this.queue) q.handedBack = false;
         this.setStopping(false);
       }
       // a handoff card proposed during the turn is still a person's answer owed once
@@ -1051,7 +1084,6 @@ export class AcpSession implements AgentAdapter {
       }
     } finally {
       this.steered = [];
-      for (const q of this.queue) q.handedBack = false;
       this.setStopping(false);
       this.turn = null;
       this.maybeArmReaper();
@@ -1062,16 +1094,14 @@ export class AcpSession implements AgentAdapter {
   }
 
   /** The turn's last event, once: nothing when no turn-start is open (a failure before the turn
-   * began has no bracket to close). A stop pressed for this turn has landed with it, whichever
-   * way it ended, so the press's mark falls here too. A plain emit otherwise: the drain loop goes
-   * straight on to the next queued turn, so the status is not touched, and the reaper is armed
-   * once the loop is done. */
+   * began has no bracket to close, and a stop closed it at the press, ahead of whatever the
+   * prompt comes back with). A plain emit: the drain loop goes straight on to the next queued
+   * turn, so the status is not touched, and the reaper is armed once the loop is done. */
   private endTurn(stopReason: string) {
     const turn = this.turn;
     if (!turn?.open) return;
     turn.open = false;
     this.turnOver(stopReason, stopReason === "interrupted" ? turn.by : undefined);
-    this.setStopping(false);
   }
 
   /** The turn's last event, whichever kind it was, and what a turn's end owes: a pieces list
@@ -1268,8 +1298,12 @@ export class AcpSession implements AgentAdapter {
       // bookkeeping for the changes panel: the turn goes whether or not it was kept
       log.warn(this.d.worktreeId, "before-turn hook failed", e);
     }
+    const turn = this.turn!;
     this.emit({ type: "turn-start", ts: Date.now() });
-    this.turn!.open = true;
+    turn.started = true;
+    turn.open = true;
+    // a stop pressed while the message was being recorded found no bracket to close
+    if (turn.stopping) return this.endTurn("interrupted");
     const live = await this.ensureLive("a turn");
     await this.applyMode(live);
     await this.applyOption(live, "model");
@@ -1277,10 +1311,7 @@ export class AcpSession implements AgentAdapter {
     // a stop that landed while the agent was starting or being set up had no turn to cancel, so the
     // prompt must not go out at all: esc straight after a send would otherwise do nothing. Nothing
     // runs between this check and the request being written, so a later stop's cancel follows it.
-    if (this.turn?.stopping) {
-      this.endTurn("interrupted");
-      return;
-    }
+    if (turn.stopping) return;
     const carried = this.carried(live, item.recorded.attachments);
     const standing = await this.d.standing?.();
     const prefix = live.prefixPending ? (this.d.systemAppend?.() ?? SYSTEM_APPEND) : undefined;
@@ -1677,7 +1708,12 @@ export class AcpSession implements AgentAdapter {
     this.holdInput(live, params.update);
   }
 
-  private forward(live: Live, events: AgentEvent[]) {
+  private forward(live: Live, all: AgentEvent[]) {
+    // A stopped turn closed in the transcript at the press. What the agent sends while it lets
+    // go (the tail of a sentence, its open calls failing, an answer to a message the stop handed
+    // back) has no turn to sit in, and the chat closed those calls with the turn. The figures are
+    // the session's, not the turn's, and still count.
+    const events = this.turn?.stopping ? all.filter((e) => e.type === "usage" || e.type === "session-info") : all;
     if (!this.running) this.trackOwn(events);
     for (const ev of events) {
       // a call, or words under a message other than the one the steer cut off, are the agent
@@ -1746,7 +1782,8 @@ export class AcpSession implements AgentAdapter {
     const tools = this.live?.tools;
     return Promise.resolve(this.answerPermission(params, bounds, sandboxed)).then((res) => {
       const end = tools && endOfAsk(params, res, tools);
-      if (end) this.emit(end);
+      // a stop closed the turn, and the call with it
+      if (end && !this.turn?.stopping) this.emit(end);
       return res;
     });
   }
@@ -1950,6 +1987,8 @@ export class AcpSession implements AgentAdapter {
     headers?: string[],
     plan = false,
   ): Promise<R> {
+    // a question out of a stopped turn the agent has not let go of yet: the stop is the answer
+    if (this.turn?.stopping) return Promise.resolve(respond("cancelled"));
     const id = randomUUID();
     return new Promise<R>((resolve) => {
       const settle = (outcome: AskOutcome, reply?: AskReply, before?: () => Promise<void>) => {
@@ -2021,7 +2060,7 @@ export class AcpSession implements AgentAdapter {
   private syncStatus() {
     if (this.status === "error") return;
     const waiting = this.asks.size > 0 || ownCards(this.log.entries).length > 0;
-    this.setStatus(waiting ? "waiting" : this.running || this.own ? "working" : "idle");
+    this.setStatus(waiting ? "waiting" : this.busy ? "working" : "idle");
   }
 
   /** Updates with no prompt out are the agent working on its own. The first word or call opens a

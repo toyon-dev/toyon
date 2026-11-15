@@ -80,7 +80,6 @@ export function clampW(n: number, fallback: number): number {
 /** the rail dot: what the worktree is doing right now */
 export type DotState =
   | "waiting"
-  | "stopping"
   | "working"
   | "background"
   | "failed"
@@ -98,8 +97,6 @@ const UP: ReadonlySet<ProcStatus> = new Set(["running", "starting", "preparing",
 export function dotClass(w: WorktreeStatus): DotState {
   // a worktree that needs you outranks one that is merely busy
   if (w.agent === "waiting") return "waiting";
-  // asked to stop and still winding down: busy, and the press should show from across the rail
-  if (w.agent === "working" && w.stopping) return "stopping";
   if (w.agent === "working") return "working";
   // The two colours that come from a record rather than a process, failed and landed, hold only
   // while something runs under the row. The dots say what a row is doing, and a row the idle
@@ -131,7 +128,6 @@ export function dotClass(w: WorktreeStatus): DotState {
 
 const DOT_LABEL: Record<DotState, string> = {
   waiting: "Waiting for you",
-  stopping: "Agent stopping",
   working: "Agent working",
   background: "Running in the background",
   failed: "Agent failed",
@@ -185,7 +181,7 @@ const SHIP_OVER: ReadonlySet<DotState> = new Set([
 
 /** the git op a row is showing in its dot's slot, when one is out: the op was started from this
  * row, and the control that started it may be off screen. A dot that needs a person (waiting,
- * crashed, a failed turn) or says a turn is in flight (working, stopping) keeps the slot and the
+ * crashed, a failed turn) or says a turn is in flight (working) keeps the slot and the
  * word: a person being needed outranks a git op that finishes on its own, and the op's dot over a
  * working row said the agent was idle. The composer's line still says the op is out there. Every
  * reader of the row's state asks this first, so the tip and the line under the name say what the

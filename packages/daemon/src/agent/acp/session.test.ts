@@ -1264,6 +1264,49 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
+  test("a stop the agent never answers drops its process, and the queue goes next on a fresh one", async () => {
+    let hung = false;
+    const deaf = fakeAgent((p, client) => {
+      if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+      hung = true;
+      return new Promise<acp.PromptResponse>(() => {});
+    });
+    const w = world(deaf, claudeSpec, 60_000, undefined, { stopGraceMs: 40 });
+    w.session.send("go");
+    w.session.send("later");
+    await Bun.sleep(30);
+    expect(hung).toBe(true);
+    w.session.stop();
+    // inside the grace the agent may still let go by itself, and the message behind waits for it
+    await Bun.sleep(15);
+    expect(w.links[0]?.killed).toBe(false);
+    expect(promptTexts(deaf)).toEqual(["go"]);
+    await w.idle();
+    expect(deaf.cancels).toBe(1);
+    expect(w.links[0]?.killed).toBe(true);
+    expect(w.links).toHaveLength(2);
+    expect(promptTexts(deaf)).toEqual(["go", "later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    expect(w.events.some((e) => e.type === "agent-error")).toBe(false);
+    await w.session.close();
+  });
+
+  test("a stop answered inside the grace keeps the process", async () => {
+    const stopping = untilCancelled();
+    const w = world(stopping, claudeSpec, 60_000, undefined, { stopGraceMs: 40 });
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.stop();
+    await w.idle();
+    await Bun.sleep(60);
+    expect(w.links).toHaveLength(1);
+    expect(w.links[0]?.killed).toBe(false);
+    await w.session.close();
+  });
+
   test("a stop another chat's agent asked for rides that turn's end, and no turn after it", async () => {
     const stopping = untilCancelled();
     const w = world(stopping);
@@ -1319,7 +1362,7 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("words under a new message after a stop are the answer, and the handed-back copy is dropped", async () => {
+  test("words under a new message after a stop are dropped with the turn, and the handed-back copy answers", async () => {
     const answering = trailingAfterStop("m2");
     const w = world(answering);
     w.session.send("go");
@@ -1328,7 +1371,8 @@ describe("AcpSession", () => {
     await Bun.sleep(30);
     w.session.stop();
     await w.idle();
-    expect(promptTexts(answering)).toEqual(["go"]);
+    expect(promptTexts(answering)).toEqual(["go", "also"]);
+    expect(w.events.some((e) => e.type === "text-delta" && e.text === " more")).toBe(false);
     expect(w.session.status).toBe("idle");
     await w.session.close();
   });
@@ -1377,24 +1421,85 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("stopping is on from the press until the turn ends, told to the rows at both edges", async () => {
-    let told = 0;
-    const stopping = untilCancelled();
-    const w = world(stopping, claudeSpec, 60_000, undefined, { onStopping: () => told++ });
+  /** an agent that takes `ms` to answer a cancel of its turn on "go" */
+  const slowToLetGo = (ms: number) => {
+    const fake = fakeAgent(async (p, client) => {
+      if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
+      while (fake.cancels === 0) await Bun.sleep(5);
+      await Bun.sleep(ms);
+      return { stopReason: "cancelled" };
+    });
+    return fake;
+  };
+
+  test("a stop ends the turn at the press, before the agent has let go of it", async () => {
+    const slow = slowToLetGo(60);
+    const w = world(slow);
     w.session.send("go");
     await Bun.sleep(30);
-    expect(w.session.stopping).toBe(false);
-    w.session.stop();
-    // the status itself does not move: the agent is still working until the cancel has taken
-    expect(w.session.stopping).toBe(true);
     expect(w.session.status).toBe("working");
-    expect(told).toBe(1);
-    // a second press re-sends the cancel and moves nothing
     w.session.stop();
-    expect(told).toBe(1);
+    expect(w.events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
+    expect(w.session.status).toBe("idle");
+    // a second press re-sends the cancel and writes nothing
+    const written = w.events.length;
+    w.session.stop();
+    expect(w.events).toHaveLength(written);
+    await Bun.sleep(100);
+    expect(slow.cancels).toBe(2);
+    expect(w.events.filter((e) => e.type === "turn-end")).toHaveLength(1);
+    expect(w.statuses.filter((s) => s === "working")).toHaveLength(1);
+    await w.session.close();
+  });
+
+  test("a message sent after a stop waits for the agent to let go, and reads as working meanwhile", async () => {
+    const slow = slowToLetGo(60);
+    const w = world(slow);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.stop();
+    expect(w.session.status).toBe("idle");
+    w.session.send("later");
+    expect(w.session.status).toBe("working");
+    expect(w.session.queueItems).toHaveLength(1);
+    await Bun.sleep(20);
+    expect(promptTexts(slow)).toEqual(["go"]);
+    // taken back to edit, there is nothing waiting and the row is quiet again
+    w.session.unqueue(0);
+    expect(w.session.status).toBe("idle");
+    w.session.send("later");
     await w.idle();
-    expect(w.session.stopping).toBe(false);
-    expect(told).toBe(2);
+    expect(promptTexts(slow)).toEqual(["go", "later"]);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
+    await w.session.close();
+  });
+
+  test("a card the agent asks for while letting go of a stopped turn is answered by the stop", async () => {
+    let outcome: string | undefined;
+    const asking = fakeAgent(async (p, client) => {
+      while (asking.cancels === 0) await Bun.sleep(5);
+      const r = await client.request(acp.methods.client.session.requestPermission, {
+        sessionId: p.sessionId,
+        toolCall: { toolCallId: "t1", title: "Ready to code?", kind: "switch_mode", rawInput: { plan: "the plan" } },
+        options: [
+          { optionId: "yes", name: "Yes", kind: "allow_once" },
+          { optionId: "no", name: "No", kind: "reject_once" },
+        ],
+      });
+      outcome = r.outcome.outcome;
+      return { stopReason: "cancelled" };
+    });
+    const w = world(asking);
+    w.session.send("go");
+    await Bun.sleep(30);
+    w.session.stop();
+    for (let i = 0; i < 100 && !outcome; i++) await Bun.sleep(5);
+    expect(outcome).toBe("cancelled");
+    expect(w.types()).not.toContain("agent-permission");
+    expect(w.session.status).toBe("idle");
     await w.session.close();
   });
 
@@ -1481,10 +1586,10 @@ describe("AcpSession", () => {
     await w.session.close();
   });
 
-  test("a steered message the agent answers after the stop, before the turn ends, is not sent again", async () => {
+  test("a steered message the agent answers after the stop is answered again, in a turn of its own", async () => {
     // the cancel does not take at once (a command still running holds the interrupt off) and the
-    // agent picks the steered message up meanwhile: its words, under a message of their own,
-    // answer the bubble already there
+    // agent picks the steered message up meanwhile: those words fall after the turn's end and are
+    // dropped with it, so the copy the stop handed back is what answers the bubble
     const lagging = fakeAgent(
       async (p, client) => {
         if ((p.prompt[0] as { text: string }).text !== "go") return say("done")(p, client);
@@ -1505,12 +1610,17 @@ describe("AcpSession", () => {
     await Bun.sleep(30);
     expect(lagging.steers).toHaveLength(1);
     w.session.stop();
-    // handed back at the press, and taken back out once the agent's words arrive
+    // handed back at the press, with the row still working for it
     expect(w.session.queueLength).toBe(1);
+    expect(w.session.status).toBe("working");
     await w.idle();
-    expect(promptTexts(lagging)).toEqual(["go"]);
+    expect(promptTexts(lagging)).toEqual(["go", "also"]);
     expect(w.types().filter((t) => t === "user-message")).toHaveLength(2);
-    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([{ stopReason: "interrupted" }]);
+    expect(w.events.some((e) => e.type === "text-delta" && e.text === "on it")).toBe(false);
+    expect(w.events.filter((e) => e.type === "turn-end")).toMatchObject([
+      { stopReason: "interrupted" },
+      { stopReason: "end_turn" },
+    ]);
     expect(w.session.status).toBe("idle");
     await w.session.close();
   });

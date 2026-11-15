@@ -59,7 +59,6 @@ export class FakeAgent implements AgentAdapter {
     this.opens++;
     this.pumpNews();
   }
-  stopping = false;
   holding = 0;
   wakes: number | null = null;
   sent: Array<{ text: string } & SendOpts> = [];

@@ -190,11 +190,17 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
     }
   }, 300_000);
 
-  test("a stop mid-command ends the call's row and the turn once, as interrupted", async () => {
-    const { t, events, session, settle } = world(BUILTIN_AGENTS, { mode: () => "auto" });
+  test("a stop mid-command ends the turn at the press, and the agent lets go in time for the next message", async () => {
+    const ups: boolean[] = [];
+    const { t, events, session, settle } = world(BUILTIN_AGENTS, {
+      mode: () => "auto",
+      onProcess: (_pgid, up) => ups.push(up),
+    });
     try {
       session.send(
-        "Run exactly this shell command with the Bash tool and nothing else, then report its output: sleep 60; echo done",
+        // not `sleep 60; echo done`: the CLI refuses a sleep chained to a command, and the stop
+        // would land on the model's next words instead of on a command in flight
+        `Run exactly this shell command with the Bash tool and nothing else, then report its output: python3 -c 'import time; time.sleep(60); print("done")'`,
       );
       for (let i = 0; i < 900 && !events.some((e) => e.type === "tool-start" && e.kind === "execute"); i++)
         await Bun.sleep(100);
@@ -203,17 +209,30 @@ describe.skipIf(!enabled)("claude via ACP (integration)", () => {
       // the stop lands on a command in flight, not on one still being written
       await Bun.sleep(3000);
       expect(session.status).toBe("working");
+      expect(
+        events.some((e) => e.type === "tool-end"),
+        "the command ended before the stop",
+      ).toBe(false);
       session.stop();
+      // over at the press, on the stop's own reason, whatever the agent takes to let go
+      expect(session.status).toBe("idle");
+      expect(events.at(-1)).toMatchObject({ type: "turn-end", stopReason: "interrupted" });
+      session.send("Reply with the single word: ok");
+      expect(session.status).toBe("working");
       await settle();
       expect(session.status).toBe("idle");
-      // the adapter closes the calls a cancel stopped before it reports the cancel; the row ends
-      // once and the transcript's bracket closes once, on the agent's own stop reason
+      // the call the stop cut has no end of its own: it closes with the turn, and the adapter's
+      // report of it failing falls after the bracket
       const toolId = (start as { toolId: string }).toolId;
-      expect(events.filter((e) => e.type === "tool-end" && e.toolId === toolId)).toHaveLength(1);
-      expect(events.filter((e) => e.type === "turn-start")).toHaveLength(1);
+      expect(events.filter((e) => e.type === "tool-end" && e.toolId === toolId)).toHaveLength(0);
+      const starts = events.filter((e) => e.type === "turn-start");
+      expect(starts).toHaveLength(2);
       expect(events.filter((e) => e.type === "turn-end")).toEqual([
         expect.objectContaining({ type: "turn-end", stopReason: "interrupted" }),
+        expect.objectContaining({ type: "turn-end", stopReason: "end_turn" }),
       ]);
+      // the agent answered the cancel itself: the process the first turn ran on took the second
+      expect(ups).toEqual([true]);
       expect(events.some((e) => e.type === "agent-error")).toBe(false);
     } finally {
       await session.close();

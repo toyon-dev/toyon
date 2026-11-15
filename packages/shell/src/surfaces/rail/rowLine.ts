@@ -73,7 +73,6 @@ export const owedLine = (repoName: string) => `in ${repoName}, here while it nee
 /** the dots that mean something is happening, or has broken, right now */
 const IN_FLIGHT: ReadonlySet<DotState> = new Set([
   "waiting",
-  "stopping",
   "working",
   "background",
   "starting",

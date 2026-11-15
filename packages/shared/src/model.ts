@@ -1089,10 +1089,6 @@ export interface WorktreeStatus {
   remoteBehind?: string[];
   /** "idle" for a row toyon does not run */
   agent: AgentStatus;
-  /** a stop was pressed and the turn has not ended yet: the agent is asked to stop and may still be
-   * winding down (a command it is running holds the interrupt off), so the status stays busy and
-   * this says the press landed. Absent otherwise. */
-  stopping?: true;
   /** rows the daemon holds open past the turn for something still going under an idle agent: a
    * command it sent to the background and a wakeup it scheduled. The agent is not working, and
    * a message sent now starts a turn as usual, but the worktree is not done either. Absent when

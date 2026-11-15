@@ -133,7 +133,7 @@ export function recalledHello(s: HelloSnapshot): HelloFull {
 
 function stilled(w: WorktreeStatus): WorktreeStatus {
   // a landing op, a queue behind a turn and a login tab are all things in motion
-  const { stopping: _s, shipping: _sh, queued: _q, syncQueued: _sq, ...row } = w;
+  const { shipping: _sh, queued: _q, syncQueued: _sq, ...row } = w;
   return { ...row, agent: w.agent === "working" ? "idle" : w.agent, procs: [], login: false };
 }
 

@@ -122,7 +122,6 @@ describe("recalledHello", () => {
     const s = helloSnapshot(
       hello([
         row("a", "working", {
-          stopping: true,
           procs: [{ name: "web" } as never],
           shipping: { op: "land" } as never,
           queued: 2,
@@ -145,7 +144,7 @@ describe("recalledHello", () => {
     expect(h.pending).toEqual([]);
     expect(h.rows.map((w) => w.agent)).toEqual(["idle", "waiting", "error"]);
     expect(h.rows[0]?.procs).toEqual([]);
-    for (const k of ["stopping", "shipping", "queued", "syncQueued"]) expect(k in (h.rows[0] as object)).toBe(false);
+    for (const k of ["shipping", "queued", "syncQueued"]) expect(k in (h.rows[0] as object)).toBe(false);
     expect(h.rows[0]?.login).toBe(false);
     expect("shipping" in (h.trunks.r as object)).toBe(false);
     expect("at" in (h as object)).toBe(false);

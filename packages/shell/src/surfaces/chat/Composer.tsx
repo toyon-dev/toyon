@@ -1722,13 +1722,7 @@ export function Composer({
           nav={nav}
           listRef={listRef}
           empty={emptyMenu(trigger.kind, files, commands.length, source !== null, outside)}
-          note={
-            more > 0
-              ? `type to find ${more} more`
-              : pathing && pathsFound.length > PATHS_LISTED
-                ? "type to find more"
-                : undefined
-          }
+          note={more > 0 ? `type to find ${more} more` : undefined}
           groupOf={(r) => (r.kind === "worktree" ? "worktrees" : r.kind === "cmd" ? "commands" : "files")}
           row={(r) => {
             // the letter column only while the live status has a letter to put in it

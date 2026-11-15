@@ -206,6 +206,10 @@
     display: flex;
     align-items: baseline;
     gap: 8px;
+    /* a baseline row sets its line at the top of the box, so a row taller than its line (the
+       phone's) carried the difference under the name. The padding splits it instead; where the
+       line fills the row this is the picker row's own 4px. */
+    padding-block: max(4px, round(down, calc((var(--row-height-sm) - 1lh) / 2), 1px));
     & .xy {
       width: 12px;
     }

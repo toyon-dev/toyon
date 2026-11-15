@@ -40,12 +40,11 @@ const PATH_OPENS = /^[@("'`]*(?=~\/|\/[^/\s])/;
  * written that way by the completion (pathComplete.ts) */
 const held = (text: string, i: number) => text[i] === " " && text[i - 1] === "\\";
 
-/** A word of a command that may be a path from where the command runs: past a quote, anything
- * but a flag, a variable, a sigil or an address. Most such words name nothing on the disk, and
- * the list stays shut on those. */
-const RELATIVE_OPENS = /^["']*(?=[^\s"'\-~$@/])/;
-/** the command's own name is a program, and a path only when it says so */
-const RUNS_A_PATH = /^["']*\.\.?\//;
+/** A word of a command that names no root is a path from where the command runs once it has a
+ * slash in it, which is what makes a word a path to a shell too: past a quote, anything but a
+ * flag, a variable, a sigil or an address. A bare word is as likely a subcommand (`git p`), and an
+ * open list takes return for its cursor row, so `npm i` would be sent as `npm index.html`. */
+const RELATIVE_OPENS = /^["']*(?=[^\s"'\-~$@/].*\/)/;
 
 /** the path the caret is typing, in a message or in a command for the shell */
 function pathAt(text: string, caret: number): Trigger | null {
@@ -56,12 +55,9 @@ function pathAt(text: string, caret: number): Trigger | null {
   if (start === 0 && shell) start = 1;
   const word = text.slice(start, caret);
   let lead = PATH_OPENS.exec(word);
-  // a command runs in the worktree, so its other words are paths from there
+  // a command runs in the worktree, so a word of it with a slash is a path from there
   const relative = !lead && shell;
-  if (relative) {
-    const names = text.slice(1, start).trim() === "" ? RUNS_A_PATH.test(word) : !word.includes("://");
-    lead = names ? RELATIVE_OPENS.exec(word) : null;
-  }
+  if (relative) lead = word.includes("://") ? null : RELATIVE_OPENS.exec(word);
   if (!lead) return null;
   const from = start + lead[0].length;
   let to = caret;

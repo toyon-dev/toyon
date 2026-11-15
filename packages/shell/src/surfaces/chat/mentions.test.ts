@@ -106,24 +106,33 @@ describe("triggerAt: shell commands", () => {
     expect(at("!/review")?.kind).toBe("path");
   });
 
-  test("a word past the command's name is a path from the worktree it runs in", () => {
-    expect(at("!cat pa")).toEqual({ kind: "path", query: "pa", from: 5, to: 7, relative: true });
+  test("a word with a slash in it is a path from the worktree the command runs in", () => {
     expect(at("!cat src/App")).toEqual({ kind: "path", query: "src/App", from: 5, to: 12, relative: true });
+    expect(at("!cat ./pa")).toEqual({ kind: "path", query: "./pa", from: 5, to: 9, relative: true });
     expect(at("!cat ../sib")).toEqual({ kind: "path", query: "../sib", from: 5, to: 11, relative: true });
     expect(at('!cat "src/')).toEqual({ kind: "path", query: "src/", from: 6, to: 10, relative: true });
+    expect(at("!cat my\\ dir/no")).toEqual({ kind: "path", query: "my\\ dir/no", from: 5, to: 15, relative: true });
     // nothing typed yet, a flag, a variable, a sigil and an address name no path
     expect(at("!cat ")).toBeNull();
-    expect(at("!ls -la")).toBeNull();
-    expect(at("!echo $HOME")).toBeNull();
+    expect(at("!ls --dir=src/")).toBeNull();
+    expect(at("!echo $HOME/bin")).toBeNull();
     expect(at("!npm i @types/node")).toBeNull();
     expect(at("!curl https://toyon.dev/docs")).toBeNull();
   });
 
-  test("the command's own name is a program, and a path only when it says so", () => {
+  test("a bare word is as likely a subcommand, and opens nothing", () => {
+    expect(at("!git p")).toBeNull();
+    expect(at("!npm i")).toBeNull();
+    expect(at("!cat READ")).toBeNull();
+    expect(at("!ls -la")).toBeNull();
+  });
+
+  test("the command's own name follows the same rule: a program until it has a slash", () => {
     expect(at("!gi")).toBeNull();
     expect(at("! gi")).toBeNull();
     expect(at("!./scr")).toEqual({ kind: "path", query: "./scr", from: 1, to: 6, relative: true });
     expect(at("!../bin/x")).toEqual({ kind: "path", query: "../bin/x", from: 1, to: 9, relative: true });
+    expect(at("!scripts/af")).toEqual({ kind: "path", query: "scripts/af", from: 1, to: 11, relative: true });
   });
 
   test("a message's words are never read from the worktree: that is the `@`", () => {

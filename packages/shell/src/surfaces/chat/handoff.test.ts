@@ -30,6 +30,7 @@ import {
   pieceStanding,
   sentPieces,
   startingPieces,
+  waitHere,
   waitOf,
   waitsOnSelf,
 } from "./handoff.ts";
@@ -122,6 +123,36 @@ describe("fates", () => {
     expect(waitOf(l, l.pieces[2]!)).toEqual({ kind: "branch", ...after });
     expect(waitOf(l, piece("p4", { after: { piece: "p9" } }))).toEqual({ kind: "piece", title: "another piece" });
   });
+  test("a piece moved here keeps its wait: a branch while it is open and unlanded, a piece while it goes to a worktree", () => {
+    const open = { kind: "worktree" as const };
+    const onBranch = piece("p1", { after });
+    const l = list([onBranch], { p1: "here" });
+    expect(waitHere(l, onBranch, open)).toEqual({ kind: "branch", ...after });
+    // landed, gone from the rail, or a main checkout, which never lands: the agent starts at once
+    expect(waitHere(l, onBranch, { ...open, landed: true })).toBeNull();
+    expect(waitHere(l, onBranch, undefined)).toBeNull();
+    expect(waitHere(l, onBranch, { kind: "main" })).toBeNull();
+    expect(waitHere(l, piece("p1"), open)).toBeNull();
+    // a piece of the list, by where it stands now: made, queued or sent on is a wait, kept here
+    // or skipped is none, and a press on it moves the answer
+    const onPiece = piece("p2", { fate: "here", after: { piece: "p1" } });
+    const two = [piece("p1"), onPiece];
+    expect(waitHere(list(two), onPiece, undefined)).toEqual({ kind: "piece", title: "Piece p1" });
+    expect(waitHere(list([piece("p1", { after }), onPiece]), onPiece, undefined)).toEqual({
+      kind: "piece",
+      title: "Piece p1",
+    });
+    expect(waitHere(list([piece("p1", { fate: "send", to }), onPiece]), onPiece, undefined)).toEqual({
+      kind: "piece",
+      title: "Piece p1",
+    });
+    expect(waitHere(list(two, { p1: "here" }), onPiece, undefined)).toBeNull();
+    expect(waitHere(list(two, { p1: "skip" }), onPiece, undefined)).toBeNull();
+    // a piece that is not on the list is nothing to wait for
+    expect(
+      waitHere(list([piece("p4", { after: { piece: "p9" } })]), piece("p4", { after: { piece: "p9" } }), open),
+    ).toBeNull();
+  });
 });
 
 describe("the words", () => {
@@ -184,6 +215,13 @@ describe("the words", () => {
       "Starts as a new worktree in acp, with this text as its plan.",
     );
     expect(fateSentence(p, "here", null)).toBe("This worktree's agent does it.");
+    // moved here, the piece still waits, and the line says for what
+    expect(fateSentence(p, "here", { kind: "branch", ...after })).toBe(
+      "This worktree's agent does it, once toyon/b lands.",
+    );
+    expect(fateSentence(p, "here", { kind: "piece", title: "Layer 1" })).toBe(
+      "This worktree's agent does it, once Layer 1 lands.",
+    );
     expect(fateSentence(piece("p1", { fate: "send", to }), "send", null)).toBe("Goes to C's agent as a message.");
     expect(fateSentence(p, "skip", null)).toBe("Skipped: nothing happens to it.");
   });
@@ -208,6 +246,25 @@ describe("oneRows", () => {
       label: "queue a worktree",
       description: "a copy of this project, with this text as its plan once Layer 1 lands",
     });
+  });
+  test("a piece that waits for a branch says so on the here row too, for as long as the wait holds", () => {
+    const p = piece("p1", { after });
+    const l = list([p]);
+    const [worktree, here] = oneRows(l, p, "a", waitHere(l, p, { kind: "worktree" }));
+    expect(worktree).toEqual({
+      fate: "worktree",
+      label: "queue a worktree",
+      description: "a copy of this project, with this text as its plan once toyon/b lands",
+    });
+    expect(here).toEqual({
+      fate: "here",
+      label: "do it here",
+      description: "this worktree's agent, once toyon/b lands",
+    });
+    // the branch landed since the list was proposed: done here, it starts after this turn
+    expect(oneRows(l, p, "a", waitHere(l, p, { kind: "worktree", landed: true }))[1]!.description).toBe(
+      "this worktree's agent, after its turn",
+    );
   });
   test("a send piece is sent or not; one for another project goes there or not, never here", () => {
     const send = list([piece("p1", { fate: "send", to })]);
@@ -525,7 +582,8 @@ describe("the strip", () => {
     expect(waitsOnSelf(piece("p2", { fate: "here", after: { piece: "p1" } }), "a")).toBe(false);
     expect(waitsOnSelf(piece("p2", { fate: "here" }), "a")).toBe(false);
     expect(waitsOnSelf(part, undefined)).toBe(false);
-    expect(fateSentence(part, "here", waitOf(list([part]), part), true)).toBe(
+    // its own landing is always the next one, whatever it landed before
+    expect(fateSentence(part, "here", waitHere(list([part]), part, { kind: "worktree", landed: true }), true)).toBe(
       "This worktree's agent does it, once this lands.",
     );
     const l = list([part]);

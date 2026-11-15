@@ -157,6 +157,31 @@ export function waitOf(item: Pick<HandoffItem, "pieces">, piece: Piece): Wait | 
   return { kind: "branch", ...after };
 }
 
+/** the wait as a sentence names it: a branch, or a piece's title */
+const waitName = (wait: Wait): string => (wait.kind === "branch" ? wait.branch : wait.title);
+
+/** What a piece done here would wait for if go were pressed now, as the daemon reads it then: a
+ * branch it named that is open and has not landed, or a piece of the list that goes to a
+ * worktree, made, queued or sent on. A branch landed or gone, and a piece kept here or skipped,
+ * is nothing to wait for, and the agent starts at once. Read off the fates as they stand, so a
+ * press on the other piece moves this one's line with it; a piece that fails at go is the one
+ * thing not known ahead. `awaited` is the row of the worktree the piece named, when it is still
+ * open. A wait on this worktree's own landing is asked of waitsOnSelf, which holds whatever
+ * landed before. */
+export function waitHere(
+  item: Pick<HandoffItem, "pieces" | "fates">,
+  piece: Piece,
+  awaited: Pick<WorktreeInfo, "kind" | "landed"> | null | undefined,
+): Wait | null {
+  const after = piece.after;
+  if (!after) return null;
+  if ("id" in after) return awaited?.kind === "worktree" && !awaited.landed ? { kind: "branch", ...after } : null;
+  const on = item.pieces.find((p) => p.id === after.piece);
+  if (!on) return null;
+  const fate = effectiveFate(item, on);
+  return fate === "worktree" || fate === "send" ? { kind: "piece", title: on.title } : null;
+}
+
 /** Whether the piece, done here, waits for this worktree's own landing: work built in parts in
  * one worktree, each landed before the next. `selfId` is the worktree the list is in. */
 export const waitsOnSelf = (piece: Piece, selfId: string | undefined): boolean =>
@@ -250,10 +275,16 @@ export interface OneRow {
 /** the rows for one piece, in digit order: what the agent proposed first, so enter on an
  * untouched card is the proposal, the alternative, then not now. A piece for another project has
  * no "here": the work does not belong in this worktree. `selfId` is the worktree the card is in,
- * so a piece that waits for its own landing says when "here" starts. */
-export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece, selfId?: string): OneRow[] {
+ * so a piece that waits for its own landing says when "here" starts; `hereWait` is what it would
+ * wait for done here otherwise (waitHere), since moving a piece here does not drop its wait. */
+export function oneRows(
+  item: Pick<HandoffItem, "pieces">,
+  piece: Piece,
+  selfId?: string,
+  hereWait: Wait | null = null,
+): OneRow[] {
   const wait = waitOf(item, piece);
-  const where = wait ? ` once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
+  const where = wait ? ` once ${waitName(wait)} lands` : "";
   const worktree: OneRow = piece.project
     ? {
         fate: "worktree",
@@ -270,7 +301,9 @@ export function oneRows(item: Pick<HandoffItem, "pieces">, piece: Piece, selfId?
     label: "do it here",
     description: waitsOnSelf(piece, selfId)
       ? "this worktree's agent, once this lands"
-      : "this worktree's agent, after its turn",
+      : hereWait
+        ? `this worktree's agent, once ${waitName(hereWait)} lands`
+        : "this worktree's agent, after its turn",
   };
   const notNow: OneRow = { fate: null, label: "not now" };
   if (piece.fate === "send") {
@@ -318,16 +351,19 @@ export function fateWord(piece: Piece, fate: PieceFate): string {
   return `sent to ${piece.to?.title ?? "the worktree"}`;
 }
 
-/** what the fate does once the list is answered, as the sentence the open row states. `self`:
- * done here, the piece waits for this worktree's own landing (waitsOnSelf). */
+/** what the fate does once the list is answered, as the sentence the open row states. `wait` is
+ * the fate's own: waitOf for a worktree, waitHere for a piece done here. `self`: done here, the
+ * piece waits for this worktree's own landing (waitsOnSelf). */
 export function fateSentence(piece: Piece, fate: PieceFate, wait: Wait | null, self = false): string {
   if (fate === "worktree") {
     const where = piece.project ? ` in ${piece.project.name}` : "";
-    const when = wait ? `, once ${wait.kind === "branch" ? wait.branch : wait.title} lands` : "";
+    const when = wait ? `, once ${waitName(wait)} lands` : "";
     return `Starts as a new worktree${where}${when}, with this text as its plan.`;
   }
-  if (fate === "here")
-    return self ? "This worktree's agent does it, once this lands." : "This worktree's agent does it.";
+  if (fate === "here") {
+    if (self) return "This worktree's agent does it, once this lands.";
+    return wait ? `This worktree's agent does it, once ${waitName(wait)} lands.` : "This worktree's agent does it.";
+  }
   if (fate === "send") return `Goes to ${piece.to?.title ?? "that worktree"}'s agent as a message.`;
   return "Skipped: nothing happens to it.";
 }

@@ -13,6 +13,7 @@
 import { type AttachmentRef, leadHeading, type Piece, type PieceFate, pieceDoc } from "@toyon/shared";
 import { useMemo, useRef, useState } from "react";
 import { useSock, useStore, useUrls } from "../../state/context.tsx";
+import { worktreeById } from "../../state/store.ts";
 import { Button } from "../../ui/Button.tsx";
 import { useOnChange } from "../../ui/hooks.ts";
 import { Icon } from "../../ui/Icon.tsx";
@@ -33,6 +34,7 @@ import {
   pieceMark,
   pieceOrder,
   pieceStanding,
+  waitHere,
   waitOf,
   waitsOnSelf,
 } from "../chat/handoff.ts";
@@ -283,7 +285,11 @@ export function PiecePage({
   const sock = useSock();
   const press = (fate: PieceFate) => sock?.send(pieceFate(item, worktreeId, piece.id, fate));
   const fate = effectiveFate(item, piece);
-  const wait = waitOf(item, piece);
+  // done here the piece keeps its wait only while the branch it named is open and unlanded, which
+  // is the row's to say
+  const awaitedId = piece.after && "id" in piece.after ? piece.after.id : undefined;
+  const awaited = useStore((s) => worktreeById(s, awaitedId)?.worktree);
+  const wait = fate === "here" ? waitHere(item, piece, awaited) : waitOf(item, piece);
   const others = deciding(item) ? fatesFor(piece, item.pieces).filter((f) => f !== fate) : [];
   // the document always opens with a heading, which the line is drawn under
   const { title, rest } = useMemo(() => leadHeading(pieceDoc(piece)), [piece]);

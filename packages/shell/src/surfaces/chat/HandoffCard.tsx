@@ -36,6 +36,7 @@ import {
   type OneRow,
   oneRows,
   pieceFate,
+  waitHere,
 } from "./handoff.ts";
 import { renderMarkdown } from "./markdown.ts";
 import { typingStart } from "./permissionNote.ts";
@@ -90,10 +91,14 @@ export function HandoffCard({
   });
   const html = useMemo(() => (only ? renderMarkdown(only.plan) : ""), [only]);
 
+  // one piece moved here keeps its wait while the branch it named is open and unlanded, which is
+  // the row's to say
+  const awaitedId = only?.after && "id" in only.after ? only.after.id : undefined;
+  const awaited = useStore((s) => worktreeById(s, awaitedId)?.worktree);
   /** the rows: one piece's fates, or go and not now for a list */
   const shape: readonly OneRow[] = useMemo(
-    () => (only ? oneRows(item, only, worktreeId) : LIST_ROWS),
-    [item, only, worktreeId],
+    () => (only ? oneRows(item, only, worktreeId, waitHere(item, only, awaited)) : LIST_ROWS),
+    [item, only, worktreeId, awaited],
   );
 
   /** the answer: a fate the agent did not propose goes first, then go, two frames the daemon

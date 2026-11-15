@@ -146,8 +146,8 @@ function editorOptions(readOnly: boolean, numbers: boolean, wrap: boolean) {
     minimap: { enabled: false },
     // a scroll the editor has no room left for goes on to the window, which pans when it is
     // pinch-zoomed; by default Monaco cancels every wheel event over it. At rest the box around
-    // the editor keeps what Monaco left (useKeepWheel): a sideways one reaching the window would
-    // be the browser's swipe back
+    // the editor keeps what Monaco left and holds the viewport's sideways overscroll
+    // (useKeepWheel): a sideways one reaching the window would be the browser's swipe back
     scrollbar: SCROLLBAR,
     ...shellType(),
     lineHeight: 1.5,

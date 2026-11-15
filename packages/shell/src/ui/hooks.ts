@@ -557,32 +557,73 @@ export function passPinch(e: { ctrlKey: boolean; stopPropagation: () => void }):
   if (e.ctrlKey) e.stopPropagation();
 }
 
+/** Whether the window is at rest: not pinch-zoomed. A hair over 1 is rounding at the end of a
+ * pinch back out, not a zoom. */
+const atRest = (scale: number): boolean => scale < 1.01;
+
 /** Whether a wheel event a widget let through is one the box around it keeps. A widget that
  * scrolls itself in script leaves a wheel event it has no room for to the window, so a pinch-zoomed
  * window pans. At rest the window has nowhere to scroll, and a sideways event reaching it is the
- * browser's swipe back: on a Mac, Chrome arms the swipe when the first wheel event of a gesture is
- * neither scrolled nor cancelled, whichever axis that event leans to, and a gesture that starts at
- * the end of a long line is a read of it and not a wish to leave the page. So at rest the box keeps
- * every event the widget left, as the widget itself would by default. A pinch is a wheel with ctrl
- * held and is nobody's to cancel. */
+ * browser's swipe back: a gesture that starts at the end of a long line is a read of it and not a
+ * wish to leave the page. So at rest the box keeps every event the widget left, as the widget
+ * itself would by default. A pinch is a wheel with ctrl held and is nobody's to cancel. */
 export function keepsWheel(e: { ctrlKey: boolean; defaultPrevented: boolean }, scale: number): boolean {
   if (e.defaultPrevented || e.ctrlKey) return false;
-  // a hair over 1 is rounding at the end of a pinch back out, not a zoom
-  return scale < 1.01;
+  return atRest(scale);
 }
 
-/** Cancels, on the element, the wheel events `keepsWheel` says to keep. A listener of its own rather
- * than a React handler: React registers wheel as passive, and a passive listener cannot cancel. In
- * the bubble phase, so the widget inside has already taken what it could. */
+/** Whether the viewport is told to hold a sideways overscroll (`data-wheel-kept` on the root,
+ * base.css): while the pointer is over the box and the window is at rest. Zoomed, the sideways
+ * scroll is the window's pan and stays its own. */
+export function holdsSwipe(over: boolean, scale: number): boolean {
+  return over && atRest(scale);
+}
+
+/** Keeps a box's sideways scroll from becoming the browser's swipe back, by both of the things a
+ * browser reads. One is the wheel events: the ones `keepsWheel` names are cancelled on the element,
+ * by a listener of its own rather than a React handler (React registers wheel as passive, and a
+ * passive listener cannot cancel), in the bubble phase so the widget inside has already taken what
+ * it could. The other is the viewport's own word: Chromium on a Mac starts the swipe only when the
+ * viewport lets a sideways overscroll through, so the root is marked while the pointer is over the
+ * box, and the mark holds whichever event of a gesture got past the first. A wheel over the box
+ * marks it too: a box drawn under a pointer that has not moved gets no enter. */
 export function useKeepWheel(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const root = document.documentElement;
+    const view = window.visualViewport;
+    let over = false;
+    const mark = () => {
+      if (holdsSwipe(over, view?.scale ?? 1)) root.dataset.wheelKept = "";
+      else delete root.dataset.wheelKept;
+    };
+    const enter = () => {
+      if (over) return;
+      over = true;
+      mark();
+    };
+    const leave = () => {
+      over = false;
+      mark();
+    };
     const onWheel = (e: WheelEvent) => {
-      if (keepsWheel(e, window.visualViewport?.scale ?? 1)) e.preventDefault();
+      if (keepsWheel(e, view?.scale ?? 1)) e.preventDefault();
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    // in the capture phase: a wheel the box's own axis hold drops never bubbles
+    el.addEventListener("wheel", enter, { capture: true, passive: true });
+    el.addEventListener("pointerenter", enter);
+    el.addEventListener("pointerleave", leave);
+    view?.addEventListener("resize", mark);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("wheel", enter, { capture: true });
+      el.removeEventListener("pointerenter", enter);
+      el.removeEventListener("pointerleave", leave);
+      view?.removeEventListener("resize", mark);
+      leave();
+    };
   }, [ref]);
 }
 
@@ -639,8 +680,8 @@ export function wheelAxis(
 
 /** Holds the box's wheel events to one axis per gesture (`wheelAxis`) ahead of the widget inside:
  * in the capture phase, so the widget never sees a dropped event. A dropped event is still kept
- * from the window as `useKeepWheel` keeps the rest, since an uncancelled first event is what arms
- * the browser's swipe. A pinch is nobody's to hold. */
+ * from the window as `useKeepWheel` keeps the rest, since one uncancelled event in a gesture is
+ * enough to arm the browser's swipe. A pinch is nobody's to hold. */
 export function useWheelAxis(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const el = ref.current;

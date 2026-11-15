@@ -15,4 +15,13 @@ describe("the viewport's overscroll", () => {
     expect(decls.has("overscroll-behavior")).toBe(false);
     expect(decls.has("overscroll-behavior-x")).toBe(false);
   });
+
+  // The editor scrolls sideways in script, and a browser left one wheel event of that gesture
+  // takes it for the swipe. The root is marked while the pointer is over the editor, and the mark
+  // is the same switch thrown the other way, on the sideways axis alone.
+  test("holds the sideways axis while the pointer is over the editor", async () => {
+    const decls = declsOf(cssRules(await shellCss()), "html[data-wheel-kept]");
+    expect(decls.get("overscroll-behavior-x")).toBe("none");
+    expect([...decls.keys()]).toEqual(["overscroll-behavior-x"]);
+  });
 });

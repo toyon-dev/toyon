@@ -47,6 +47,14 @@
   html:not([data-framed]) {
     overscroll-behavior-y: none;
   }
+  /* The switch itself, thrown while the pointer is over the editor (useKeepWheel marks the root).
+     Cancelling the editor's wheel events is not enough on its own: Chromium starts the swipe on
+     any one event of a gesture it is left to scroll, and only when the viewport says a sideways
+     overscroll goes on. In a frame too: the frame's viewport ends the chain there, so nothing
+     reaches the window that holds it. (scroll.test.ts) */
+  html[data-wheel-kept] {
+    overscroll-behavior-x: none;
+  }
   /* selected text sits on the picked seat, the tier the editor pane already selects in, so a
      drag across the chat and one across a file read as the same act. The text is named too: the
      platform highlight leaves the run in whatever tier it stood in, and a finished tool row's

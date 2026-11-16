@@ -28,6 +28,20 @@
   font-display: swap;
   src: url("../fonts/toyon-mono-bold.woff2") format("woff2");
 }
+/* The prose face. Inter on one variable file: weights 400-700, and the optical size axis whole, so
+   the browser draws the tighter display cut as the size grows, the way the system face does. The
+   file is cut to Latin, punctuation, arrows and key symbols; any other script falls through to
+   the system face behind it in --face-ui. The l with a tail is the file's own default
+   (src/fonts/LICENSE-inter.md lists the changes) and not a font-feature-settings rule: every
+   --type-* token is a `font` shorthand, which resets that property on each element that takes
+   one, so a rule on the root would reach almost nothing. There is no italic file; an emphasis is
+   the upright slanted by the browser. */
+@font-face {
+  font-family: "Inter";
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../fonts/inter.woff2") format("woff2");
+}
 
 @layer tokens {
   :root {
@@ -218,13 +232,17 @@
    *               second.
    *
    * Editor.tsx and XTerm.tsx read --face-mono off the root because their editors want a string.
-   * -apple-system already resolves optical sizing on Apple platforms; naming "SF Pro Text" pins
-   * the Text cut and defeats the switch to Display at larger sizes. The mono fallbacks are Toyon
-   * Mono's own family (Menlo is DejaVu Sans Mono with Apple's tweaks, DejaVu is Vera): the same
-   * cell and x-height, so the swap once the woff2 is in moves nothing. SF Mono shares the cell
-   * but not the x-height and reflowed every line, so it and ui-monospace, which is SF Mono on a
-   * Mac, are out. */
-    --face-ui: -apple-system, "Segoe UI", sans-serif;
+   * Behind Inter sits the system face, for the moment before the woff2 is in and for a script the
+   * file does not carry. system-ui is the name every browser resolves; Chromium does not know
+   * -apple-system and falls through it to sans-serif, which on a Mac is Helvetica, 7% narrower
+   * than Inter, so lines would rewrap when the file lands. San Francisco is within 2% of it.
+   * -apple-system stays for a browser older than system-ui. Both resolve optical sizing on Apple
+   * platforms; naming "SF Pro Text" pins the Text cut and defeats the switch to Display at larger
+   * sizes. The mono fallbacks are Toyon Mono's own family (Menlo is DejaVu Sans Mono with Apple's
+   * tweaks, DejaVu is Vera): the same cell and x-height, so the swap once the woff2 is in moves
+   * nothing. SF Mono shares the cell but not the x-height and reflowed every line, so it and
+   * ui-monospace, which is SF Mono on a Mac, are out. */
+    --face-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     --face-mono: "Toyon Mono", Menlo, "DejaVu Sans Mono", "Bitstream Vera Sans Mono", monospace;
 
     /* Type is two families by two tiers, plus one rung above for the things that arrive. Each token

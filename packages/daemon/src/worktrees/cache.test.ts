@@ -202,6 +202,22 @@ describe("restore", () => {
     expect(await w.restore(w.worktree("main", { "pyproject.toml": "a" }))).toEqual(["node_modules"]);
   });
 
+  test("a lockfile in a folder keys the family as the root's does, and names its tool", async () => {
+    w.repo.config.cache = { paths: ["web/node_modules"] };
+    mkdirSync(join(w.repo.path, "web"));
+    writeFileSync(join(w.repo.path, "web", "yarn.lock"), "one\n");
+    const one = w.commit("web one");
+    const src = w.worktree(one, { "web/node_modules/dep/index.js": "one\n" });
+    await w.cache.publish(src.id);
+    const manifest = JSON.parse(readFileSync(join(w.entries()[0]!, "manifest.json"), "utf8")) as Manifest;
+    // no tools named, so they follow from the lockfiles, the folder's among them
+    expect(Object.keys(manifest.tools)).toEqual(["node --version"]);
+    expect(await w.restore(w.worktree(one))).toEqual(["web/node_modules"]);
+    writeFileSync(join(w.repo.path, "web", "yarn.lock"), "two\n");
+    const two = w.commit("web two");
+    expect(await w.restore(w.worktree(two))).toEqual([]);
+  });
+
   test("the entry at the copy's own base commit wins over a newer one; a base with none takes the newest", async () => {
     const c0 = sh(w.repo.path, GIT, "rev-parse", "HEAD");
     const old = w.worktree(c0, { "node_modules/which": "at c0\n" });
@@ -266,15 +282,15 @@ describe("sweep", () => {
 });
 
 describe("defaultTools", () => {
-  test("follows from the lockfiles present", () => {
-    const dir = join(w.paths.home, "tools");
-    mkdirSync(dir);
-    expect(defaultTools(dir)).toEqual([]);
-    writeFileSync(join(dir, "bun.lock"), "");
-    writeFileSync(join(dir, "uv.lock"), "");
-    expect(defaultTools(dir)).toEqual(["bun --version", "python3 --version"]);
-    writeFileSync(join(dir, "pnpm-lock.yaml"), "");
-    writeFileSync(join(dir, "Cargo.lock"), "");
-    expect(defaultTools(dir)).toEqual(["bun --version", "node --version", "python3 --version", "rustc --version"]);
+  test("follows from the lockfiles present, a folder's as the root's", () => {
+    expect(defaultTools([])).toEqual([]);
+    expect(defaultTools(["bun.lock", "uv.lock"])).toEqual(["bun --version", "python3 --version"]);
+    expect(defaultTools(["bun.lock", "pnpm-lock.yaml", "uv.lock", "Cargo.lock"])).toEqual([
+      "bun --version",
+      "node --version",
+      "python3 --version",
+      "rustc --version",
+    ]);
+    expect(defaultTools(["web/yarn.lock", "api/uv.lock"])).toEqual(["node --version", "python3 --version"]);
   });
 });

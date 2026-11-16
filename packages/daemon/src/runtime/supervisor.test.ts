@@ -7,7 +7,7 @@ import type { ProcState } from "@toyon/shared";
 import { reclaimGroup } from "./kill.ts";
 import { reachableHost } from "./listeners.ts";
 import { allocatePort, releasePort } from "./ports.ts";
-import { execForm, WorktreeProcs } from "./supervisor.ts";
+import { answerTimes, execForm, WorktreeProcs } from "./supervisor.ts";
 
 function alive(pid: number): boolean {
   try {
@@ -328,6 +328,49 @@ describe("WorktreeProcs sleep and wake", () => {
     expect(Date.now() - answered).toBeLessThan(350);
     await procs.stopAll();
   }, 15_000);
+});
+
+describe("answerTimes", () => {
+  const proc = (over: Partial<ProcState>): ProcState =>
+    ({ name: "web", command: "vite", port: 4100, ...over }) as ProcState;
+
+  test("says once per spawn how long the port took to answer, from the spawn and not the first emit", () => {
+    const said: string[] = [];
+    let clock = 0;
+    const listen = answerTimes(
+      (line) => said.push(line),
+      () => clock,
+    );
+    listen(proc({ status: "preparing" }));
+    clock = 1_000;
+    listen(proc({ status: "starting" }));
+    clock = 7_240;
+    listen(proc({ status: "running" }));
+    // a second running frame of the same spawn (its host moved) is not another answer
+    listen(proc({ status: "running" }));
+    expect(said).toEqual(["web answered on :4100 after 6.2s"]);
+    // a restart is a spawn of its own
+    clock = 10_000;
+    listen(proc({ status: "starting" }));
+    clock = 10_500;
+    listen(proc({ status: "running" }));
+    expect(said[1]).toBe("web answered on :4100 after 0.5s");
+  });
+
+  test("a proc that never answered says nothing, and one on a port of its own names both", () => {
+    const said: string[] = [];
+    let clock = 0;
+    const listen = answerTimes(
+      (line) => said.push(line),
+      () => clock,
+    );
+    listen(proc({ status: "starting" }));
+    listen(proc({ status: "crashed" }));
+    listen(proc({ status: "starting" }));
+    clock = 60_000;
+    listen(proc({ status: "running", boundPort: 5173 }));
+    expect(said).toEqual(["web answered on :5173, not the :4100 it was given, after 60.0s"]);
+  });
 });
 
 describe("a proc is one process", () => {

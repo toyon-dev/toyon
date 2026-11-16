@@ -64,10 +64,9 @@ import { firstAskOf } from "../agent/recap.ts";
 import type { AgentRegistry } from "../agent/registry.ts";
 import { makeNamer, taskText } from "../agent/tasks.ts";
 import { sealOpenTurn, Transcript, type TranscriptEntry, transcriptPathFor } from "../agent/transcript.ts";
-import { cloneTree } from "../core/clone.ts";
 import { UserError } from "../core/errors.ts";
 import type { Hub } from "../core/hub.ts";
-import { fireAndForget, log } from "../core/log.ts";
+import { fireAndForget, log, took } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import { moveToWatches, type StateStore } from "../core/state.ts";
 import type { DraftStore } from "../drafts/store.ts";
@@ -98,6 +97,7 @@ import {
 import { ArchivedGit } from "./archivedGit.ts";
 import { changedFiles, touched } from "./backend.ts";
 import type { ArtifactCache } from "./cache.ts";
+import { cloneDeps, depFolders, depsLine } from "./deps.ts";
 import { discoverIn, type FoundWorktree } from "./discover.ts";
 import type { FixService } from "./fix.ts";
 import { type FillJob, fillLandMarks, unfilled } from "./landSubjects.ts";
@@ -220,6 +220,14 @@ interface Carried {
   /** a move was asked for and did not happen: the reason, for the person */
   unmoved?: string;
 }
+
+/** one stage of a setup, timed for the daemon log's line: its name, when it began, and how it
+ * ended when that was not well */
+type Span = (name: string, since: number, note?: string) => void;
+
+/** how a setup command ended, as its span says it; nothing for one that ended well */
+const exitNote = (code: number | string | null): string =>
+  code === 0 ? "" : code === "timeout" ? " (gave up)" : ` (exit ${code})`;
 
 /** The first prompt says what the tree it starts in owes to main's working copy. An agent that
  * finds a dirty tree with no word about it commits it or cleans it up; one told main still has
@@ -941,6 +949,7 @@ export class WorktreeService {
     repo: RepoInfo,
     names: string[],
     sink: "setup" | "tab",
+    span?: Span,
   ): Promise<{ ready: string[]; failed?: string }> {
     // the worktree's own file: its commands carry their setup
     const { config } = configFor(wt, repo);
@@ -964,6 +973,7 @@ export class WorktreeService {
       for (const cmd of cmds) {
         if (toTab) this.d.runtime.preparing(wt.id, name, runCmd(entry), `setup: ${cmd}`);
         const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: `${name}: ${cmd}` });
+        const since = Date.now();
         const code = await runSetup(
           cmd,
           wt.path,
@@ -978,6 +988,7 @@ export class WorktreeService {
           },
         );
         run.finish(code);
+        span?.(`${name}: ${cmd}`, since, exitNote(code));
         if (code === 0) continue;
         broke =
           code === "timeout"
@@ -2029,27 +2040,37 @@ export class WorktreeService {
     const cfg = configFor(wt, repo);
     for (const line of settingsLines(cfg, repo)) this.d.hub.emit("log", wt.id, "setup", line);
     const ceiling = timeoutFor(cfg.config, "setup");
+    // what each stage took, for the one line the daemon log keeps of a setup: the row shows the
+    // stages as they pass and keeps none of it, so a slow start had no number to be reported with
+    const began = Date.now();
+    const spans: string[] = [];
+    // a command is named as one line of a bounded length, whatever its script holds
+    const span: Span = (name, since, note = "") =>
+      spans.push(`${name.replace(/\s+/g, " ").trim().slice(0, 60)} ${took(Date.now() - since)}${note}`);
     // what an earlier worktree built to pass the check comes first: keyed by this tree's own
     // lockfiles, it matches when main's copy would not, and a hit makes the copy below and the
     // install after it no-ops. It stands on the row as a setup stage of its own, since a clone of
     // a large tree is seconds a person waits through with nothing on the transcript yet.
     if (this.d.cache && cachePolicy(repo.config)) {
       const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: "restoring cache" });
+      const since = Date.now();
       await this.d.cache.restore(wt, repo, (line) => this.d.hub.emit("log", wt.id, "setup", line));
       run.finish(0);
+      span("restoring cache", since);
     }
     // the base checkout's deps, copy-on-write where the fs allows it; the log line records which
     // path ran and how long the fallback copy takes per worktree
-    const srcNm = join(depsSource, "node_modules");
-    const dstNm = join(wt.path, "node_modules");
-    if (existsSync(srcNm) && !existsSync(dstNm)) {
+    const folders = await depFolders(depsSource, wt.path);
+    if (folders.length > 0) {
       // on the row as a stage like the cache restore: a copy of a large tree is seconds the
       // person reads the row through, and a row claimed meanwhile has no phase left to say so
       const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage: "copying dependencies" });
-      const r = await cloneTree(srcNm, dstNm);
+      const since = Date.now();
+      const r = await cloneDeps(depsSource, wt.path, folders);
       run.finish(0);
-      if (r.ok) this.d.hub.emit("log", wt.id, "setup", `deps via ${r.how} in ${r.ms}ms`);
-      else log.warn(wt.id, "could not copy node_modules from the base checkout", r.error);
+      span("copying dependencies", since);
+      if (r.cloned.length > 0) this.d.hub.emit("log", wt.id, "setup", depsLine(r));
+      for (const f of r.failed) log.warn(wt.id, `could not copy ${f.folder} from the base checkout`, f.error);
     }
     for (const f of LOCAL_CONFIG_FILES) {
       const src = join(depsSource, f);
@@ -2065,6 +2086,7 @@ export class WorktreeService {
     for (const [i, cmd] of cmds.entries()) {
       const stage = cmds.length > 1 ? `${cmd} (${i + 1} of ${cmds.length})` : cmd;
       const run = this.runs.begin(wt.id, "setup", { timeoutMs: ceiling, stage });
+      const since = Date.now();
       const code = await runSetup(
         cmd,
         wt.path,
@@ -2073,13 +2095,15 @@ export class WorktreeService {
         { timeoutMs: ceiling, onSpawn: run.spawned },
       );
       run.finish(code);
+      span(cmd, since, exitNote(code));
       if (code === "timeout") {
         this.d.hub.emit("log", wt.id, "setup", `setup gave up after ${describeDuration(ceiling)}: ${cmd}`);
       } else if (code !== 0) this.d.hub.emit("log", wt.id, "setup", `setup failed (exit ${code}): ${cmd}`);
     }
     // each proc the copy will run itself gets its own setup, the shared ones it borrows none: theirs
     // runs on the day the copy takes one over
-    if (setupCommands) await this.prepareProcs(wt, repo, spawnsOf(resolveRun(cfg, wt, repo.tier ?? {})), "setup");
+    if (setupCommands) await this.prepareProcs(wt, repo, spawnsOf(resolveRun(cfg, wt, repo.tier ?? {})), "setup", span);
+    log.info(wt.id, `setup took ${took(Date.now() - began)}${spans.length > 0 ? `: ${spans.join(", ")}` : ""}`);
     // a cold worktree stops here: the first look at it, or the first request for its preview,
     // wakes it through the runtime, which starts a worktree whose setup is done and procs are not up
     if (start) await this.d.runtime.start(wt, repo);

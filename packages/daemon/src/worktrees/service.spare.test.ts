@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fakeFactories } from "../../test/helpers/fakes.ts";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
@@ -8,7 +8,7 @@ import { UserError } from "../core/errors.ts";
 import { Hub } from "../core/hub.ts";
 import { log } from "../core/log.ts";
 import { StateStore } from "../core/state.ts";
-import { git } from "../git/exec.ts";
+import { GIT, git } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { RepoRegistry } from "../repos/registry.ts";
 import { RuntimeRegistry } from "../runtime/registry.ts";
@@ -208,6 +208,30 @@ describe("spare pool", () => {
       for (const r of releases.splice(0)) r();
       return w.worktrees.spare.current(repoId)?.ready === true;
     });
+  });
+
+  test("a lockfile that moved in a folder of main runs the spare's setup again; another file does not", async () => {
+    const repoId = await registered();
+    w.state.requireRepo(repoId).config = { run: { web: "true" }, setup: ["echo ran >> .setup-runs"] };
+    const land = (rel: string, body: string) => {
+      mkdirSync(join(w.repo, rel, ".."), { recursive: true });
+      writeFileSync(join(w.repo, rel), body);
+      sh(w.repo, GIT, "add", "-A");
+      sh(w.repo, GIT, "commit", "-qm", rel);
+    };
+    land("web/yarn.lock", "one\n");
+    await w.worktrees.spare.ensure(repoId);
+    const spare = w.state.worktrees.find((x) => x.kind === "spare")!;
+    const runs = () => readFileSync(join(spare.path, ".setup-runs"), "utf8").trim().split("\n").length;
+    expect(runs()).toBe(1);
+    land("web/src/app.ts", "export {};\n");
+    await w.worktrees.spare.refresh(repoId);
+    expect(runs()).toBe(1);
+    // the install the spare holds was made from the lockfile as it stood
+    land("web/yarn.lock", "two\n");
+    await w.worktrees.spare.refresh(repoId);
+    expect(runs()).toBe(2);
+    expect(readFileSync(join(spare.path, "web", "yarn.lock"), "utf8")).toBe("two\n");
   });
 
   test("a spare warmed under one agent is restarted for a task that asks for another", async () => {

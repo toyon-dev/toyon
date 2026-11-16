@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { sh } from "../../test/helpers/tmp-repo.ts";
@@ -16,6 +16,7 @@ import {
 } from "../../test/helpers/world.ts";
 import { transcriptPathFor } from "../agent/transcript.ts";
 import { UserError } from "../core/errors.ts";
+import { log } from "../core/log.ts";
 import { FileService } from "../files/service.ts";
 import { GIT, git } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
@@ -139,14 +140,16 @@ describe("create / remove", () => {
     await settle();
     mkdirSync(join(first.path, ".mypy_cache"), { recursive: true });
     writeFileSync(join(first.path, ".mypy_cache", "x"), "checked\n");
+    // the second worktree's alone: the first's setup can still be saying what it found
     const lines: string[] = [];
-    w.hub.on("log", (_id, proc, line) => {
-      if (proc === "setup") lines.push(line);
+    w.hub.on("log", (id, proc, line) => {
+      if (proc === "setup" && id !== first.id) lines.push(line);
     });
     // the stages the setup run passes through on the row, so the wait can say what it is on
     const stages: string[] = [];
     w.hub.on("worktreesChanged", () => {
       for (const wt of w.state.worktrees) {
+        if (wt.id === first.id) continue;
         const stage = wt.runs?.find((r) => r.kind === "setup")?.stage;
         if (stage && stages.at(-1) !== stage) stages.push(stage);
       }
@@ -166,6 +169,7 @@ describe("create / remove", () => {
       );
     };
     await until(kept);
+    const info = spyOn(log, "info");
     const second = await w.worktrees.create(repoId, "second");
     await until(() => existsSync(join(second.path, "restored")));
     // the file is there before the command's shell has exited, and the run goes only once it has
@@ -173,6 +177,12 @@ describe("create / remove", () => {
     expect(readFileSync(join(second.path, ".mypy_cache", "x"), "utf8")).toBe("checked\n");
     expect(lines.find((l) => l.startsWith("cache:"))).toMatch(/^cache: restored \.mypy_cache from [0-9a-f]{7}/);
     expect(stages).toEqual(["restoring cache", "test -e .mypy_cache/x && touch restored"]);
+    // the stages the row showed and let go of, kept as one line with what each took
+    const took = info.mock.calls.find(([tag, line]) => tag === second.id && line.startsWith("setup took"));
+    info.mockRestore();
+    expect(took?.[1]).toMatch(
+      /^setup took \d+\.\ds: restoring cache \d+\.\ds, test -e \.mypy_cache\/x && touch restored \d+\.\ds$/,
+    );
     expect(w.state.worktree(second.id)?.runs).toBeUndefined();
     expect((await w.worktrees.gitStatus(second.id))?.files).toEqual([]);
   });
@@ -196,6 +206,31 @@ describe("create / remove", () => {
     await until(() => existsSync(join(wt.path, "node_modules", "dep", "index.js")));
     await until(() => !w.state.worktree(wt.id)?.runs);
     expect(stages).toEqual(["copying dependencies", "true"]);
+  });
+
+  test("a package in a folder starts with the base checkout's install, and a failed command says so in the log", async () => {
+    const repoId = await registered();
+    w.state.requireRepo(repoId).config = { run: { web: "true" }, setup: ["exit 3"] };
+    writeFileSync(join(w.repo, ".gitignore"), "node_modules/\n");
+    mkdirSync(join(w.repo, "web"));
+    writeFileSync(join(w.repo, "web", "package.json"), "{}\n");
+    sh(w.repo, GIT, "add", "-A");
+    sh(w.repo, GIT, "commit", "-qm", "a web package");
+    mkdirSync(join(w.repo, "web", "node_modules", "dep"), { recursive: true });
+    writeFileSync(join(w.repo, "web", "node_modules", "dep", "index.js"), "module.exports = 1;\n");
+    const lines: string[] = [];
+    w.hub.on("log", (_id, proc, line) => {
+      if (proc === "setup") lines.push(line);
+    });
+    const info = spyOn(log, "info");
+    const wt = await w.worktrees.create(repoId, "task");
+    await until(() => info.mock.calls.some(([tag, line]) => tag === wt.id && line.startsWith("setup took")));
+    const took = info.mock.calls.find(([tag, line]) => tag === wt.id && line.startsWith("setup took"));
+    info.mockRestore();
+    expect(readFileSync(join(wt.path, "web", "node_modules", "dep", "index.js"), "utf8")).toBe("module.exports = 1;\n");
+    expect(lines.find((l) => l.startsWith("deps via"))).toMatch(/^deps via \w+ in \d+ms: web\/node_modules$/);
+    expect(took?.[1]).toMatch(/^setup took \d+\.\ds: copying dependencies \d+\.\ds, exit 3 \d+\.\ds \(exit 3\)$/);
+    expect((await w.worktrees.gitStatus(wt.id))?.files).toEqual([]);
   });
 
   test("a second setup rewrites the mirrored block rather than stacking another", async () => {

@@ -19,14 +19,14 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { baseOf, type CachePolicy, cachePolicy, type RepoInfo, SIDECARS, type WorktreeInfo } from "@toyon/shared";
 import { type CloneHow, type CloneResult, cloneTree } from "../core/clone.ts";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { Paths } from "../core/paths.ts";
 import type { StateStore } from "../core/state.ts";
-import { git, lockfileHash, run } from "../git/exec.ts";
+import { git, lockfileHash, lockfiles, run } from "../git/exec.ts";
 import { worktreeEnv } from "../runtime/registry.ts";
 
 /** entries kept per family: the newest few, so a base commit a worktree still sits on has one */
@@ -62,10 +62,12 @@ interface Family {
   tools: Record<string, string>;
 }
 
-/** the version commands the lockfiles present imply, when the settings name none: the runtime
- * a native module was built against, the interpreter a bytecode cache was written by */
-export function defaultTools(dir: string): string[] {
-  const has = (...files: string[]) => files.some((f) => existsSync(join(dir, f)));
+/** the version commands the tree's lockfiles imply, when the settings name none: the runtime a
+ * native module was built against, the interpreter a bytecode cache was written by. `files` are
+ * the lockfiles' paths, a folder's counting as the root's does. */
+export function defaultTools(files: string[]): string[] {
+  const names = new Set(files.map((f) => basename(f)));
+  const has = (...any: string[]) => any.some((f) => names.has(f));
   const out: string[] = [];
   if (has("bun.lock", "bun.lockb")) out.push("bun --version");
   if (has("package-lock.json", "pnpm-lock.yaml", "yarn.lock")) out.push("node --version");
@@ -299,8 +301,9 @@ export class ArtifactCache {
    * (absent is a fact of its own), and what each version command prints */
   private async family(wt: WorktreeInfo, repo: RepoInfo, policy: CachePolicy): Promise<Family> {
     const platform = `${process.platform}-${process.arch}`;
+    const locks = await lockfiles(wt.path);
     const h = createHash("sha1");
-    h.update(`${platform}\0${lockfileHash(wt.path)}`);
+    h.update(`${platform}\0${await lockfileHash(wt.path, locks)}`);
     for (const f of policy.key) {
       h.update(`\0${f}\0`);
       try {
@@ -310,7 +313,7 @@ export class ArtifactCache {
       }
     }
     const tools: Record<string, string> = {};
-    for (const cmd of policy.tools ?? defaultTools(wt.path)) {
+    for (const cmd of policy.tools ?? defaultTools(locks)) {
       const out = await (this.d.tool ?? toolOutput)(cmd, wt.path, worktreeEnv(wt, repo));
       tools[cmd] = out;
       h.update(`\0${cmd}\0${out}`);

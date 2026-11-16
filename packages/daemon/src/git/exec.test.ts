@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
-import { GIT, run, runRows, runWatched, spawnEnv } from "./exec.ts";
+import { GIT, lockfileHash, lockfiles, run, runRows, runWatched, spawnEnv } from "./exec.ts";
 
 describe("spawnEnv", () => {
   // landing reads git's stderr for "CONFLICT" and the like, which a translated git never prints
@@ -144,5 +145,61 @@ describe("run", () => {
   test("a command inside the ceiling comes back as before", async () => {
     const r = await run("echo", ["hi"], "/", undefined, { timeoutMs: 5_000 });
     expect(r).toMatchObject({ ok: true, out: "hi", exit: 0 });
+  });
+});
+
+describe("lockfiles", () => {
+  let t: ReturnType<typeof tmpRepo>;
+  beforeEach(() => {
+    t = tmpRepo();
+  });
+  afterEach(() => t.cleanup());
+
+  const write = (rel: string, body: string) => {
+    mkdirSync(join(t.repo, rel, ".."), { recursive: true });
+    writeFileSync(join(t.repo, rel), body);
+  };
+  const track = () => {
+    sh(t.repo, GIT, "add", "-A");
+    sh(t.repo, GIT, "commit", "-qm", "files");
+  };
+
+  test("the root's as they stand on the disk, then the ones tracked in folders", async () => {
+    write("uv.lock", "root\n");
+    write("web/yarn.lock", "web\n");
+    write("api/deep/poetry.lock", "api\n");
+    // a dependency's own, and a folder's nobody committed: neither pins this tree's install
+    write("web/node_modules/dep/yarn.lock", "dep\n");
+    writeFileSync(join(t.repo, ".gitignore"), "node_modules/\n");
+    track();
+    write("scratch/bun.lock", "untracked\n");
+    expect(await lockfiles(t.repo)).toEqual(["uv.lock", "api/deep/poetry.lock", "web/yarn.lock"]);
+  });
+
+  test("a tree with lockfiles at the root alone hashes their contents in the list's order", async () => {
+    write("yarn.lock", "y\n");
+    write("bun.lock", "b\n");
+    const want = createHash("sha1").update("b\n").update("y\n").digest("hex");
+    expect(await lockfileHash(t.repo)).toBe(want);
+  });
+
+  test("a folder's lockfile moves the hash when it changes, and when it moves", async () => {
+    write("web/yarn.lock", "one\n");
+    track();
+    const first = await lockfileHash(t.repo);
+    expect(first).not.toBe(createHash("sha1").digest("hex"));
+    write("web/yarn.lock", "two\n");
+    const second = await lockfileHash(t.repo);
+    expect(second).not.toBe(first);
+    sh(t.repo, GIT, "mv", "web", "site");
+    expect(await lockfileHash(t.repo)).not.toBe(second);
+  });
+
+  test("a directory that is no repo has its root's alone", async () => {
+    const dir = join(t.paths.home, "plain");
+    mkdirSync(join(dir, "web"), { recursive: true });
+    writeFileSync(join(dir, "bun.lock"), "");
+    writeFileSync(join(dir, "web", "yarn.lock"), "");
+    expect(await lockfiles(dir)).toEqual(["bun.lock"]);
   });
 });

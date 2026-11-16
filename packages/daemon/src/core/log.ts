@@ -82,6 +82,10 @@ export const log = {
   },
 };
 
+/** a span of time as a log line writes it: tenths of a second, since the waits worth a line (an
+ * install, a dev server's boot) are seconds long and a count of milliseconds hides that */
+export const took = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
+
 /** Run a promise in the background: a rejection is logged under `tag` instead of killing the daemon
  * (Bun exits on unhandled rejections). Use for every fire-and-forget call. */
 export function fireAndForget(tag: string, p: Promise<unknown>, what = "background task"): void {

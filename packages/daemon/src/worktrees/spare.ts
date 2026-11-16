@@ -111,9 +111,9 @@ export class SparePool {
     for (const extra of persisted.slice(1)) fireAndForget(extra.id, this.d.discard(extra.id), "stale spare removal");
     const spare = persisted[0];
     if (!spare) return;
-    // a record from before phases were written was only ever saved once ready
+    // a record from before phases were written was only ever saved once ready. One with no
+    // lockfile hash keeps none: the refresh reads that as changed and runs setup again, once.
     spare.phase ??= "ready";
-    spare.lockfile ??= lockfileHash(spare.path);
   }
 
   /** the repo is in use: refresh its adopted spare (main may have moved while the daemon was
@@ -224,9 +224,10 @@ export class SparePool {
           await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", baseOf(repo)));
         }
         await this.d.setupAndStart(wt, repo); // CoW deps + setup + warm servers
+        const lockfile = await lockfileHash(wt.path);
         // claimed while finishing: the task's procs are up, and the pool has moved on
         if (wt.kind !== "spare") return;
-        wt.lockfile = lockfileHash(wt.path);
+        wt.lockfile = lockfile;
         wt.phase = "ready";
         this.d.state.save();
         this.d.ready?.(repoId);
@@ -277,7 +278,7 @@ export class SparePool {
       const before = await commitOf(wt.path, "HEAD");
       await withRepoLock(repo.path, () => git(wt.path, "reset", "--hard", baseOf(repo)));
       const after = await commitOf(wt.path, "HEAD");
-      const h = lockfileHash(wt.path);
+      const h = await lockfileHash(wt.path);
       // deps, env, containers or a migration landed on main: what setup made for this copy (a
       // database cloned from main's) is behind, so it is torn down and made again
       const moved = before && after && before !== after ? await filesBetween(wt.path, before, after) : [];

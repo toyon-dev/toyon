@@ -53,7 +53,7 @@ import { type PortLease, proxyPorts } from "./ports.ts";
 import { type ProxyTarget, startProxy, type WorktreeProxy } from "./proxy.ts";
 import { type PtyHandle, type PtyOpts, PtyStream } from "./pty.ts";
 import { EMPTY_RUN, type ResolvedRun, resolveRun, spawnsOf } from "./run.ts";
-import { WorktreeProcs } from "./supervisor.ts";
+import { answerTimes, WorktreeProcs } from "./supervisor.ts";
 
 export interface Runtime {
   info: WorktreeInfo;
@@ -394,9 +394,13 @@ function defaultAgent(
 }
 
 function defaultProcs(wt: WorktreeInfo, d: RuntimeDeps): WorktreeProcs {
+  const answered = answerTimes((line) => log.info(wt.id, line));
   return new WorktreeProcs(
     wt.path,
-    (p) => d.hub.emit("proc", wt.id, p),
+    (p) => {
+      answered(p);
+      d.hub.emit("proc", wt.id, p);
+    },
     (proc, line) => d.hub.emit("log", wt.id, proc, line),
     (proc, data) => d.hub.emit("termData", wt.id, proc, data),
     (proc, code) => d.hub.emit("termExit", wt.id, proc, code),

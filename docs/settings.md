@@ -82,7 +82,7 @@ How long a run may take before Toyon kills it. The keys are `setup`, `check` and
 
 ### `cache`
 
-A new copy starts with main's `node_modules`, cloned where the filesystem supports it: APFS, btrfs and XFS. Anything else a copy builds is deleted with the copy unless `cache` lists it:
+A new copy starts with main's `node_modules`, cloned where the filesystem supports it: APFS, btrfs and XFS. A package in a subfolder is included: `web/node_modules` is cloned if `web/package.json` is committed and git ignores the folder. Anything else a copy builds is deleted with the copy unless `cache` lists it:
 
 ```json
 {
@@ -95,6 +95,7 @@ A new copy starts with main's `node_modules`, cloned where the filesystem suppor
 - A path that does not exist is skipped. A path the new copy already has is not replaced.
 - A SQLite file is saved with its `-wal` and `-journal` files.
 - A cache is reused only with the same platform, lockfiles and tool versions. Of those that match, a copy takes the one saved at its base commit, or the newest.
+- Lockfiles in subfolders count if they are committed, such as `web/yarn.lock`.
 
 The long form adds to what must match:
 
@@ -123,6 +124,28 @@ A `run` command must stay in the foreground and listen on `$PORT`. How it reload
 - Each command gets the addresses of the others: `<NAME>_URL` and `VITE_<NAME>_URL`, plus `API_URL` for a command named `api`. An address stays the same for the copy's life, whether the command runs in the copy, on main or at a remote.
 - Toyon's guess adds the port flag: `--port $PORT --strictPort` for Vite, `--port $PORT` for Astro.
 - If a server starts on a different port, Toyon detects the port and the process log shows which flag to add. If it never listens, the preview shows an error.
+
+## Start time
+
+`toyon logs` shows how long a copy took to start: one line for setup and one for each `run` command.
+
+```
+12:04:31 info  [wt-2e6a] setup took 21.4s: copying dependencies 0.3s, yarn install 21.1s
+12:04:38 info  [wt-2e6a] web answered on :51234 after 6.2s
+```
+
+- `setup took` lists the cache restore, the copy of `node_modules` and each setup command.
+- `answered` is the time from the command starting to its port accepting a connection.
+
+Vite compiles a file when the browser first asks for it, so the first page load takes longer than later ones. To compile files when the server starts, list them in the Vite config:
+
+```js
+export default defineConfig({
+  server: {
+    warmup: { clientFiles: ["./src/main.tsx", "./src/pages/*.tsx"] },
+  },
+});
+```
 
 ## Sleep
 

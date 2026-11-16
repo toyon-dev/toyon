@@ -23,14 +23,34 @@ export const LOCKFILES = [
   "Cargo.lock",
 ];
 
-/** Combined hash of all present lockfiles — spare deps re-setup only when this changes. */
-export function lockfileHash(dir: string): string {
+/** The lockfiles a tree installs from, as paths under `dir`: the root's own, in the order above,
+ * then the ones git tracks in its folders, sorted. A package in a subfolder (`web/yarn.lock`
+ * beside an api) pins its install as surely as one at the root. The root's are read off the disk
+ * whether tracked or not; a folder's has to be tracked, since nothing else says which of a tree's
+ * directories are its own, and one inside a `node_modules` is a dependency's. */
+export async function lockfiles(dir: string): Promise<string[]> {
+  const root = LOCKFILES.filter((f) => existsSync(join(dir, f)));
+  const r = await gitRaw(dir, "ls-files", "-z", "--", ...LOCKFILES.map((f) => `:(glob)**/${f}`));
+  // not a repo, or no tree yet: the root's own are all there is to read
+  if (!r.ok) return root;
+  const nested = nulSplit(r.out)
+    .filter((f) => f.includes("/") && !f.split("/").includes("node_modules") && existsSync(join(dir, f)))
+    .sort();
+  return [...root, ...nested];
+}
+
+/** Combined hash of the tree's lockfiles: what a spare's deps and a kept cache were built from,
+ * so either is made again only when this changes. The root's go in by content alone and a
+ * folder's by its path too, since the same lockfile moved to another package is another install. */
+export async function lockfileHash(dir: string, files?: string[]): Promise<string> {
   const h = createHash("sha1");
-  for (const f of LOCKFILES) {
+  for (const f of files ?? (await lockfiles(dir))) {
     try {
-      h.update(readFileSync(join(dir, f)));
+      const body = readFileSync(join(dir, f));
+      if (f.includes("/")) h.update(`\0${f}\0`);
+      h.update(body);
     } catch {
-      // absent lockfile: not part of the hash
+      // gone since it was listed: not part of the hash
     }
   }
   return h.digest("hex");

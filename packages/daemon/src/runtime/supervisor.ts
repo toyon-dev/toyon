@@ -1,5 +1,5 @@
 import { applyLog, type LogLine, type ProcState } from "@toyon/shared";
-import { fireAndForget } from "../core/log.ts";
+import { fireAndForget, took } from "../core/log.ts";
 import { LineSplitter } from "./lines.ts";
 import { listeningPorts, portFromLogs, reachableHost } from "./listeners.ts";
 import { allocatePort, releasePort } from "./ports.ts";
@@ -45,6 +45,25 @@ export interface ManagedProc {
 const preparing = (mp: ManagedProc): boolean => mp.state.status === "preparing";
 
 export type ProcListener = (proc: ProcState) => void;
+
+/** A listener that says, once per spawn, how long a proc took to answer on its port: the wait
+ * between a command starting and its page being there to load, which nothing else writes down.
+ * A proc that came up on a port of its own choosing says so, since the time it names is then the
+ * diagnosis deadline and not the server's boot. */
+export function answerTimes(say: (line: string) => void, now: () => number = Date.now): ProcListener {
+  const spawned = new Map<string, number>();
+  return (p) => {
+    if (p.status === "starting") {
+      spawned.set(p.name, now());
+      return;
+    }
+    const since = spawned.get(p.name);
+    spawned.delete(p.name);
+    if (p.status !== "running" || since === undefined) return;
+    const where = p.boundPort ? `:${p.boundPort}, not the :${p.port} it was given,` : `:${p.port}`;
+    say(`${p.name} answered on ${where} after ${took(now() - since)}`);
+  };
+}
 export type LogListener = (proc: string, line: string, retract: number) => void;
 export type DataListener = (proc: string, data: string) => void;
 export type ExitListener = (proc: string, exitCode: number) => void;

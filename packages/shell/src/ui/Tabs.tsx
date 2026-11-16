@@ -1,5 +1,6 @@
 import { type CSSProperties, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { cx } from "./cx.ts";
+import { Kbd } from "./Kbd.tsx";
 import { step } from "./listNav.ts";
 import { type MenuEntry, useContextMenu } from "./menu.ts";
 import { rowState } from "./rowState.ts";
@@ -17,6 +18,9 @@ export type TabItem<Id extends string> = {
    * sibling of the tab's own button floated over its end rather than a child, since a button
    * cannot hold one, and the tab's button stays the whole tab. */
   trail?: ReactNode;
+  /** the key that opens this tab, after its label in the quiet tier: a tab that is a word has the
+   * room to say its own key, and a hover that only named the word it stands on said nothing else */
+  chord?: string;
   tip?: ReturnType<typeof tip>;
   /** what a right-click on the tab offers */
   menu?: () => MenuEntry[];
@@ -145,6 +149,7 @@ export function Tabs<Id extends string>({
               >
                 {it.lead}
                 {it.label}
+                {it.chord && <Kbd k={it.chord} className="tab-key" />}
               </button>
               {open && it.trail && <span className="tab-trail">{it.trail}</span>}
             </div>

@@ -13,6 +13,7 @@ import {
   useBare,
   useCommittedOpen,
   useLocalField,
+  useTowardCentre,
   useTurnOpen,
 } from "../../state/selectors.ts";
 import { type ChangesTab, changesTabShown, type EditorView, repoById } from "../../state/store.ts";
@@ -82,6 +83,7 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
   // hidden, not closed, on a first-run screen: the layout remembers nothing of it and the panel is
   // back, as it was, with the first message
   const bare = useBare();
+  const tipSide = useTowardCentre("changes");
   const focusReq = useStore((s) => s.focusChanges);
   // The page of a row this tab is still archiving stands over what the row held: a status and a
   // history read in a directory that is leaving. Neither is shown and nothing is asked for; the
@@ -694,8 +696,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       className={cx("changes-dock", onScreen && "changes-screen", !onScreen && (!changesOpen || bare) && "collapsed")}
       style={onScreen ? undefined : { width }}
     >
-      {/* the strip holds words alone, so a tab never shifts as the work moves; what the working
-          tree holds is said on the changes tab's hover, beside its key. On a screen it is the quiet
+      {/* the strip holds words and a key, so a tab never shifts as the work moves; what the working
+          tree holds is said on the changes tab's hover. On a screen it is the quiet
           form: the bar over it already holds a control, and a second recess under that read as a
           band heavier than the one above it */}
       {!archived && (
@@ -712,9 +714,18 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
               label: <Icon name="folder" className="icon-inline" />,
               fit: true,
               ariaLabel: "files",
-              tip: tip("files", chord("files")),
+              // off the strip's edge toward the centre, as the rows under it hang theirs: under
+              // the tab it stood over the tree's first rows
+              tip: tip("files", chord("files"), { placement: tipSide, align: "center" }),
             },
-            { id: "changes", label: "changes", tip: tip("changes", chord("changes"), { detail: changedFact }) },
+            {
+              id: "changes",
+              label: "changes",
+              chord: chord("changes"),
+              // the hover is the working tree's figures alone, and there is none on a clean tree;
+              // the tab keeps its own name for a reader, with the figures after it
+              ...(changedFact ? { tip: tip(changedFact), ariaLabel: `changes, ${changedFact}` } : {}),
+            },
             { id: "history", label: "history" },
           ]}
           current={tab}

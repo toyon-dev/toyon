@@ -94,6 +94,13 @@
   .tabs-fill .tab-btn {
     justify-content: center;
   }
+  /* the tab's key, in the quietest tier whichever tab is open: it is there to be found, not read
+   each time. It keeps its own width, and a strip that can run out of room for it drops it whole
+   (the changes dock does, by its strip's width). */
+  .tab-key {
+    flex-shrink: 0;
+    color: var(--text2);
+  }
   /* the trail is the open tab's alone, so the tab grows by the slot when it opens. It floats over
    the button's end rather than sitting beside it, so the button is the whole tab and the slot is
    the button's own padding. */

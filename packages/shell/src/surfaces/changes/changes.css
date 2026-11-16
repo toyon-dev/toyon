@@ -68,6 +68,18 @@
   .changes-screen .tab-fit {
     --tab-inset: 18px;
   }
+  /* The changes tab says its key beside its word while the strip has room for both at an inset the
+     eye still reads as one. Under that the key goes whole: the word is what the tab is, and a key
+     cut at the tab's edge is noise. The strip is the container, since it takes its width from the
+     dock and never from its tabs. */
+  .changes-dock:not(.changes-screen) > .tabs {
+    container-type: inline-size;
+  }
+  @container (max-width: 215px) {
+    .changes-dock .tab-key {
+      display: none;
+    }
+  }
   .app[data-chat-side="left"] .changes-dock {
     border-right: 0;
     border-left: 1px solid var(--border0);

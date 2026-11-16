@@ -73,11 +73,16 @@ function rowOf(r: StepResult): StepRow | undefined {
 
 /** How a landing's steps are run. `step` names the one starting, for the person waiting on the
  * press; `git` runs one git command with its output watched, so a hook's minutes read live and
- * what it printed is kept whole when it refuses. The daemon passes the watch that writes the
- * worktree's transcript; a caller with no one watching (a pull on main, a test) runs UNWATCHED. */
+ * what it printed is kept whole when it refuses. `moving` brackets the steps that rewrite the
+ * worktree's files (a rebase, a merge, the carry, a landing commit built on a detached HEAD):
+ * the one stretch of an op an agent must not start work in. A commit's hooks, a fetch, a push
+ * and gh move no file and run outside it. The daemon
+ * passes the watch that writes the worktree's transcript and holds its agent's queue; a caller
+ * with no one watching (a pull on main, a test) runs UNWATCHED. */
 export interface LandWatch {
   step(name: string): void;
   git(cwd: string, args: string[]): Promise<StepResult>;
+  moving<T>(run: () => Promise<T>): Promise<T>;
 }
 
 /** one git step, run to completion, to the ceiling, or to a stop pressed on its row */
@@ -93,6 +98,7 @@ export const stepRun = (
 export const UNWATCHED: LandWatch = {
   step() {},
   git: (cwd, args) => stepRun(cwd, args),
+  moving: (run) => run(),
 };
 
 /** the message for a step git refused: where its output went, or its first words when no
@@ -306,10 +312,12 @@ export async function takeMainIn(
   const { behind } = await aheadBehind(worktreePath, defaultBr);
   if (behind === 0) return { ok: true, message: `already up to date with ${defaultBr}` };
   const how = await howToBring(worktreePath, defaultBr, own);
-  const aside = carry ? await setAside(worktreePath) : null;
-  if (aside && "message" in aside) return aside;
-  const taken = await bringIn(worktreePath, defaultBr, how, behind, w);
-  return aside ? putBack(worktreePath, defaultBr, how, aside, taken) : taken;
+  return w.moving(async () => {
+    const aside = carry ? await setAside(worktreePath) : null;
+    if (aside && "message" in aside) return aside;
+    const taken = await bringIn(worktreePath, defaultBr, how, behind, w);
+    return aside ? putBack(worktreePath, defaultBr, how, aside, taken) : taken;
+  });
 }
 
 /** A landing by rebase puts the branch's commits on main as they are, so a merge among them lands
@@ -542,29 +550,34 @@ export async function landingCommit(
     const sha = await git(worktreePath, "rev-parse", "HEAD");
     return { ok: true, sha: sha.out, message: `squashed ${branch} onto ${base}` };
   }
-  const detached = await git(worktreePath, "checkout", "-q", "--detach", base);
-  if (!detached.ok) return { ok: false, message: `could not check out ${base}: ${detached.err.slice(0, 200)}` };
-  try {
-    if (method === "squash") {
-      w.step(`squashing onto ${base}`);
-      const s = await w.git(worktreePath, ["merge", "--squash", branch]);
-      if (!s.ok) return stepRefused("squash refused", s);
-      const c = await w.git(worktreePath, ["commit", "-m", message]);
-      if (!c.ok) return stepRefused("squash commit refused", c);
-    } else {
-      w.step(`merging into ${base}`);
-      // the subject git would write on main itself; on a detached HEAD it says "into HEAD"
-      const m = await w.git(worktreePath, ["merge", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
-      if (!m.ok) return stepRefused("merge refused", m);
+  // The whole stretch off the branch, its commit's hooks included: the hard reset that ends it
+  // would take with it whatever an agent wrote meanwhile.
+  return w.moving(async () => {
+    const detached = await git(worktreePath, "checkout", "-q", "--detach", base);
+    if (!detached.ok) return { ok: false, message: `could not check out ${base}: ${detached.err.slice(0, 200)}` };
+    try {
+      if (method === "squash") {
+        w.step(`squashing onto ${base}`);
+        const s = await w.git(worktreePath, ["merge", "--squash", branch]);
+        if (!s.ok) return stepRefused("squash refused", s);
+        const c = await w.git(worktreePath, ["commit", "-m", message]);
+        if (!c.ok) return stepRefused("squash commit refused", c);
+      } else {
+        w.step(`merging into ${base}`);
+        // the subject git would write on main itself; on a detached HEAD it says "into HEAD"
+        const m = await w.git(worktreePath, ["merge", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
+        if (!m.ok) return stepRefused("merge refused", m);
+      }
+      const sha = await git(worktreePath, "rev-parse", "HEAD");
+      const how = method === "squash" ? "squashed" : "merged";
+      return { ok: true, sha: sha.out, message: `${how} ${branch} onto ${base}` };
+    } finally {
+      // a refused commit leaves the squash staged, and a refused merge leaves one in progress:
+      // both go with the detached HEAD, which the tree was clean under, before the branch is back
+      await git(worktreePath, "reset", "-q", "--hard");
+      await git(worktreePath, "switch", "-q", branch);
     }
-    const sha = await git(worktreePath, "rev-parse", "HEAD");
-    return { ok: true, sha: sha.out, message: `${method === "squash" ? "squashed" : "merged"} ${branch} onto ${base}` };
-  } finally {
-    // a refused commit leaves the squash staged, and a refused merge leaves one in progress:
-    // both go with the detached HEAD, which the tree was clean under, before the branch is back
-    await git(worktreePath, "reset", "-q", "--hard");
-    await git(worktreePath, "switch", "-q", branch);
-  }
+  });
 }
 
 /** the remote and branch main tracks: where the base is fetched from and the landing pushed to */

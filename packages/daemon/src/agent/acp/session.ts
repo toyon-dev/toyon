@@ -390,9 +390,9 @@ export class AcpSession implements AgentAdapter {
    * `giveUp` is the clock on the letting go (STOP_GRACE_MS), running while `stopping` is on. */
   private turn: Turn | null = null;
   private stopped = false;
-  /** landing ops out on the worktree: while any is, nothing starts a turn and nothing is steered
-   * into one, and what is sent meanwhile waits in the queue. A count, since a sync that waited for
-   * the turn holds the queue from the turn's end until its own op has taken the hold over. */
+  /** something is moving the tree under the agent (a landing op's rebase, merge or restart, a
+   * worktree still being made): while any is, nothing starts a turn and nothing is steered into
+   * one, and what is sent meanwhile waits in the queue. A count, since the holds nest. */
   private holds = 0;
   private get held(): boolean {
     return this.holds > 0;

@@ -120,8 +120,8 @@ export interface AgentAdapter {
    * daemon came up, goes now when it gives the agent something to do */
   opened(): void;
   /** hold the queue: a message sent meanwhile waits in it, drawn as queued, rather than start a
-   * turn while a landing op is moving the tree under the agent. Holds nest; the last release
-   * starts what waited. */
+   * turn while git is moving the tree under the agent. For the steps of a landing op that rewrite
+   * files, never for the op's whole length. Holds nest; the last release starts what waited. */
   hold(): () => void;
   /** Interrupt the running turn; anything queued goes next. `by` is another chat's agent asking,
    * and rides the turn's end onto the transcript; without it the stop is the person's. Whether

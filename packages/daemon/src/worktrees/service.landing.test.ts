@@ -239,18 +239,20 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     expect((await w.worktrees.commit(wt.id, "add feature")).ok).toBe(true);
     await w.worktrees.gitStatus(wt.id);
-    // what each frame would carry of the op, and whether the queue was held when it went out
-    const seen: Array<{ op: string; held: boolean }> = [];
+    // what each frame would carry of the op
+    const seen: string[] = [];
     w.hub.on("worktreesChanged", () => {
       const out = w.worktrees.shippingOf(wt.id);
-      if (out) seen.push({ op: out.op, held: agent.held });
+      if (out) seen.push(out.op);
     });
+    const holds = agent.holds;
     expect((await git(w.repo, "merge", "--ff-only", wt.branch)).ok).toBe(true);
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landed).toBe(true);
-    // a land, with the queue held across the restart: a message sent meanwhile waits for it
+    // a land, with the queue held for the restart alone: a message sent as the branch moves waits
     expect(seen.length).toBeGreaterThan(0);
-    expect(seen.filter((f) => f.op !== "land" || !f.held)).toEqual([]);
+    expect(seen.filter((op) => op !== "land")).toEqual([]);
+    expect(agent.holds).toBe(holds + 1);
     // over: off the frame, and the queue goes again
     expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
     expect(agent.held).toBe(false);
@@ -505,7 +507,7 @@ describe("landing", () => {
     expect(await w.worktrees.gitStatus(wt.id)).toMatchObject({ files: [], ahead: 1 });
   });
 
-  test("the press is the op out on the row, named step by step, with the agent's queue held", async () => {
+  test("the press is the op out on the row, named step by step, with the agent's queue held only while git moves the tree", async () => {
     const repoId = await registered();
     const wt = await w.worktrees.create(repoId, "feature");
     const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
@@ -522,11 +524,13 @@ describe("landing", () => {
     // one op per row: a second press meanwhile is refused, whichever tab it came from
     await expect(w.worktrees.commit(wt.id, "again")).rejects.toThrow("a land is already running here");
     expect((await landing).result.ok).toBe(true);
+    // a message sent under the commit and its hooks, or while main takes the branch, reaches the
+    // agent at once; one sent as the rebase rewrites the files waits for it
     expect(seen).toEqual([
-      { step: undefined, held: true },
-      { step: "committing", held: true },
+      { step: undefined, held: false },
+      { step: "committing", held: false },
       { step: "rebasing onto main", held: true },
-      { step: "moving main onto the branch", held: true },
+      { step: "moving main onto the branch", held: false },
     ]);
     // over: off the frame, and the queue goes again
     expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
@@ -534,6 +538,29 @@ describe("landing", () => {
     expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.shipping).toBeUndefined();
     // steps that passed at once left no rows behind: the transcript holds the word on the land alone
     expect(recorded(wt.id).map((e) => e.type)).toEqual(["landed"]);
+  });
+
+  test("a commit waiting on its hook leaves the agent's queue free: the chat goes on under it", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    // a pre-commit hook that waits for a file: the commit is the op out until the test says so
+    const gate = `${w.repo}.gate`;
+    const hooks = join(w.repo, ".git", "hooks");
+    mkdirSync(hooks, { recursive: true });
+    writeFileSync(join(hooks, "pre-commit"), `#!/bin/sh\nwhile [ ! -f "${gate}" ]; do sleep 0.05; done\n`, {
+      mode: 0o755,
+    });
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    const holds = agent.holds;
+    const commit = w.worktrees.commit(wt.id, "add feature");
+    await until(() => w.worktrees.shippingOf(wt.id)?.step === "committing");
+    await settle();
+    expect(agent.held).toBe(false);
+    writeFileSync(gate, "");
+    expect((await commit).ok).toBe(true);
+    // a commit moves no file, so nothing of it held the queue
+    expect(agent.holds).toBe(holds);
   });
 
   test("the verdict goes and the landed mark comes in one frame, so no frame reads as work unchecked", async () => {
@@ -1010,7 +1037,7 @@ describe("landing", () => {
       w.hub.emit("agentStatus", agent.worktreeId, s);
     };
 
-    test("a turn in flight keeps the press: the row says so, a question out is still the turn, and the sync runs once it ends with the queue held", async () => {
+    test("a turn in flight keeps the press: the row says so, a question out is still the turn, and the sync runs once it ends", async () => {
       const wt = await dirtyWorktree();
       mainMoves("newer.txt", "x\n");
       const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
@@ -1028,15 +1055,44 @@ describe("landing", () => {
       expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
       expect(queuedOn(wt.id)).toBe(true);
       status(agent, "working");
+      const holds = agent.holds;
       status(agent, "idle");
-      // held from inside the status dispatch, before anything sent meanwhile could start a turn
-      expect(agent.held).toBe(true);
+      // out from inside the status dispatch, and the chat is not held for it
       expect(queuedOn(wt.id)).toBeUndefined();
+      expect(agent.held).toBe(false);
       await until(() => existsSync(join(wt.path, "newer.txt")));
-      await until(() => !agent.held);
+      await until(() => !agent.held && w.worktrees.shippingOf(wt.id) === undefined);
+      // the carry held the queue, and nothing else of the sync did
+      expect(agent.holds).toBeGreaterThan(holds);
       expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
       expect(readFileSync(join(wt.path, "loose.txt"), "utf8")).toBe("loose\n");
       expect((await w.worktrees.gitStatus(wt.id))?.behind).toBe(0);
+      await noTrace(wt.path);
+    });
+
+    test("a turn that starts under the sync keeps the press again, and the sync runs when that turn ends", async () => {
+      const wt = await dirtyWorktree();
+      mainMoves("newer.txt", "x\n");
+      const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+      // a message sent on the op's first frame starts a turn before the carry is reached
+      let started = false;
+      w.hub.on("worktreesChanged", () => {
+        if (started || w.worktrees.shippingOf(wt.id)?.op !== "sync-main") return;
+        started = true;
+        status(agent, "working");
+      });
+      const { result } = await w.worktrees.sync(wt.id);
+      expect(started).toBe(true);
+      expect(result.ok).toBe(true);
+      expect(result.message).toContain("once the turn ends");
+      expect(existsSync(join(wt.path, "newer.txt"))).toBe(false);
+      expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
+      expect(queuedOn(wt.id)).toBe(true);
+      status(agent, "idle");
+      await until(() => existsSync(join(wt.path, "newer.txt")));
+      await until(() => !agent.held && w.worktrees.shippingOf(wt.id) === undefined);
+      expect(queuedOn(wt.id)).toBeUndefined();
+      expect(readFileSync(join(wt.path, "mine.txt"), "utf8")).toBe("edited\n");
       await noTrace(wt.path);
     });
 
@@ -1090,7 +1146,7 @@ describe("landing", () => {
       status(agent, "working");
       await w.worktrees.sync(wt.id);
       status(agent, "idle");
-      // written while the sync still held the queue, and sent as the hold let go
+      // written after the sync, with the queue free: sent as it is written
       await until(() => sent(wt.id).length === 1);
       expect(sent(wt.id)[0]?.asked).toMatchObject({ kind: "news" });
       expect(sent(wt.id)[0]?.text).toContain("the conflicts are in the uncommitted changes");

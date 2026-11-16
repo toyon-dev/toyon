@@ -86,8 +86,9 @@ export class ExecService {
   }
 
   /** start the command; the result reaches the shell through the agent stream, not a reply.
-   * Refused while a landing op is out here: a chat sent then waits in the queue, but a command
-   * has no queue, and the line under the box says when to send it again. */
+   * Refused while a landing op is out here: a chat sent as the op rewrites the tree waits in the
+   * queue for that step, but a command has no queue, and the line under the box says when to
+   * send it again. */
   run(worktreeId: string, command: string): void {
     const op = this.deps.shipping?.(worktreeId);
     if (op) throw new UserError(`${shipNoun(op.op)} is running here; run the command once it is done`);

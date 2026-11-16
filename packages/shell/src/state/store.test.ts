@@ -4675,8 +4675,8 @@ describe("the outbox", () => {
     });
   });
 
-  test("behind a landing op's hold or a queue, the message has no placeholder: its queued row keeps the send order", () => {
-    // a landing op out on the row holds the agent's queue, from the press on
+  test("behind a queue the message has no placeholder: its queued row keeps the send order; a landing op is no wait", () => {
+    // a landing op out on the row leaves the chat going: the message is shown at the press
     let s = run([
       hello(wt("a")),
       { a: "shipping", id: "a", op: "commit" },
@@ -4684,9 +4684,12 @@ describe("the outbox", () => {
       { a: "hold-send", id: "a", log: "a", text: "first", frame: chat },
     ]);
     s = run([{ a: "sent-out", id: outOf(s) }], s);
-    expect(s.local.a?.sending).toBeUndefined();
+    expect(s.local.a?.sending).toEqual({
+      message: { text: "first", attachments: [toInput(landed)] },
+      at: expect.any(Number),
+    });
     expect(s.local.a?.sent).toBe(1);
-    // messages waiting already, the agent idle: the queue is held, and this one goes behind them
+    // messages waiting already, the agent idle: this one goes behind them
     let q = run([
       hello({ ...wt("b"), queued: 1 }),
       { a: "attach", id: "b", items: [landed] },

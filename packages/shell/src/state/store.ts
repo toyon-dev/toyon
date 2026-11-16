@@ -1303,14 +1303,15 @@ export function rowById(s: Pick<State, "rows">, id: string | null | undefined): 
 }
 
 /** A message sent into this row now goes behind something, so the log draws it where the daemon
- * puts it rather than from a placeholder at the press: the agent has the turn, a landing op
- * holds the queue (the press's own mark counts, ahead of the frame that says so), or messages
- * wait in it already. The placeholder is one slot drawn above the queued rows, so under a hold
- * each send would take it from the one before and put the newest message first. */
-export function sendWaits(s: Pick<State, "rows" | "shipping">, id: string | null | undefined): boolean {
+ * puts it rather than from a placeholder at the press: the agent has the turn, or messages wait
+ * in the queue already. The placeholder is one slot drawn above the queued rows, so behind a
+ * queue each send would take it from the one before and put the newest message first. A landing
+ * op out on the row is not a wait: the chat goes on under a commit or a land, and the moment its
+ * git rewrites the tree is shorter than the placeholder. */
+export function sendWaits(s: Pick<State, "rows">, id: string | null | undefined): boolean {
   const row = rowById(s, id);
   if (!row) return false;
-  return isBusy(row.agent) || !!s.shipping[row.id] || (row.queued ?? 0) > 0;
+  return isBusy(row.agent) || (row.queued ?? 0) > 0;
 }
 
 /** a row toyon owns, by id: what the chat, the composer and landing read */

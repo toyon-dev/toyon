@@ -135,7 +135,7 @@ export interface ShipDeps {
 
 export class Ship {
   /** the landing ops out, by the row or trunk each runs on: what every frame carries as the
-   * row's `shipping`, and what holds a chat sent meanwhile. In memory only: an op does not
+   * row's `shipping`, and what refuses a second press. In memory only: an op does not
    * outlive the daemon, and what git was left mid-way is git's to report on the next press. */
   private ops = new Map<string, Shipping>();
   /** worktrees whose sync from main was pressed mid-turn on a dirty tree: it runs when the turn
@@ -298,7 +298,8 @@ export class Ship {
    * the press says what it is on instead of spinning, and each git command runs through
    * ExecService.watch, so a hook's minutes read live on the chat and its refusal is whole for the
    * message that asks the agent to fix it. A command in the main checkout is named with its `-C`, since the row
-   * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain.
+   * sits on a worktree's chat. A worktree with no transcript yet runs the steps plain. The steps
+   * that rewrite the worktree's files run with its agent's queue held (moving).
    *
    * A commit is the step with a suite in it (pre-commit), so it runs under the settings' commit
    * ceiling rather than the step's, and stands on the row as a run while it does: which hook git
@@ -307,6 +308,7 @@ export class Ship {
     const repo = this.d.state.requireRepo(wt.repoId);
     return {
       step: (name) => this.step(wt.id, name),
+      moving: (run) => this.moving(wt.id, run),
       git: async (cwd, args) => {
         const where = cwd === wt.path ? "git" : `git -C ${cwd}`;
         const commit = args[0] === "commit";
@@ -381,7 +383,7 @@ export class Ship {
 
   /** Every landing runs here, whoever started it: the press, the poll that heard GitHub merged
    * the PR, the read that found the work on the base already. It is the op out on the row, so a
-   * second is refused and the agent's queue is held; the record's branch is the checkout's before
+   * second is refused; the record's branch is the checkout's before
    * anything is measured; and a landing that put the work on the base says so once, on the
    * transcript and to the hub, after the op has let the row go. Nothing is awaited before the op
    * is out: the read that lands by hand looks for an op and calls this in the same tick. */
@@ -416,9 +418,8 @@ export class Ship {
     return { result: this.fixShip(wt, out.result, baseOf(repo)) };
   }
 
-  /** What a landing op's failure asks of the agent, after the op, whose hold on the queue is gone
-   * by now: it is written on the chat as news the agent is owed, and the session sends the
-   * message for it once the agent is at rest. A hook that refused a commit or a push printed
+  /** What a landing op's failure asks of the agent, after the op: it is written on the chat as
+   * news the agent is owed, and the session sends the message for it once the agent is at rest. A hook that refused a commit or a push printed
    * why on the transcript, and a rebase or merge that stopped on conflicts names what to merge:
    * both are the agent's to fix. A
    * commit-msg hook judged the message and not the tree, so the message is written again with
@@ -497,10 +498,11 @@ export class Ship {
     return this.ops.get(id);
   }
 
-  /** Run a landing op as the one out on the row: on every frame while it runs, with the agent's
-   * queue held so a chat sent meanwhile waits rather than run under a rebase, and a second press
-   * refused. The refusal is by id, so a found row and a trunk count too; a row with no agent (a
-   * found worktree, main) has nothing to hold. A press is a hand on the row, so the row goes to
+  /** Run a landing op as the one out on the row: on every frame while it runs, and a second press
+   * refused. The refusal is by id, so a found row and a trunk count too. The chat goes on under
+   * the op: a commit hook, a fetch, a push and gh take seconds to minutes and move no file, so a
+   * message sent meanwhile reaches the agent as at any other time, and only the steps that
+   * rewrite the tree hold it back (moving). A press is a hand on the row, so the row goes to
    * the top of the rail like a send's, at the press and whatever comes of it: a commit hook can
    * hold the op for minutes, and the row should not wait for it. Landed, it reads as the next
    * thing to archive; refused, it is the row whose failure is being fixed. An op nobody pressed
@@ -508,8 +510,6 @@ export class Ship {
   private async ship<T>(id: string, op: ShipOp, by: "press" | "auto", run: () => Promise<T>): Promise<T> {
     const out = this.ops.get(id);
     if (out) throw new UserError(`${shipNoun(out.op)} is already running here`);
-    // held before the frame says so: a send that reads the frame must find the queue held
-    const release = this.d.runtime.agentFor(id)?.hold();
     this.ops.set(id, { op });
     // on the op's first frame, with the word it shows
     if (by === "press") this.d.stampPrompted(id);
@@ -528,13 +528,27 @@ export class Ship {
     } finally {
       clearInterval(watchdog);
       this.ops.delete(id);
-      release?.();
       // a landing by hand that left the row to this op is asked about again in the read this
       // frame sets off
       if (this.handWaits.delete(id)) this.d.tree.invalidate(id);
       this.d.hub.emit("worktreesChanged");
       // a sync that waited for the turn and then for this op runs now, while the tree is still
       if (!isBusy(this.d.runtime.agentFor(id)?.status)) this.syncAfterTurn(id);
+    }
+  }
+
+  /** Git is rewriting the worktree's files (a rebase, a merge, the carry, the restart from the
+   * base): the agent's queue is held for that stretch, so a message sent in it waits, drawn as
+   * queued, rather than start a turn or steer one into a tree that is half one commit and half
+   * another. The release sends what waited. A turn already running is not stopped by this; the
+   * steps refuse a tree it has dirtied, and the carry waits for it (sync). A row with no agent
+   * (a found worktree, main) has nothing to hold. */
+  private async moving<T>(id: string, run: () => Promise<T>): Promise<T> {
+    const release = this.d.runtime.agentFor(id)?.hold();
+    try {
+      return await run();
+    } finally {
+      release?.();
     }
   }
 
@@ -866,7 +880,7 @@ export class Ship {
     if (!hasOwnBranch(wt)) return;
     // marked before the move: a read out across it answers for the tree before, and is dropped
     this.d.tree.invalidate(wt.id);
-    const r = await git(wt.path, "reset", "--keep", base);
+    const r = await this.moving(wt.id, () => git(wt.path, "reset", "--keep", base));
     if (!r.ok) log.warn(wt.id, `could not restart ${wt.branch} from ${base}: ${r.err}`);
     // the counts for the moved head, said in the settle's frame with the landing and its mark: a
     // frame of its own here would carry a branch level with the base and nothing on the record
@@ -1014,12 +1028,16 @@ export class Ship {
     // Carrying empties the tree for a moment, and a file tool writing into that gap is lost under
     // the work put back; a clean tree has no such gap. So under a turn the press is kept and runs
     // when the turn settles, which is what the person pressing it now wants of it anyway.
-    const busy = isBusy(this.d.runtime.agentFor(worktreeId)?.status);
-    if (carry && busy && (await statusFiles(r.path)).length > 0) {
+    const underTurn = async () =>
+      carry && isBusy(this.d.runtime.agentFor(worktreeId)?.status) && (await statusFiles(r.path)).length > 0;
+    const kept = (): ShipResult => {
       this.syncQueued.add(worktreeId);
-      if (by === "press") this.d.stampPrompted(worktreeId);
       this.d.hub.emit("worktreesChanged");
-      return { result: { ok: true, message: `${r.name} syncs from ${r.base} once the turn ends` }, base: r.base };
+      return { ok: true, message: `${r.name} syncs from ${r.base} once the turn ends` };
+    };
+    if (await underTurn()) {
+      if (by === "press") this.d.stampPrompted(worktreeId);
+      return { result: kept(), base: r.base };
     }
     // a found worktree has no chat for the rows to go on
     const w = r.wt ? this.landWatch(r.wt) : UNWATCHED;
@@ -1032,7 +1050,14 @@ export class Ship {
       }
       // marked before the move: a read out across it answers for the tree before, and is dropped
       this.d.tree.invalidate(worktreeId);
-      const taken = await withRepoLock(repo.path, () => takeMainIn(r.path, r.base, own, w, carry));
+      // A message sent under the fetch may have started a turn: asked again with the queue held,
+      // so none starts between the answer and the carry, and a turn found there keeps the press
+      // as one found at the press does. The lock first: waiting on another row's landing moves
+      // no file here, and the chat goes on under it.
+      const taken = await withRepoLock(repo.path, () =>
+        this.moving(worktreeId, async () => ((await underTurn()) ? null : takeMainIn(r.path, r.base, own, w, carry))),
+      );
+      if (!taken) return kept();
       if (taken.ok) {
         await this.d.headMoved(worktreeId);
         // the same work over a newer base: the sentence and the message still describe it
@@ -1049,19 +1074,16 @@ export class Ship {
     this.d.hub.emit("worktreesChanged");
   }
 
-  /** The turn a queued sync waited for is over. The queue is held here, inside the status
-   * dispatch, so a message sent meanwhile waits for the sync rather than start a turn under the
-   * carry; the op's own hold takes over once the sync is out, and the count lets this one go.
-   * Nobody pressed this, so a failure is said on the chat the way a daemon's own is, unless it
-   * is one the agent is owed: that one is on the chat already, and letting the queue go is what
-   * sends the agent its message. */
+  /** The turn a queued sync waited for is over. A message sent while the sync fetches starts a
+   * turn as at any other time, and the sync, finding it at the carry, waits for that turn in its
+   * place. Nobody pressed this, so a failure is said on the chat the way a daemon's own is, unless
+   * it is one the agent is owed: that one is on the chat already, as news the session sends. */
   syncAfterTurn(worktreeId: string): void {
     if (!this.syncQueued.has(worktreeId)) return;
     // an op still out on the row (a commit or land pressed under the turn) would refuse a second:
     // the press keeps, and the op's own end runs it
     if (this.ops.has(worktreeId)) return;
     this.syncQueued.delete(worktreeId);
-    const release = this.d.runtime.agentFor(worktreeId)?.hold();
     this.d.hub.emit("worktreesChanged");
     fireAndForget(
       worktreeId,
@@ -1071,8 +1093,6 @@ export class Ship {
           if (!result.ok && !result.asked && !result.owed) this.d.hub.emit("failed", worktreeId, result.message);
         } catch (e) {
           this.d.hub.emit("failed", worktreeId, e instanceof Error ? e.message : String(e));
-        } finally {
-          release?.();
         }
       })(),
       "sync after the turn",
@@ -1089,7 +1109,7 @@ export class Ship {
     if (!isMain(wt)) throw new UserError("pull on main; a worktree syncs from main instead");
     const repo = this.d.state.requireRepo(wt.repoId);
     // main has no chat for git's rows, so the pull's steps are named and nothing more
-    const w: LandWatch = { step: (name) => this.step(worktreeId, name), git: UNWATCHED.git };
+    const w: LandWatch = { ...UNWATCHED, step: (name) => this.step(worktreeId, name) };
     return this.ship(worktreeId, "pull-main", "auto", async () => {
       const result = await this.d.trunk.pull(repo.id, w);
       // main moved under every row: the op's closing frame carries all of them read again

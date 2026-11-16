@@ -136,7 +136,7 @@ import { PickChip } from "./PickChip.tsx";
 import { commandAsPath, type PathRow, pathRows, pathWritten, unescapePath } from "./pathComplete.ts";
 import { QuestionCard } from "./QuestionCard.tsx";
 import { type Step, stepWalk, type WalkKey } from "./recall.ts";
-import { shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
+import { landsInCommand, shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
 import { insertedWorktree, matchesSibling, pastedWorktree, type Sibling, siblingWorktrees } from "./siblings.ts";
 import { UsageMeters, UsagePanel } from "./UsagePanel.tsx";
 import { compactAdvice, compactNudge, limitLevel, limitSummary } from "./usage.ts";
@@ -729,11 +729,20 @@ export function Composer({
     placeWords(el, el.selectionStart, el.selectionEnd, words);
     return true;
   };
-  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(boxId, id, (pasted) =>
-    takeWorktreeName(pastedWorktree(pasted, worktreeNames)),
+  // a command's text is the shell's, typed in as it was copied: no chip, and no name read as a reference
+  const intoCommand = () => (!!id || outside) && landsInCommand(text, composerRef.current?.selectionStart ?? 0);
+  const { onPaste, onPasteKey, onPasteKeyUp } = useComposerPaste(
+    boxId,
+    id,
+    (pasted) => takeWorktreeName(pastedWorktree(pasted, worktreeNames)),
+    intoCommand,
   );
   // a phone keyboard's clipboard key puts the name in without a paste
-  useWholeInsert(rootRef, composerRef, (text) => takeWorktreeName(insertedWorktree(text, worktreeNames)));
+  useWholeInsert(
+    rootRef,
+    composerRef,
+    (inserted) => !intoCommand() && takeWorktreeName(insertedWorktree(inserted, worktreeNames)),
+  );
   // the keyboard's place in the box: the ask while one is up, else the textarea
   const focusBox = () => (cardRef.current ?? composerRef.current)?.focus();
   const refocus = focusBox;

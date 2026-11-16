@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatItem } from "../../state/store.ts";
-import { ranClean, shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
+import { landsInCommand, ranClean, shellCommandOf, shellContext, shellHintOf } from "./shellMode.ts";
 
 const run = (command: string, output?: string, done = true): ChatItem => ({
   kind: "tool",
@@ -33,6 +33,20 @@ describe("shellCommandOf", () => {
     expect(shellCommandOf("ls")).toBeNull();
     expect(shellCommandOf("wow !ls")).toBeNull();
     expect(shellCommandOf("")).toBeNull();
+  });
+});
+
+describe("landsInCommand", () => {
+  test("text put in after the sigil is part of the command", () => {
+    expect(landsInCommand("!", 1)).toBe(true);
+    expect(landsInCommand("!cat <<EOF\n", 11)).toBe(true);
+    expect(landsInCommand("!echo  done", 6)).toBe(true);
+  });
+
+  test("text over the sigil, or in a message, is not", () => {
+    expect(landsInCommand("!ls", 0)).toBe(false);
+    expect(landsInCommand("", 0)).toBe(false);
+    expect(landsInCommand("run !ls", 7)).toBe(false);
   });
 });
 

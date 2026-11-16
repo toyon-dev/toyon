@@ -14,6 +14,14 @@ export function shellCommandOf(text: string): string | null {
   return text.slice(1).trim();
 }
 
+/** text arriving whole at `at`, by a paste, lands in a command: the draft leads with the sigil and
+ * the text goes in after it. A command is the shell's to read whole, so its paste is typed in
+ * however long it is; on a chip it would be left out of what runs. A paste over the sigil itself
+ * leaves a draft that is a message again. */
+export function landsInCommand(text: string, at: number): boolean {
+  return text.startsWith("!") && at > 0;
+}
+
 /** the mode's hint as the ghost draws it after the draft, or null for a draft that is past one. The
  * hint stands a space off the sigil, and the space most people type next takes that gap rather than
  * pushing the hint along, so the line holds still beside the caret the way a placeholder does. A

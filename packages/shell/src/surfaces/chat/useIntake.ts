@@ -381,14 +381,16 @@ export function useFileDrop() {
  * chip named for its file and lines; then text the field takes in a shape of its own (`takeText`,
  * which says so with true: a worktree's name, put in as the `@branch` that names it); then text
  * long enough to bury the textarea. Anything shorter is typed in as usual. ⌘⇧V types any text
- * in, however long or wherever it was copied from. `boxId` is where the attachment waits;
- * `worktreeId` is the worktree on screen, whose files a copy has to come from for its lines to
- * mean anything to the agent.
+ * in, however long or wherever it was copied from, and so does a field that answers `typed` with
+ * true: a draft whose text is read where it stands, with nowhere for a chip's to go. `boxId` is
+ * where the attachment waits; `worktreeId` is the worktree on screen, whose files a copy has to
+ * come from for its lines to mean anything to the agent.
  */
 export function useComposerPaste(
   boxId: string | null,
   worktreeId: string | null,
   takeText?: (text: string) => boolean,
+  typed?: () => boolean,
 ) {
   const store = useStoreInstance();
   // a paste event carries no modifiers, so the chord is noted on its keydown, which the browser
@@ -412,7 +414,7 @@ export function useComposerPaste(
       e.preventDefault();
       return attachFiles(store, boxId, files);
     }
-    if (plain.current) return;
+    if (plain.current || typed?.()) return;
     // text/plain, never text/html: an editor or a web page offers both, and the markup is style
     // noise the model has no use for
     const text = e.clipboardData.getData("text/plain");

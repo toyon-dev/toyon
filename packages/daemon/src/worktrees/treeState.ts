@@ -7,6 +7,13 @@
 // from so a shell can drop one that arrives late. The core (status entries, counts, HEAD) goes out
 // first and feeds the rail; the extras (line counts, the committed list, the turn's files) are
 // read behind it, and only for a worktree someone is subscribed to.
+//
+// Who pays for a read follows who can see its answer. A row a tab shows, or whose agent is
+// mid-turn, is read at every mark. A row a rail draws (its project is on some tab) is kept by the
+// floor: main moving and the clock read it a few rows per frame. A row of a project no tab is on
+// is read when its own tree moves and at no other time, so main moving under ten idle worktrees
+// of a monorepo nobody has open costs nothing, and the row is read when it is next opened. A row
+// whose read is slow is not read behind a frame sooner than ten times what that read took.
 
 import { type FSWatcher, watch } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -70,6 +77,9 @@ export interface TreeRecord {
   readAt: number;
   /** a mark landed and no read has answered it yet */
   staleSince?: number;
+  /** how many marks of the row's own (`invalidate`) the read behind this record had seen: a later
+   * one is owed a read wherever the row is, where main moving under it is not */
+  ownAt: number;
   /** the last read failed; `core` is the one before it */
   failedAt?: number;
   failures: number;
@@ -87,11 +97,13 @@ export interface TreeStateDeps {
   readable: (id: string) => ReadableWorktree | null;
   /** its directory is being removed, or is not there yet: nothing is read and nothing published */
   going: (id: string) => boolean;
-  /** a shell is subscribed to it (server/interest.ts): the extras are read and frames sent */
+  /** a shell is subscribed to it (server/interest.ts): the extras are read and frames sent. Not a
+   * look: a page keeps its last few rows subscribed, hidden or on another project, for as long
+   * as it is open */
   interested: (id: string) => boolean;
-  /** a tab shows it (runtime/idle.ts isShown) */
+  /** a tab shows it (runtime/idle.ts isShown): it is read at every mark */
   shown: (id: string) => boolean;
-  /** its agent is mid-turn (runtime busy): its tree is moving */
+  /** its agent is mid-turn (runtime busy): its tree is moving, and it is read like a shown one */
   live: (id: string) => boolean;
   /** main's behind against its upstream, with the trunk's own fetch cadence (Trunk.behind) */
   trunkBehind: (mainId: string, path: string) => Promise<{ behind?: number }>;
@@ -110,6 +122,7 @@ export interface TreeStateDeps {
   editDelayMs?: number;
   shellQuietMs?: number;
   watchDelayMs?: number;
+  retryMs?: number[];
   /** how old a row nobody looks at may get before the floor reads it again */
   floorMs?: number;
   /** how many such rows one frame reads */
@@ -128,6 +141,16 @@ export const FLOOR_BATCH = 3;
 export const SLOTS = { fg: 6, bg: 3, extras: 2 };
 /** how long a failed read waits before asking again, by how many times it has failed */
 const RETRY_MS = [2_000, 10_000, 60_000];
+/** A read nobody asked for waits this many times what the row's last read took, once a read
+ * takes long enough to ration. A status that takes a minute on a large monorepo is then a tenth
+ * of a core behind the frames and not all of one, and one that gave up at its ceiling is not
+ * started again minutes later. A read that answers inside a second earns no rest: a mark
+ * landing right after it is read at the next frame. */
+export const REST_FACTOR = 10;
+const SLOW_READ_MS = 1_000;
+const restAfter = (took: number) => (took < SLOW_READ_MS ? 0 : REST_FACTOR * took);
+/** the longest the floor leaves a row whose read keeps failing, having doubled up to it */
+const FAILED_REST_MAX_MS = 60 * 60_000;
 /** files stat'ed for the signature; past this the entries alone tell the states apart */
 const SIGNATURE_STATS = 2_000;
 
@@ -142,6 +165,9 @@ export class TreeState {
    * a mark answers for the tree before it, and is not kept */
   private marks = new Map<string, number>();
   private markAll = 0;
+  /** how many of a row's marks were its own (`invalidate`: its tree or its state moved, or
+   * someone asked), as against main moving under it */
+  private own = new Map<string, number>();
   private extrasRunning = new Map<string, Promise<void>>();
   /** rows whose read is inside its side effects: a refresh asked from there (a hand landing's
    * reset) would wait on the read it is part of, so it marks and lets the read's own rerun answer */
@@ -149,9 +175,14 @@ export class TreeState {
   private extrasAgain = new Set<string>();
   /** a signal's wait, by row: one timer, the latest signal's */
   private timers = new Map<string, { at: number; t: ReturnType<typeof setTimeout>; done: () => void }>();
-  /** when a row with no record last failed to read, so a frame does not read it again at once */
-  private lastFailure = new Map<string, number>();
+  /** until when the floor leaves a row alone: `REST_FACTOR` times a slow read, and after a
+   * failed one the floor's own wait, doubled each time */
+  private rest = new Map<string, number>();
+  /** failed reads in a row, by row, with or without a record */
+  private misses = new Map<string, number>();
   private retries = new Map<string, ReturnType<typeof setTimeout>>();
+  /** the frame the floor has booked for itself, for rows it had to pass over (comeBackAt) */
+  private comeBack: { at: number; t: ReturnType<typeof setTimeout> } | null = null;
   private watchers = new Map<string, { w: FSWatcher; ignore: Set<string> }>();
   /** every read and every wait set off behind a frame or a signal (settled awaits them) */
   private pending = new Set<Promise<unknown>>();
@@ -175,7 +206,7 @@ export class TreeState {
       // the rest keep their number until the floor reaches them.
       hub.on("repoTick", (repoId) => {
         for (const id of this.d.rowsOf(repoId)) {
-          this.invalidate(id);
+          this.mark(id);
           if (this.hot(id)) this.signal(id, "now");
         }
       }),
@@ -255,6 +286,12 @@ export class TreeState {
   /** the row's HEAD or files moved: a read in flight rereads when it lands, and the next ask
    * reads again. Nothing starts here. */
   invalidate(id: string): void {
+    this.own.set(id, (this.own.get(id) ?? 0) + 1);
+    this.mark(id);
+  }
+
+  /** the row's numbers are in doubt, its own tree untouched: main moved under it */
+  private mark(id: string): void {
     this.marks.set(id, (this.marks.get(id) ?? 0) + 1);
     const rec = this.records.get(id);
     if (rec) rec.staleSince ??= this.now();
@@ -276,7 +313,9 @@ export class TreeState {
   forget(id: string): void {
     this.records.delete(id);
     this.marks.delete(id);
-    this.lastFailure.delete(id);
+    this.own.delete(id);
+    this.rest.delete(id);
+    this.misses.delete(id);
     this.unwatch(id);
     const retry = this.retries.get(id);
     if (retry) {
@@ -304,13 +343,18 @@ export class TreeState {
     return this.reading.get(id) ?? this.readOne(id);
   }
 
-  /** For a frame being built: the rows named that have no record, the marked ones someone looks
-   * at, and a few of the rest, oldest first, whether marked or past the floor. Null when there is
-   * nothing to read; else true when any count moved, which the caller turns into a frame. */
-  refreshStale(ids: Iterable<string>): Promise<boolean> | null {
+  /** For a frame being built. Read now: a row someone looks at that is marked or past the floor.
+   * Read a few per frame, oldest first: the rows `drawn` says a rail shows, when they have no
+   * record, are marked or are past the floor, and any row whose own tree moved. A row no rail
+   * draws is otherwise left as last read: nothing shows its number, and it is read when it is
+   * next looked at. Null when there is nothing to read; else true when any count moved, which
+   * the caller turns into a frame. */
+  refreshStale(ids: Iterable<string>, drawn: (id: string) => boolean = () => true): Promise<boolean> | null {
     const reads: Promise<boolean>[] = [];
     const floor: Array<{ id: string; at: number }> = [];
     const now = this.now();
+    // when the first marked row passed over for its rest may be read
+    let later = Number.POSITIVE_INFINITY;
     for (const id of new Set(ids)) {
       if (this.d.going(id)) continue;
       const running = this.reading.get(id);
@@ -318,27 +362,58 @@ export class TreeState {
         reads.push(running.then(() => false));
         continue;
       }
+      const hot = this.hot(id);
+      const resting = this.resting(id);
       const rec = this.records.get(id);
       if (!rec) {
-        const failed = this.lastFailure.get(id);
-        if (failed === undefined || now - failed > (this.d.floorMs ?? FLOOR_MS)) reads.push(this.readMoved(id));
+        if (!resting && (hot || drawn(id))) reads.push(this.readMoved(id));
         continue;
       }
       if (rec.failedAt !== undefined && this.retries.has(id)) continue;
-      if (rec.staleSince !== undefined && this.hot(id)) {
-        reads.push(this.readMoved(id));
+      const stale = rec.staleSince !== undefined;
+      const old = now - rec.readAt > (this.d.floorMs ?? FLOOR_MS);
+      if (hot) {
+        // a mark is answered while someone looks, however long the read; the clock alone waits
+        // out the rest like any read nobody asked for
+        if (stale || (old && !resting)) reads.push(this.readMoved(id));
         continue;
       }
-      if (rec.staleSince !== undefined || now - rec.readAt > (this.d.floorMs ?? FLOOR_MS)) {
-        floor.push({ id, at: rec.staleSince ?? rec.readAt });
+      const owed = stale && this.ownOf(id) !== rec.ownAt;
+      const wanted = owed || ((stale || old) && drawn(id));
+      if (resting) {
+        if (wanted && stale) later = Math.min(later, this.rest.get(id) ?? now);
+        continue;
       }
+      if (wanted) floor.push({ id, at: rec.staleSince ?? rec.readAt });
     }
     floor.sort((a, b) => a.at - b.at);
-    for (const { id } of floor.slice(0, this.d.floorBatch ?? FLOOR_BATCH)) reads.push(this.readMoved(id));
+    const batch = this.d.floorBatch ?? FLOOR_BATCH;
+    for (const { id } of floor.slice(0, batch)) reads.push(this.readMoved(id));
+    if (later < Number.POSITIVE_INFINITY) this.comeBackAt(later);
     if (!reads.length) return null;
-    const all = Promise.all(reads).then((moved) => moved.some(Boolean));
+    const all = Promise.all(reads).then((moved) => {
+      if (floor.length > batch) this.comeBackAt(this.now());
+      return moved.some(Boolean);
+    });
     this.track(all);
     return all;
+  }
+
+  /** The floor is fed by frames, and none may be due: rows left over from a batch, and a marked
+   * row passed over while it rests, get a frame of their own, so a mark is answered in the end
+   * whether or not anything else happens. One timer, the soonest ask's. */
+  private comeBackAt(at: number): void {
+    if (this.stopped || (this.comeBack && this.comeBack.at <= at)) return;
+    if (this.comeBack) clearTimeout(this.comeBack.t);
+    const t = setTimeout(
+      () => {
+        this.comeBack = null;
+        this.d.hub.emit("worktreesChanged");
+      },
+      Math.max(0, at - this.now()),
+    );
+    t.unref?.();
+    this.comeBack = { at, t };
   }
 
   /** a sign the tree changed, coalesced by kind: an agent edit waits for the burst it is part of,
@@ -396,7 +471,12 @@ export class TreeState {
   watch(id: string): void {
     const r = this.d.readable(id);
     if (!r || this.watchers.has(id) || this.stopped) return;
-    if (this.records.has(id)) this.scheduleExtras(id);
+    const rec = this.records.get(id);
+    // a row nobody was drawing kept the numbers of its last read: opening it reads it again
+    // behind the frame those numbers go out on
+    const behind = rec && (rec.staleSince !== undefined || this.now() - rec.readAt > (this.d.floorMs ?? FLOOR_MS));
+    if (behind && !this.resting(id)) this.kick(id);
+    else if (rec) this.scheduleExtras(id);
     let timer: ReturnType<typeof setTimeout> | null = null;
     const ignore = new Set<string>([".git"]);
     let w: FSWatcher;
@@ -466,17 +546,30 @@ export class TreeState {
     }
     for (const t of this.retries.values()) clearTimeout(t);
     this.retries.clear();
+    if (this.comeBack) clearTimeout(this.comeBack.t);
+    this.comeBack = null;
     for (const id of [...this.watchers.keys()]) this.unwatch(id);
   }
 
   // ---- reads ----
 
+  /** someone is looking at it, or its agent is working in it. A subscription alone is neither:
+   * a hidden page holds three, and read as a look they kept three worktrees of a project nobody
+   * had open rereading every time its main moved. */
   private hot(id: string): boolean {
-    return this.d.interested(id) || this.d.shown(id) || this.d.live(id);
+    return this.d.shown(id) || this.d.live(id);
   }
 
   private markOf(id: string): number {
     return (this.marks.get(id) ?? 0) + this.markAll;
+  }
+
+  private ownOf(id: string): number {
+    return this.own.get(id) ?? 0;
+  }
+
+  private resting(id: string): boolean {
+    return this.now() < (this.rest.get(id) ?? 0);
   }
 
   private track<T>(p: Promise<T>): Promise<T> {
@@ -490,34 +583,53 @@ export class TreeState {
     return this.readOne(id).then((rec) => !!rec?.moved);
   }
 
-  /** one read, kept until it answers for the tree as it stands: a mark landing mid-read, or a side
-   * effect of the read moving HEAD, reads again before anything is stored or published */
+  /** One read. A row someone waits on (it is looked at, or its own tree was marked while the
+   * read was out) is read until the read answers for the tree as it stands: a mark landing
+   * mid-read, or a side effect of the read moving HEAD, reads again before anything is stored or
+   * published. A row nobody waits on that main moved under mid-read keeps what was read, still
+   * marked, for the floor to come back to: where a status outlasts the gap between two moves of
+   * main, reading again would never end. */
   private readOne(id: string): Promise<Read | null> {
     const read = (async (): Promise<Read | null> => {
       for (let reruns = 0; ; ) {
         const mark = this.markOf(id);
+        const own = this.ownOf(id);
         const r = this.d.readable(id);
         if (!r) {
           this.records.delete(id);
           return null;
         }
         let core: CoreRead | null = null;
-        const key = this.hot(id) ? "tree:fg" : "tree:bg";
+        let took = 0;
+        const key = this.hot(id) || this.d.interested(id) ? "tree:fg" : "tree:bg";
         const cap = key === "tree:fg" ? this.slots.fg : this.slots.bg;
         try {
-          core = await withSlot(key, cap, () => (this.d.readCore ?? this.readCore)(r));
+          core = await withSlot(key, cap, async () => {
+            const began = this.now();
+            try {
+              return await (this.d.readCore ?? this.readCore)(r);
+            } finally {
+              took = this.now() - began;
+            }
+          });
           treeReads.core++;
         } catch (e) {
           log.warn(id, "git state read failed", e);
         }
         if (this.d.going(id)) return null;
+        const waitedOn = () => this.hot(id) || this.ownOf(id) !== own;
+        if (!core) {
+          // an ask that arrived while the read was failing gets one more; past that a failure
+          // stands whatever moved meanwhile, since a status that gives up at its ceiling would
+          // otherwise run back to back for as long as main keeps moving
+          if (this.ownOf(id) !== own && reruns++ === 0) continue;
+          this.noteFailure(id, took);
+          return null;
+        }
         if (this.markOf(id) !== mark) {
           treeReads.superseded++;
-          continue;
-        }
-        if (!core) {
-          this.noteFailure(id);
-          return null;
+          if (waitedOn()) continue;
+          return this.store(id, core, { took, own, stale: true });
         }
         let again = false;
         if (r.wt) {
@@ -533,9 +645,10 @@ export class TreeState {
         if (again && reruns++ === 0) continue;
         if (this.markOf(id) !== mark) {
           treeReads.superseded++;
-          continue;
+          if (waitedOn()) continue;
+          return this.store(id, core, { took, own, stale: true });
         }
-        return this.store(id, core);
+        return this.store(id, core, { took, own });
       }
     })().finally(() => this.reading.delete(id));
     this.reading.set(id, read);
@@ -602,9 +715,10 @@ export class TreeState {
     return { counts, ...(committed ? { committed } : {}), ...(turn ? { turn } : {}) };
   };
 
-  /** keep an accepted read: the same tree as before refreshes the record's age and nothing else;
-   * a new one is a new version, announced to whoever is subscribed, with the extras to follow */
-  private store(id: string, read: CoreRead): Read {
+  /** keep a read: the same tree as before refreshes the record's age and nothing else; a new one
+   * is a new version, announced to whoever is subscribed, with the extras to follow. `stale` is a
+   * read main moved under: its numbers are kept and the mark stands. */
+  private store(id: string, read: CoreRead, at: { took: number; own: number; stale?: boolean }): Read {
     const { folded, signature, ...core } = read;
     const prev = this.records.get(id);
     const now = this.now();
@@ -613,10 +727,12 @@ export class TreeState {
       clearTimeout(retry);
       this.retries.delete(id);
     }
-    this.lastFailure.delete(id);
+    this.misses.delete(id);
+    this.rest.set(id, now + restAfter(at.took));
     if (prev && prev.signature === signature) {
       prev.readAt = now;
-      prev.staleSince = undefined;
+      prev.staleSince = at.stale ? (prev.staleSince ?? now) : undefined;
+      prev.ownAt = at.own;
       prev.failedAt = undefined;
       prev.failures = 0;
       return { ...prev, moved: false };
@@ -628,6 +744,8 @@ export class TreeState {
       signature,
       folded,
       readAt: now,
+      ...(at.stale ? { staleSince: prev?.staleSince ?? now } : {}),
+      ownAt: at.own,
       failures: 0,
     };
     this.records.set(id, rec);
@@ -639,27 +757,36 @@ export class TreeState {
     return { ...rec, moved };
   }
 
-  private noteFailure(id: string): void {
+  private noteFailure(id: string, took: number): void {
     treeReads.failed++;
     const now = this.now();
     const rec = this.records.get(id);
-    this.lastFailure.set(id, now);
+    const misses = (this.misses.get(id) ?? 0) + 1;
+    this.misses.set(id, misses);
+    // a failure answers the floor the way a read does: the next ask comes from a signal, a retry
+    // while someone looks, or the floor coming round again, later each time it fails, and never
+    // sooner than a read that slow rests
+    const wait = Math.min((this.d.floorMs ?? FLOOR_MS) * 2 ** (misses - 1), FAILED_REST_MAX_MS);
+    this.rest.set(id, now + Math.max(wait, restAfter(took)));
     if (rec) {
       if (rec.failedAt === undefined) log.warn(id, "git could not read the tree; the last numbers stand");
       rec.failedAt = now;
       rec.failures++;
-      // a failure answers the floor the way a read does: the next ask comes from a signal, a
-      // retry while someone looks, or the floor coming round again, not from every frame
       rec.readAt = now;
       rec.staleSince = undefined;
+      rec.ownAt = this.ownOf(id);
     }
     // asked again only while someone looks at it; a row nobody looks at waits for the next signal
-    if (!this.d.interested(id) || this.retries.has(id) || this.stopped) return;
-    const delay = RETRY_MS[Math.min((rec?.failures ?? 1) - 1, RETRY_MS.length - 1)] ?? RETRY_MS[0];
-    const t = setTimeout(() => {
-      this.retries.delete(id);
-      if (this.d.interested(id)) this.kick(id);
-    }, delay);
+    if (!this.hot(id) || this.retries.has(id) || this.stopped) return;
+    const retry = this.d.retryMs ?? RETRY_MS;
+    const delay = retry[Math.min(misses - 1, retry.length - 1)] ?? 0;
+    const t = setTimeout(
+      () => {
+        this.retries.delete(id);
+        if (this.hot(id)) this.kick(id);
+      },
+      Math.max(delay, restAfter(took)),
+    );
     t.unref?.();
     this.retries.set(id, t);
   }

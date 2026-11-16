@@ -233,11 +233,12 @@ function withCarry(context: string[] | undefined, c: Carried): string[] | undefi
   return [...(context ?? []), line];
 }
 
-/** every row and trunk a frame carries numbers for */
-const idsOf = (rows: readonly { id: string }[], trunks: Record<string, TrunkStatus>) => [
-  ...rows.map((r) => r.id),
-  ...Object.values(trunks).map((t) => t.id),
-];
+/** every row and trunk a frame carries numbers for, with the project each belongs to */
+const idsOf = (rows: readonly { id: string; repoId: string }[], trunks: Record<string, TrunkStatus>) =>
+  new Map([
+    ...rows.map((r) => [r.id, r.repoId] as const),
+    ...Object.entries(trunks).map(([repoId, t]) => [t.id, repoId] as const),
+  ]);
 
 export interface WorktreeServiceDeps {
   state: StateStore;
@@ -256,7 +257,8 @@ export interface WorktreeServiceDeps {
   /** a shell is subscribed to the worktree (server/interest.ts): the tree-state owner reads the
    * panel's tier for it and sends it frames */
   interested?: (id: string) => boolean;
-  /** a tab shows the row (runtime/idle.ts): its tree is read ahead of rows nobody looks at */
+  /** a tab shows the row (runtime/idle.ts): its tree is read at every mark, and its project's
+   * rows are the ones the floor keeps */
   shown?: (id: string) => boolean;
   /** what earlier worktrees built to pass the check, cloned in ahead of the install */
   cache?: Pick<ArtifactCache, "restore">;
@@ -2189,7 +2191,8 @@ export class WorktreeService {
   private async recountAll() {
     this.tree.invalidateAll();
     for (;;) {
-      const reading = this.tree.refreshStale(this.countedIds());
+      const ids = this.countedIds();
+      const reading = this.tree.refreshStale(ids.keys(), this.drawn(ids));
       if (!reading) return;
       await reading;
     }
@@ -2533,17 +2536,40 @@ export class WorktreeService {
   snapshot(): { rows: WorktreeStatus[]; trunks: Record<string, TrunkStatus> } {
     const rows = [...this.ownedRows(), ...this.foundRows()];
     const trunks = this.trunksNow();
-    const reading = this.tree.refreshStale(idsOf(rows, trunks));
-    if (reading) {
-      this.behind(
-        "tree",
-        reading.then((moved) => {
-          if (moved) this.d.hub.emit("worktreesChanged");
-        }),
-        "badge counts",
-      );
-    }
+    this.readBehind(idsOf(rows, trunks));
     return { rows, trunks };
+  }
+
+  /** A tab moved to another row, or came back into view. What it shows now, and the rows of a
+   * project it has just opened, were left as last read while no rail drew them: they are read
+   * behind this, without waiting for a frame something else happens to send. */
+  looked(): void {
+    this.readBehind(this.countedIds());
+  }
+
+  /** the reads a frame owes, set off behind it; a moved number sends a frame of its own */
+  private readBehind(ids: Map<string, string>) {
+    const reading = this.tree.refreshStale(ids.keys(), this.drawn(ids));
+    if (!reading) return;
+    this.behind(
+      "tree",
+      reading.then((moved) => {
+        if (moved) this.d.hub.emit("worktreesChanged");
+      }),
+      "badge counts",
+    );
+  }
+
+  /** Whether a rail draws the row: its project is one some tab is on. The rows of any other
+   * project are on no screen, so the floor leaves them as last read (treeState.ts refreshStale).
+   * Where nothing says what tabs show, every row counts as drawn. */
+  private drawn(ids: Map<string, string>): (id: string) => boolean {
+    const shown = this.d.shown;
+    if (!shown) return () => true;
+    const open = new Set<string>();
+    for (const wt of this.d.state.worktrees) if (shown(wt.id)) open.add(wt.repoId);
+    for (const [id, repoId] of ids) if (shown(id)) open.add(repoId);
+    return (id) => open.has(ids.get(id) ?? "");
   }
 
   /** the rows half of the frame (snapshot) */
@@ -2557,7 +2583,7 @@ export class WorktreeService {
   }
 
   /** every row and trunk a frame carries numbers for */
-  private countedIds(): string[] {
+  private countedIds(): Map<string, string> {
     return idsOf([...this.ownedRows(), ...this.foundCached()], this.trunksNow());
   }
 

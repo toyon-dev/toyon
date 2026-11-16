@@ -260,6 +260,9 @@ export const handlers: { [K in ClientMsg["t"]]: Handler<K> } = {
     // all on a reconnect, which would start every one of them as a daemon comes up. The agent is
     // there already, made by the subscribe the page sends ahead of its look.
     if (wt) s.runtime.agentFor(wt.id)?.opened();
+    // the row now on screen, and the rows of a project just opened, kept their last numbers
+    // while nothing drew them: they are read now
+    s.worktrees.looked();
   },
 
   seen(msg, _ctx, s) {

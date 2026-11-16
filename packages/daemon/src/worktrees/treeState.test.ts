@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Hub } from "../core/hub.ts";
 import { waitingFor } from "../core/limiter.ts";
 import type { ReadableWorktree } from "./service.ts";
-import { type CoreRead, TreeState, type TreeStateDeps } from "./treeState.ts";
+import { type CoreRead, FLOOR_MS, REST_FACTOR, TreeState, type TreeStateDeps } from "./treeState.ts";
 
 /** a core read answered by hand, so a test can mark the tree while a read is out */
 function gated() {
@@ -38,6 +38,7 @@ function world(over: Partial<TreeStateDeps> = {}) {
   hub.on("treeChanged", (id) => frames.push(id));
   hub.on("worktreesChanged", () => rows++);
   const interested = new Set<string>();
+  const shown = new Set<string>();
   const going = new Set<string>();
   const g = gated();
   const readable = (id: string): ReadableWorktree | null =>
@@ -58,7 +59,7 @@ function world(over: Partial<TreeStateDeps> = {}) {
     readable,
     going: (id) => going.has(id),
     interested: (id) => interested.has(id),
-    shown: () => false,
+    shown: (id) => shown.has(id),
     live: () => false,
     trunkBehind: async () => ({}),
     prOpen: () => false,
@@ -72,7 +73,7 @@ function world(over: Partial<TreeStateDeps> = {}) {
     ...over,
   };
   const tree = new TreeState(deps);
-  return { tree, hub, frames, rows: () => rows, interested, going, g, tick: (ms: number) => (now += ms) };
+  return { tree, hub, frames, rows: () => rows, interested, shown, going, g, tick: (ms: number) => (now += ms) };
 }
 
 const flush = () => Bun.sleep(0);
@@ -254,7 +255,7 @@ describe("TreeState", () => {
     const read = w.tree.refresh("a");
     w.g.answer(core("s1"));
     await read;
-    w.interested.add("a");
+    w.shown.add("a");
     w.tree.invalidateAll();
     expect(w.g.reads).toEqual(["a", "a"]);
     w.g.answer(core("s2", ["x"]));
@@ -307,7 +308,7 @@ describe("TreeState", () => {
       w.g.answer(core(`${id}1`));
       await read;
     }
-    w.interested.add("b");
+    w.shown.add("b");
     w.hub.emit("repoTick", "r");
     await flush();
     expect(w.g.reads).toEqual(["a", "b", "b"]);
@@ -337,5 +338,159 @@ describe("TreeState", () => {
     w.g.answer(core("c1"));
     await w.tree.settled();
     expect(waitingFor("tree:bg")).toBe(0);
+  });
+
+  test("main moving under a read nobody waits on keeps the numbers, still marked, and reads once", async () => {
+    const w = world();
+    const first = w.tree.refresh("a");
+    w.g.answer(core("s1", [], 1));
+    await first;
+    w.tick(FLOOR_MS + 1);
+    const floor = w.tree.refreshStale(["a"]);
+    w.hub.emit("repoTick", "r");
+    w.g.answer(core("s2", [], 2));
+    expect(await floor).toBe(true);
+    // the read is kept and not run again, and the mark stands for the floor's next pass
+    expect(w.g.reads).toEqual(["a", "a"]);
+    expect(w.tree.counts("a")).toEqual({ ahead: 2, behind: 0, dirty: 0 });
+    expect(w.tree.get("a")?.staleSince).toBeDefined();
+    const again = w.tree.refreshStale(["a"]);
+    w.g.answer(core("s2", [], 2));
+    await again;
+    expect(w.tree.get("a")?.staleSince).toBeUndefined();
+  });
+
+  test("main moving under a read of a row a tab shows reads it again", async () => {
+    const w = world();
+    w.shown.add("a");
+    const read = w.tree.refresh("a");
+    w.hub.emit("repoTick", "r");
+    w.g.answer(core("old", [], 1));
+    await flush();
+    expect(w.tree.get("a")).toBeUndefined();
+    w.g.answer(core("new", [], 2));
+    expect((await read)?.core.ahead).toBe(2);
+    await w.tree.settled();
+  });
+
+  test("a subscription is not a look: main moving leaves a subscribed row to the floor", async () => {
+    const w = world();
+    const read = w.tree.refresh("a");
+    w.g.answer(core("s1"));
+    await read;
+    w.interested.add("a");
+    w.hub.emit("repoTick", "r");
+    w.tree.invalidateAll();
+    await flush();
+    expect(w.g.reads).toEqual(["a"]);
+    const floor = w.tree.refreshStale(["a"]);
+    expect(w.g.reads).toEqual(["a", "a"]);
+    w.g.answer(core("s2", ["x"]));
+    await floor;
+    await w.tree.settled();
+    // the subscriber still gets the frame, at the floor's pace
+    expect(w.frames).toContain("a");
+  });
+
+  test("a row no rail draws is left as last read by the clock and by main, and read for a mark of its own", async () => {
+    const w = world();
+    const undrawn = () => false;
+    // never read: nothing shows the badge it would fill
+    expect(w.tree.refreshStale(["a"], undrawn)).toBeNull();
+    const first = w.tree.refresh("a");
+    w.g.answer(core("s1"));
+    await first;
+    w.tick(FLOOR_MS + 1);
+    w.hub.emit("repoTick", "r");
+    w.tree.invalidateAll();
+    expect(w.tree.refreshStale(["a"], undrawn)).toBeNull();
+    expect(w.g.reads).toEqual(["a"]);
+    // its own tree moved: that is read wherever the row is
+    w.tree.invalidate("a");
+    const owed = w.tree.refreshStale(["a"], undrawn);
+    expect(w.g.reads).toEqual(["a", "a"]);
+    w.g.answer(core("s2", ["x"]));
+    expect(await owed).toBe(true);
+    expect(w.tree.refreshStale(["a"], undrawn)).toBeNull();
+    // and a tab opening it reads what main moving left behind
+    w.hub.emit("repoTick", "r");
+    w.shown.add("a");
+    const opened = w.tree.refreshStale(["a"], undrawn);
+    expect(w.g.reads).toHaveLength(3);
+    w.g.answer(core("s2", ["x"]));
+    await opened;
+    await w.tree.settled();
+  });
+
+  test("the floor rests a row for ten times what its read took; a look does not wait", async () => {
+    const w = world();
+    const first = w.tree.refresh("a");
+    w.tick(60_000);
+    w.g.answer(core("s1"));
+    await first;
+    w.tick(FLOOR_MS + 1);
+    w.hub.emit("repoTick", "r");
+    // marked and past the floor, and still inside the rest its one-minute read earned
+    expect(w.tree.refreshStale(["a"])).toBeNull();
+    w.tick(REST_FACTOR * 60_000 - FLOOR_MS);
+    const floor = w.tree.refreshStale(["a"]);
+    expect(w.g.reads).toEqual(["a", "a"]);
+    w.tick(60_000);
+    w.g.answer(core("s1"));
+    await floor;
+    w.hub.emit("repoTick", "r");
+    expect(w.tree.refreshStale(["a"])).toBeNull();
+    w.shown.add("a");
+    const looked = w.tree.refreshStale(["a"]);
+    expect(w.g.reads).toHaveLength(3);
+    w.g.answer(core("s1"));
+    await looked;
+  });
+
+  test("a read that keeps failing is asked for later each time, and main moving does not restart it", async () => {
+    const fails: Array<() => void> = [];
+    const w = world({ readCore: () => new Promise((_, reject) => fails.push(() => reject(new Error("gave up")))) });
+    const read = w.tree.refreshStale(["a"]);
+    // main moves while the read is out: a failure stands, and is not read again at once
+    w.hub.emit("repoTick", "r");
+    fails.shift()?.();
+    expect(await read).toBe(false);
+    expect(fails).toHaveLength(0);
+    w.tick(FLOOR_MS - 1);
+    expect(w.tree.refreshStale(["a"])).toBeNull();
+    w.tick(2);
+    const second = w.tree.refreshStale(["a"]);
+    fails.shift()?.();
+    await second;
+    // twice the floor after the second miss
+    w.tick(FLOOR_MS + 1);
+    expect(w.tree.refreshStale(["a"])).toBeNull();
+    w.tick(FLOOR_MS);
+    expect(w.tree.refreshStale(["a"])).not.toBeNull();
+    fails.shift()?.();
+    await w.tree.settled();
+  });
+
+  test("a failed read is retried on its own only while a tab shows the row", async () => {
+    const fails: Array<() => void> = [];
+    const w = world({
+      retryMs: [10],
+      readCore: () => new Promise((_, reject) => fails.push(() => reject(new Error("gave up")))),
+    });
+    w.interested.add("a");
+    const read = w.tree.refresh("a");
+    fails.shift()?.();
+    expect(await read).toBeNull();
+    await Bun.sleep(30);
+    expect(fails).toHaveLength(0);
+    w.shown.add("a");
+    const looked = w.tree.refresh("a");
+    fails.shift()?.();
+    expect(await looked).toBeNull();
+    await Bun.sleep(30);
+    expect(fails).toHaveLength(1);
+    w.shown.delete("a");
+    fails.shift()?.();
+    await w.tree.settled();
   });
 });

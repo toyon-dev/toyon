@@ -1,6 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { Hub } from "../core/hub.ts";
 import { waitingFor } from "../core/limiter.ts";
+import { gitSpawns } from "../core/metrics.ts";
+import { GIT } from "../git/exec.ts";
 import type { ReadableWorktree } from "./service.ts";
 import { type CoreRead, FLOOR_MS, REST_FACTOR, TreeState, type TreeStateDeps } from "./treeState.ts";
 
@@ -492,5 +497,67 @@ describe("TreeState", () => {
     w.shown.delete("a");
     fails.shift()?.();
     await w.tree.settled();
+  });
+});
+
+describe("the core read, against a real repo", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+  const reader = (path: string) => {
+    const tree = new TreeState({
+      hub: new Hub(),
+      readable: (id) =>
+        ({ id, repoId: "r", path, name: id, defaultBranch: "main", base: "main", wt: { kind: "worktree" } }) as never,
+      going: () => false,
+      interested: () => false,
+      shown: () => false,
+      live: () => false,
+      trunkBehind: async () => ({}),
+      prOpen: () => false,
+      afterCore: async () => false,
+      rowsOf: () => ["a"],
+    });
+    return async () => {
+      const before = { ...gitSpawns };
+      const core = (await tree.refresh("a"))?.core;
+      const spawned = Object.entries(gitSpawns).flatMap(([cmd, n]) => {
+        const d = n - (before[cmd] ?? 0);
+        return d ? [[cmd, d] as const] : [];
+      });
+      return { core, spawned: Object.fromEntries(spawned) };
+    };
+  };
+
+  test("the commit and the branch come with the status: three git processes, none asked for either", async () => {
+    sh(repo, GIT, "checkout", "-q", "-b", "feat");
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    sh(repo, GIT, "add", "-A");
+    sh(repo, GIT, "commit", "-q", "-m", "one");
+    writeFileSync(join(repo, "b.txt"), "two\n");
+    const { core, spawned } = await reader(repo)();
+    expect(core).toEqual({
+      files: [{ path: "b.txt", xy: "??" }],
+      ahead: 1,
+      behind: 0,
+      head: sh(repo, GIT, "rev-parse", "HEAD"),
+      branch: "feat",
+    });
+    expect(spawned).toEqual({ "status --porcelain=v2": 1, "rev-list --count": 2 });
+  });
+
+  test("a detached head reads its commit and no branch", async () => {
+    sh(repo, GIT, "checkout", "-q", "--detach");
+    const { core } = await reader(repo)();
+    expect(core?.head).toBe(sh(repo, GIT, "rev-parse", "HEAD"));
+    expect(core).not.toHaveProperty("branch");
+    expect(core?.ahead).toBe(1);
+  });
+
+  test("a repo with no commits reads its branch and no commit", async () => {
+    const empty = join(dirname(repo), "empty");
+    sh(dirname(repo), GIT, "init", "-q", "-b", "main", empty);
+    writeFileSync(join(empty, "a.txt"), "one\n");
+    const { core } = await reader(empty)();
+    expect(core).toEqual({ files: [{ path: "a.txt", xy: "??" }], ahead: 0, behind: 0, branch: "main" });
   });
 });

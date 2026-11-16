@@ -40,36 +40,78 @@ describe("statusFiles", () => {
   });
 });
 
+// records as `git status --porcelain=v2 -z` writes them: the letters, then modes and object names
+// the parser reads past, then the path
+const OID = "0".repeat(40);
+const changed = (xy: string, path: string) => `1 ${xy} N... 100644 100644 100644 ${OID} ${OID} ${path}\0`;
+const renamed = (xy: string, path: string, from: string) =>
+  `2 ${xy} N... 100644 100644 100644 ${OID} ${OID} R100 ${path}\0${from}\0`;
+const unmerged = (xy: string, path: string) =>
+  `u ${xy} N... 100644 100644 100644 100644 ${OID} ${OID} ${OID} ${path}\0`;
+const untracked = (path: string) => `? ${path}\0`;
+
 describe("parsePorcelain", () => {
-  test("plain modified / added / untracked", () => {
-    expect(parsePorcelain(" M src/a.ts\0A  src/b.ts\0?? src/c.ts\0")).toEqual([
-      { xy: " M", path: "src/a.ts" },
-      { xy: "A ", path: "src/b.ts" },
-      { xy: "??", path: "src/c.ts" },
-    ]);
+  test("plain modified / added / untracked, with the letters in the short format's spelling", () => {
+    expect(parsePorcelain(changed(".M", "src/a.ts") + changed("A.", "src/b.ts") + untracked("src/c.ts"))).toEqual({
+      files: [
+        { xy: " M", path: "src/a.ts" },
+        { xy: "A ", path: "src/b.ts" },
+        { xy: "??", path: "src/c.ts" },
+      ],
+    });
   });
   test("renames report the new path, not the old one", () => {
-    expect(parsePorcelain("R  new.ts\0old.ts\0")).toEqual([{ xy: "R ", path: "new.ts" }]);
-    expect(parsePorcelain("RM new/dir/b.ts\0old/dir/a.ts\0 M c.ts\0")).toEqual([
+    expect(parsePorcelain(renamed("R.", "new.ts", "old.ts")).files).toEqual([{ xy: "R ", path: "new.ts" }]);
+    expect(parsePorcelain(renamed("RM", "new/dir/b.ts", "old/dir/a.ts") + changed(".M", "c.ts")).files).toEqual([
       { xy: "RM", path: "new/dir/b.ts" },
       { xy: " M", path: "c.ts" },
     ]);
+    // an old path that reads like a record is still the old path
+    expect(parsePorcelain(renamed("R.", "new.ts", "? old.ts") + untracked("c.ts")).files).toEqual([
+      { xy: "R ", path: "new.ts" },
+      { xy: "??", path: "c.ts" },
+    ]);
   });
   test("a path is taken whole: an arrow, a space, a quote, a newline", () => {
-    expect(parsePorcelain(' M notes/a -> b.md\0?? with space.ts\0?? a"b\nc.ts\0')).toEqual([
+    expect(
+      parsePorcelain(
+        changed(".M", "notes/a -> b.md") +
+          unmerged("UU", "both sides.ts") +
+          untracked("with space.ts") +
+          untracked('a"b\nc.ts'),
+      ).files,
+    ).toEqual([
       { xy: " M", path: "notes/a -> b.md" },
+      { xy: "UU", path: "both sides.ts" },
       { xy: "??", path: "with space.ts" },
       { xy: "??", path: 'a"b\nc.ts' },
     ]);
   });
-  test("empty output", () => {
-    expect(parsePorcelain("")).toEqual([]);
+  test("the branch header gives the commit and the branch", () => {
+    const sha = "883a31386286e1ee8786b1362a15a85c17c0a9df";
+    const upstream = "# branch.upstream origin/main\0# branch.ab +? -?\0";
+    expect(parsePorcelain(`# branch.oid ${sha}\0# branch.head feat/x\0${upstream}${untracked("a.ts")}`)).toEqual({
+      files: [{ xy: "??", path: "a.ts" }],
+      head: sha,
+      branch: "feat/x",
+    });
+    // no branch checked out
+    expect(parsePorcelain(`# branch.oid ${sha}\0# branch.head (detached)\0`)).toEqual({ files: [], head: sha });
+    // no commit yet: the branch has a name and nothing to point at
+    expect(parsePorcelain("# branch.oid (initial)\0# branch.head main\0")).toEqual({ files: [], branch: "main" });
+  });
+  test("empty output, and a record cut short", () => {
+    expect(parsePorcelain("")).toEqual({ files: [] });
+    expect(parsePorcelain("1 .M N... 100644\0")).toEqual({ files: [] });
   });
 });
 
 describe("foldDropped", () => {
   test("a path listed as deleted and untracked is one modified entry", () => {
-    expect(foldDropped(parsePorcelain("D  a.ts\0 M b.ts\0?? a.ts\0?? c.ts\0"))).toEqual({
+    const { files } = parsePorcelain(
+      changed("D.", "a.ts") + changed(".M", "b.ts") + untracked("a.ts") + untracked("c.ts"),
+    );
+    expect(foldDropped(files)).toEqual({
       files: [
         { xy: " M", path: "a.ts" },
         { xy: " M", path: "b.ts" },
@@ -79,8 +121,45 @@ describe("foldDropped", () => {
     });
   });
   test("a deletion on its own, or an untracked file on its own, is left as it is", () => {
-    const entries = parsePorcelain("D  a.ts\0?? b.ts\0");
-    expect(foldDropped(entries)).toEqual({ files: entries, dropped: [] });
+    const { files } = parsePorcelain(changed("D.", "a.ts") + untracked("b.ts"));
+    expect(foldDropped(files)).toEqual({ files, dropped: [] });
+  });
+});
+
+describe("where HEAD stands, from the status call", () => {
+  const { repo, cleanup } = tmpRepo();
+  afterAll(cleanup);
+
+  test("a branch checked out: its name and its commit, with the entries", async () => {
+    sh(repo, GIT, "checkout", "-q", "-b", "feat/x");
+    writeFileSync(join(repo, "new file.txt"), "one\n");
+    const read = await statusEntries(repo);
+    expect(read.head).toBe(sh(repo, GIT, "rev-parse", "HEAD"));
+    expect(read.branch).toBe("feat/x");
+    expect(read.files).toEqual([{ xy: "??", path: "new file.txt" }]);
+  });
+
+  test("a detached head: the commit and no branch", async () => {
+    sh(repo, GIT, "checkout", "-q", "--detach");
+    const read = await statusEntries(repo);
+    expect(read.head).toBe(sh(repo, GIT, "rev-parse", "HEAD"));
+    expect(read.branch).toBeUndefined();
+    expect(read.files).toEqual([{ xy: "??", path: "new file.txt" }]);
+  });
+
+  test("a repo with no commits: the branch and no commit", async () => {
+    const empty = join(dirname(repo), "empty");
+    sh(dirname(repo), GIT, "init", "-q", "-b", "trunk", empty);
+    writeFileSync(join(empty, "a.txt"), "one\n");
+    sh(empty, GIT, "add", "a.txt");
+    writeFileSync(join(empty, "b.txt"), "two\n");
+    const read = await statusEntries(empty);
+    expect(read.head).toBeUndefined();
+    expect(read.branch).toBe("trunk");
+    expect(read.files).toEqual([
+      { xy: "A ", path: "a.txt" },
+      { xy: "??", path: "b.txt" },
+    ]);
   });
 });
 

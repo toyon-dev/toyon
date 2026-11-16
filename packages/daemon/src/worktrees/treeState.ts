@@ -23,7 +23,7 @@ import type { Hub } from "../core/hub.ts";
 import { withSlot } from "../core/limiter.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import { noteSync, treeReads } from "../core/metrics.ts";
-import { git, gitRaw, nulSplit } from "../git/exec.ts";
+import { gitRaw, nulSplit } from "../git/exec.ts";
 import {
   aheadBehind,
   aheadUpstream,
@@ -43,8 +43,9 @@ export interface TreeCore {
   behind?: number;
   /** counted only while the row's PR is open */
   unpushed?: number;
+  /** the commit, as the status call read it; undefined in a repo with no commit yet */
   head?: string;
-  /** `branch --show-current`; undefined when detached */
+  /** the branch checked out, from the same call; undefined when detached */
   branch?: string;
 }
 
@@ -660,13 +661,12 @@ export class TreeState {
     // main is its own base; a found row with no branch has nothing to count against, and no
     // fetch to run on its behalf
     const countable = !isMain && (!!r.wt || !!r.branch);
-    const [entries, ab, unpushed, head, branch] = await Promise.all([
+    const [entries, ab, unpushed] = await Promise.all([
       statusEntries(r.path),
       isMain ? this.d.trunkBehind(r.id, r.path) : countable ? aheadBehind(r.path, r.base) : Promise.resolve({}),
       this.d.prOpen(r.id) ? aheadUpstream(r.path, r.branch) : Promise.resolve(null),
-      git(r.path, "rev-parse", "HEAD"),
-      git(r.path, "branch", "--show-current"),
     ]);
+    const { head, branch } = entries;
     const files = entries.files.map((f) => ({
       path: f.path,
       xy: f.xy,
@@ -685,7 +685,7 @@ export class TreeState {
     const signature = String(
       Bun.hash(
         [
-          head.ok ? head.out : "",
+          head ?? "",
           counts.ahead,
           counts.behind,
           counts.unpushed,
@@ -700,8 +700,8 @@ export class TreeState {
     return {
       files,
       ...counts,
-      ...(head.ok ? { head: head.out } : {}),
-      ...(branch.ok && branch.out ? { branch: branch.out } : {}),
+      ...(head ? { head } : {}),
+      ...(branch ? { branch } : {}),
       folded: entries.folded,
       signature,
     };

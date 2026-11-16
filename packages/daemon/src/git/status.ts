@@ -36,23 +36,40 @@ export async function statusFiles(worktreePath: string, ...only: string[]): Prom
   return (await readStatus(worktreePath, only)).files;
 }
 
-/** the status, with the paths that `foldDropped` read against HEAD: their counts are already on
- * the entry, and a diff over the index would report each as a whole file deleted */
-async function readStatus(
-  worktreePath: string,
-  only: string[],
-): Promise<{ files: GitFileStatus[]; folded: Set<string> }> {
-  // -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
-  // not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
-  // set of files this adds is the set a commit would have taken anyway. Literal pathspecs, so a
-  // file named with a `*` is that file and not a glob.
-  const args = ["status", "--porcelain", "-z", "-uall"];
+/** where HEAD stands, as the status's branch header says it */
+export interface Head {
+  /** the commit; absent in a repo with no commit yet */
+  head?: string;
+  /** the branch checked out, one with no commit yet included; absent when HEAD is detached */
+  branch?: string;
+}
+
+/** what one status call says: the entries, the paths that `foldDropped` read against HEAD (their
+ * counts are already on the entry, and a diff over the index would report each as a whole file
+ * deleted), and where HEAD stands */
+export interface StatusRead extends Head {
+  files: GitFileStatus[];
+  folded: Set<string>;
+}
+
+/** -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
+ * not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
+ * set of files this adds is the set a commit would have taken anyway. */
+export const STATUS_ARGS = ["status", "--porcelain=v2", "-z", "-uall"];
+
+async function readStatus(worktreePath: string, only: string[]): Promise<StatusRead> {
+  // --branch, so the process that reads the tree also says the commit and the branch: a core read
+  // wants both every time, and each asked on its own is a process of its own. --no-ahead-behind,
+  // because the branch header otherwise walks the history to count against the upstream, a number
+  // nobody here reads. Literal pathspecs, so a file named with a `*` is that file and not a glob.
+  const args = [...STATUS_ARGS, "--branch", "--no-ahead-behind"];
   const r = only.length
     ? await gitRaw(worktreePath, "--literal-pathspecs", ...args, "--", ...only)
     : await gitRaw(worktreePath, ...args);
   if (!r.ok) throw new Error(`git status failed: ${r.err}`);
-  const { files, dropped } = foldDropped(parsePorcelain(r.out));
-  if (dropped.length === 0) return { files, folded: new Set() };
+  const { files: entries, ...at } = parsePorcelain(r.out);
+  const { files, dropped } = foldDropped(entries);
+  if (dropped.length === 0) return { files, folded: new Set(), ...at };
   const counts = new Map(
     await Promise.all(dropped.map(async (p) => [p, await diskAgainstHead(worktreePath, p)] as const)),
   );
@@ -60,6 +77,7 @@ async function readStatus(
     // bytes that match HEAD are no change at all once `add -A` has put the file back
     files: files.filter((f) => counts.get(f.path) !== null).map((f) => ({ ...f, ...(counts.get(f.path) ?? {}) })),
     folded: new Set(dropped),
+    ...at,
   };
 }
 
@@ -93,22 +111,53 @@ async function diskAgainstHead(worktreePath: string, file: string): Promise<Line
   return counts ?? {};
 }
 
-/** `git status --porcelain -z` (v1) → entries. `-z`, because without it git quotes a name that
- * holds anything past ASCII and escapes its bytes in octal, and a name is then whatever the
- * unquoting made of it. A rename or copy is two records, the new path and then the old one, and
- * reports the NEW path: that is the file that exists on disk, and what read-file / discard act on. */
-export function parsePorcelain(out: string): GitFileStatus[] {
+/** how many space-separated fields come before the path, by the record's first letter: an
+ * ordinary change, a rename or copy, an unmerged path. The path is the rest, spaces and all. */
+const FIELDS_BEFORE_PATH: Record<string, number> = { "1": 8, "2": 9, u: 10 };
+
+/** where the text after `record`'s first `n` space-separated fields starts; -1 when it has fewer */
+function afterFields(record: string, n: number): number {
+  let at = 0;
+  for (let i = 0; i < n; i++) {
+    at = record.indexOf(" ", at) + 1;
+    if (at === 0) return -1;
+  }
+  return at;
+}
+
+/** `git status --porcelain=v2 -z` → entries, and the commit and branch when `--branch` was asked
+ * for. `-z`, because without it git quotes a name that holds anything past ASCII and escapes its
+ * bytes in octal, and a name is then whatever the unquoting made of it. The two status letters
+ * are given in the short format's spelling, a space where v2 prints a dot and `??` for an
+ * untracked file, since that is the form every reader of `xy` matches on. A rename or copy is two
+ * records, the new path and then the old one, and reports the NEW path: that is the file that
+ * exists on disk, and what read-file / discard act on. */
+export function parsePorcelain(out: string): Head & { files: GitFileStatus[] } {
   const files: GitFileStatus[] = [];
+  const at: Head = {};
   const records = out.split("\0");
   for (let i = 0; i < records.length; i++) {
     const record = records[i] ?? "";
-    if (record.length <= 3) continue;
-    const xy = record.slice(0, 2);
-    files.push({ xy, path: record.slice(3) });
-    // the old path follows as a record of its own, with no status in front of it
-    if (xy.includes("R") || xy.includes("C")) i++;
+    const kind = record[0] ?? "";
+    if (kind === "#") {
+      // git writes a word in brackets where there is no value: `(initial)` before the first
+      // commit, `(detached)` with no branch checked out. A branch of that very name reads as none.
+      const [, key, value] = record.split(" ");
+      if (key === "branch.oid" && value !== "(initial)") at.head = value;
+      else if (key === "branch.head" && value !== "(detached)") at.branch = value;
+      continue;
+    }
+    if (kind === "?") {
+      files.push({ xy: "??", path: record.slice(2) });
+      continue;
+    }
+    const start = afterFields(record, FIELDS_BEFORE_PATH[kind] ?? 0);
+    if (start <= 0) continue;
+    files.push({ xy: record.slice(2, 4).replaceAll(".", " "), path: record.slice(start) });
+    // the old path follows as a record of its own, with nothing in front of it
+    if (kind === "2") i++;
   }
-  return files;
+  return { files, ...at };
 }
 
 /** File content at merge-base with the default branch (empty string for new files). */
@@ -202,9 +251,9 @@ const MAX_UNTRACKED_COUNTED = 500;
  * size cap could still be a gigabyte, and the loop has to stay answerable while they are read */
 export const UNTRACKED_BYTES_MAX = 16 * 1024 * 1024;
 
-/** the uncommitted files as path and status, and the paths folded against HEAD (readStatus), for
- * a reader that counts their lines later or not at all */
-export function statusEntries(worktreePath: string): Promise<{ files: GitFileStatus[]; folded: Set<string> }> {
+/** the uncommitted files as path and status, the paths folded against HEAD and where HEAD stands
+ * (readStatus), for a reader that counts their lines later or not at all */
+export function statusEntries(worktreePath: string): Promise<StatusRead> {
   return readStatus(worktreePath, []);
 }
 

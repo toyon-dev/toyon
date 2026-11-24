@@ -195,10 +195,18 @@ export class Ship {
    * still landing. A verdict gone ahead of the mark is work with no verdict, which the box reads
    * as a check to run. */
   private async settleLanded(wt: WorktreeInfo, noted: LandMark | undefined): Promise<string | undefined> {
-    const repo = this.d.state.repo(wt.repoId);
-    const f = wt.kind === "main" || !repo ? null : await this.landedFacts(wt);
+    const f = wt.kind === "main" ? null : await this.landedFacts(wt);
     if (noted) wt.lands = [...(wt.lands ?? []), noted];
     delete wt.landing;
+    return this.markLanded(wt, f);
+  }
+
+  /** The landed mark after a landing, by the rule, from facts read a moment ago, and the frame
+   * that says so. Nothing is awaited in here, which is what lets settleLanded put the landing on
+   * the record in the same step. Returns what held the mark back, or nothing when the row is
+   * landed. */
+  private markLanded(wt: WorktreeInfo, f: LandedFacts | null): string | undefined {
+    const repo = this.d.state.repo(wt.repoId);
     // the work is on the base by now, so a mark held back is news: the landed row says what held
     // it, and the log keeps it for a landing with no row (one git did by hand)
     let held: string | undefined;
@@ -819,6 +827,21 @@ export class Ship {
     return { mark: noted, held: await this.settleLanded(wt, noted) };
   }
 
+  /** The tail of settle for a landing that went on the record ahead of it (prMergedOp): the
+   * restart, the recount and the mark by the rule again, since the base and the branch both moved
+   * under the one the record was written with. The verdict is left alone: the one the landing
+   * answered went with the record, and one written since is about work done since. */
+  private async settleRecorded(
+    wt: WorktreeInfo,
+    repo: RepoInfo,
+    noted: LandMark | undefined,
+    stay: boolean,
+  ): Promise<Pick<Landed, "mark" | "held">> {
+    if (!stay) await this.restartFromMain(wt, baseOf(repo));
+    this.d.tree.invalidateAll();
+    return { mark: noted, held: this.markLanded(wt, await this.landedFacts(wt)) };
+  }
+
   /** A landing for the record, with its tip kept under a ref: the branch restarts from main after
    * it, and a squash never puts these commits on main, yet an archived worktree's page still
    * lists them. The mark says what landed in one line each: a merged PR's title, since GitHub
@@ -937,13 +960,25 @@ export class Ship {
     // read before the base moves: a merge that kept the commits' hashes puts them on it, and
     // the range would then read as nothing to keep
     const read = carried === undefined ? await landingMark(wt.path, base) : carried;
+    // The merge is the landing, and the fetch below takes seconds on a large repo: when what the
+    // PR took is known without it and HEAD holds nothing more, the landing goes on the record
+    // now, with its tip at HEAD, and the row reads landed while main follows. Outside the repo
+    // lock, which can be minutes behind another row's commit hook: this moves no checkout.
+    const early = (await this.prTookKnown(wt, base)) && !(await this.pastPr(wt, base));
+    const noted = early
+      ? await this.landMark(repo, wt, await this.prMark(wt, base, read, null), { pr: wt.pr })
+      : undefined;
+    if (early) await this.settleLanded(wt, noted);
     const pulled = await this.d.trunk.pull(repo.id, w);
-    // after the pull, whose fetch is what puts a merge that kept the hashes on the base
+    // after the pull, whose fetch is what puts a merge that kept the hashes on the base; and read
+    // again for a landing recorded ahead of it, since a commit made under the pull is past the PR
     const past = await this.pastPr(wt, base);
     // Origin's main, fetched by the pull, whatever the checkout here could do with it. The branch
     // stays under commits the PR never had: the restart would take it off them.
     const settled = await withRepoLock(repo.path, async () =>
-      this.settle(wt, repo, await this.prMark(wt, base, read, past), { pr: wt.pr, stay: !!past }),
+      early
+        ? this.settleRecorded(wt, repo, noted, !!past)
+        : this.settle(wt, repo, await this.prMark(wt, base, read, past), { pr: wt.pr, stay: !!past }),
     );
     const took = pulled.ok
       ? `${br} here ${pulled.moved ? "pulled it" : "has it"}`
@@ -971,6 +1006,20 @@ export class Ship {
     const own = read ?? (await handLanding(wt.path, wt.branch, base, wt.lands?.at(-1)?.tip));
     const mark = own ?? (wt.pr ? await this.tipMark(wt) : null);
     return mark && past?.tip ? { ...mark, tip: past.tip } : mark;
+  }
+
+  /** Whether pastPr's answer now is the one it would give after a fetch of origin. It is when
+   * the commit GitHub named as the PR's head is in this clone: a fetch then only adds to what the
+   * base and the PR are known to hold, so commits read as taken stay taken. It is when HEAD holds
+   * nothing the base lacks, and for an adopted branch, where nothing is ever past the PR. With no
+   * head named, or one this clone never fetched (a suggestion taken on GitHub), origin's copy of
+   * the branch is a guess the fetch may correct, and a landing recorded on it could call commits
+   * landed that the PR never had. */
+  private async prTookKnown(wt: WorktreeInfo, base: string): Promise<boolean> {
+    if (!hasOwnBranch(wt)) return true;
+    const head = wt.pr?.head;
+    if (head && (await commitOf(wt.path, head))) return true;
+    return (await aheadOf(wt.path, base)) === 0;
   }
 
   /** The commits a merged PR never had: on HEAD, and in neither the base nor the PR's head, as

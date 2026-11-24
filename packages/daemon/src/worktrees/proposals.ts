@@ -4,16 +4,19 @@
 
 import type { TranscriptEntry } from "../agent/transcript.ts";
 
-/** proposals one turn may make, answered or not: a loop ends here */
+/** cards one turn may raise, answered or not: a loop ends here */
 export const PER_TURN_MAX = 3;
 
-/** how many proposals the turn under way has made, declined ones included */
+/** How many cards of its own the turn under way has put before the person, declined ones
+ * included: a list proposed outside plan mode, or a held one shown since. A list held for a plan
+ * card costs nothing: it rides a card the person answers, and a plan redrafted around their
+ * answers or sent back for changes needs a new list each round, however long the turn runs. */
 export function proposedThisTurn(entries: readonly TranscriptEntry[]): number {
   let n = 0;
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!.event;
     if (e.type === "turn-start") break;
-    if (e.type === "handoff-proposed") n++;
+    if (e.type === "handoff-shown" || (e.type === "handoff-proposed" && !e.held)) n++;
   }
   return n;
 }

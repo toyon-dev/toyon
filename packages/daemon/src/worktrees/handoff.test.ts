@@ -277,6 +277,19 @@ describe("the tool", () => {
     expect(recorded(a.id, "handoff-declined")).toHaveLength(3);
   });
 
+  test("a list held for a plan card does not spend the turn's proposals", async () => {
+    const repoId = await registered();
+    const a = await w.worktrees.create(repoId, "task", { mode: "plan" });
+    agentOf(a.id).note({ type: "turn-start", ts: 1 });
+    // a plan redrafted around the person's answers hands its list over again each round, and a
+    // held list gives way to the next one: none of them is a card the person has to answer
+    for (let round = 0; round < 5; round++) expect(await call(a.id, piece())).toEqual({ text: HELD });
+    expect(recorded(a.id, "handoff-declined")).toHaveLength(4);
+    // one that went back with its plan is the same: the next draft still takes a list
+    await w.handoff.answer(a.id, lastProposal(a.id).id, false);
+    expect(await call(a.id, piece())).toEqual({ text: HELD });
+  });
+
   test("the briefs file a shown list sits on is written where nothing can be awaited, and a blank after is refused", async () => {
     const repoId = await registered();
     const a = await w.worktrees.create(repoId, "task", { mode: "plan" });

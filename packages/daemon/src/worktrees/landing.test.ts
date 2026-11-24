@@ -325,22 +325,112 @@ describe("LandingService", () => {
     expect(w.judged.length).toBe(1);
   });
 
-  test("a message that arrives while the check is out is dropped once a new turn started", async () => {
-    let answer: (v: LandVerdict | null) => void = () => {};
-    const slow = new Promise<LandVerdict | null>((r) => {
-      answer = r;
+  test("a turn that starts while the check is out leaves it running, and one that leaves the tree alone keeps its answer and the message", async () => {
+    w = world({
+      check: "bun run check",
+      slow: true,
+      verdict: { ready: true, subject: "add the feature", recap: "Added the feature." },
+      recap: async () => "Answered a question; nothing changed.",
+      transcript: answered("what does the feature do?", "It adds a file."),
     });
-    w = world({ check: "bun run check", slow: true, judge: () => slow });
+    const passed: string[] = [];
+    w.hub.on("checkPassed", (id) => passed.push(id));
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => w?.started.length === 1 && !!w.wt()?.landing?.subject);
+    // the sentence the answer carried is the first turn's
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Added the feature.");
+    w.hub.emit("agentStatus", "w1", "working");
+    expect(w.wt()?.landing).toMatchObject({ check: "pending", subject: "add the feature" });
+    expect(w.wt()?.runs).toEqual([expect.objectContaining({ kind: "check", status: "running" })]);
+    w.hub.emit("agentStatus", "w1", "idle");
+    await w.settle("done", 200, false);
+    await w.recapSettled();
+    // the turn that only asked gets its own sentence, and neither the check nor the question again
+    expect(w.wt()?.lastTurn).toMatchObject({ at: 200, recap: { text: "Answered a question; nothing changed." } });
+    expect(w.wt()?.landing?.check).toBe("pending");
+    w.end("w1");
+    await until(() => w?.wt()?.landing?.check === "pass");
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.judged.length).toBe(1);
+    expect(passed).toEqual(["w1"]);
+    expect(w.wt()?.landing).toMatchObject({ ready: true, subject: "add the feature" });
+    expect(w.wt()?.landing?.fingerprint).toBe(await treeFingerprint(w.wtPath));
+    expect(w.wt()?.lastTurn?.recap?.text).toBe("Answered a question; nothing changed.");
+  });
+
+  test("a check that passes under a turn still running is the verdict, while the tree is the one it started on", async () => {
+    w = world({ check: "bun run check", slow: true, verdict: { ready: true, subject: "add the feature" } });
     w.dirty();
     await w.settle("done", 100, false);
     await until(() => w?.started.length === 1);
     w.hub.emit("agentStatus", "w1", "working");
-    expect(w.wt()?.landing).toBeUndefined();
-    answer({ ready: true, subject: "add the feature" });
     w.end("w1");
-    await Bun.sleep(50);
+    await until(() => w?.wt()?.landing?.check === "pass");
+    expect(w.wt()?.landing).toMatchObject({ ready: true, subject: "add the feature" });
+  });
+
+  test("a file that moves under the turn drops the check still out, and the turn's end runs it on what the turn left", async () => {
+    w = world({ check: "bun run check", slow: true, verdict: { ready: true, subject: "add the feature" } });
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => w?.started.length === 1 && !!w.wt()?.landing?.subject);
+    // a hand's edit under a check at rest is the person's to judge: the run goes on
+    w.hub.emit("treeLeftCheck", "w1");
+    expect(w.wt()?.landing?.check).toBe("pending");
+    w.hub.emit("agentStatus", "w1", "working");
+    writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+    w.hub.emit("treeLeftCheck", "w1");
     expect(w.wt()?.landing).toBeUndefined();
-    expect(w.wt()?.lastTurn?.recap).toBeUndefined();
+    expect(w.wt()?.runs).toBeUndefined();
+    w.end("w1");
+    await Bun.sleep(30);
+    expect(w.wt()?.landing).toBeUndefined();
+    w.hub.emit("agentStatus", "w1", "idle");
+    await w.settle("done", 200, false);
+    await until(() => w?.started.length === 2);
+    w.end("w1");
+    await until(() => w?.wt()?.landing?.check === "pass");
+    expect(w.wt()?.landing).toMatchObject({ at: 200, ready: true });
+  });
+
+  test("a check whose answer finds the tree moved under the turn beside it is dropped, pass or fail", async () => {
+    w = world({ check: "bun run check", slow: true, exit: 1, verdict: { ready: true, subject: "add the feature" } });
+    const passed: string[] = [];
+    w.hub.on("checkPassed", (id) => passed.push(id));
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => w?.started.length === 1);
+    w.hub.emit("agentStatus", "w1", "working");
+    writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+    w.end("w1");
+    await until(() => w?.wt()?.landing === undefined);
+    expect(w.fixed).toEqual([]);
+    expect(passed).toEqual([]);
+    expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
+  });
+
+  test("a check that fails under a turn that left the tree alone is told once, and the turn's end does not run it again", async () => {
+    w = world({
+      check: "bun run check",
+      slow: true,
+      exit: 1,
+      output: "1 failed\n",
+      verdict: { ready: true, subject: "add the feature" },
+    });
+    w.dirty();
+    await w.settle("done", 100, false);
+    await until(() => w?.started.length === 1);
+    w.hub.emit("agentStatus", "w1", "working");
+    w.end("w1");
+    await until(() => w?.wt()?.landing?.check === "fail");
+    expect(w.fixed.length).toBe(1);
+    w.hub.emit("agentStatus", "w1", "idle");
+    await w.settle("done", 200, false);
+    await Bun.sleep(50);
+    expect(w.checks).toEqual(["bun run check"]);
+    expect(w.judged.length).toBe(1);
+    expect(w.wt()?.landing).toMatchObject({ check: "fail", checkTail: "1 failed", subject: "add the feature" });
   });
 
   test("the question reads the turns since the branch's last commit, with the next commit's files named as the message's own", async () => {
@@ -563,23 +653,31 @@ describe("LandingService", () => {
     expect(w.wt()?.lastTurn?.recap).toBeUndefined();
   });
 
-  test("a new turn starting clears it, and an answer to the old turn is dropped", async () => {
-    let release: (v: LandVerdict) => void = () => {};
-    const slow = new Promise<LandVerdict>((r) => {
-      release = r;
-    });
-    w = world({ judge: () => slow });
-    w.dirty();
-    // the verdict is still being judged when the agent starts again
-    await w.settle("done", 100, false);
-    for (let i = 0; i < 200 && !w.judged.length; i++) await Bun.sleep(10);
-    expect(w.judged.length).toBe(1);
-    w.hub.emit("agentStatus", "w1", "working");
-    release({ ready: true, subject: "add the feature" });
-    await slow;
-    await Bun.sleep(30);
-    expect(w.wt()?.landing).toBeUndefined();
-    expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
+  test("an answer that comes under a new turn stands while the tree is as it was, and is dropped once a file moved", async () => {
+    for (const moves of [false, true]) {
+      let release: (v: LandVerdict) => void = () => {};
+      const slow = new Promise<LandVerdict>((r) => {
+        release = r;
+      });
+      w = world({ judge: () => slow });
+      w.dirty();
+      // the verdict is still being judged when the agent starts again
+      await w.settle("done", 100, false);
+      for (let i = 0; i < 200 && !w.judged.length; i++) await Bun.sleep(10);
+      expect(w.judged.length).toBe(1);
+      w.hub.emit("agentStatus", "w1", "working");
+      expect(w.wt()?.landing?.check).toBe("pending");
+      if (moves) writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+      release({ ready: true, subject: "add the feature", recap: "Added the feature." });
+      await slow;
+      await until(() => w?.wt()?.landing?.check !== "pending");
+      if (moves) {
+        expect(w.wt()?.landing).toBeUndefined();
+        expect(w.set.every((l) => l === undefined || l.check === "pending")).toBe(true);
+      } else expect(w.wt()?.landing).toMatchObject({ check: "none", ready: true, subject: "add the feature" });
+      w.cleanup();
+      w = undefined;
+    }
   });
 
   test("a clean tree after a finished turn asks the answer question and the turn gets its sentence", async () => {
@@ -717,9 +815,11 @@ describe("LandingService", () => {
     await w.lineUp(ids);
     await until(() => w?.started.length === 2);
     expect(w.started).toEqual(["w1", "w2"]);
-    // a new turn on w3 while it stands in line: its verdict and its run are cleared, and the
-    // check it was waiting to run is about a tree that is changing
+    // a new turn on w3 while it stands in line, and a file moved under it: its verdict and its
+    // run are cleared, and the check it was waiting to run is about a tree that is changing
     w.hub.emit("agentStatus", "w3", "working");
+    expect(w.wt("w3")?.landing?.check).toBe("pending");
+    w.hub.emit("treeLeftCheck", "w3");
     expect(w.wt("w3")?.landing).toBeUndefined();
     expect(w.wt("w3")?.runs).toBeUndefined();
     w.end("w1");
@@ -731,17 +831,22 @@ describe("LandingService", () => {
     expect(w.wt("w3")?.runs).toBeUndefined();
   });
 
-  test("judge() is refused mid-turn and with nothing to land", async () => {
-    w = world({ verdict: { ready: true, subject: "add the feature" } });
+  test("judge() is refused with nothing to land; mid-turn it runs beside the turn, for the tree as it stands", async () => {
+    w = world({ check: "bun run check", slow: true, verdict: { ready: true, subject: "add the feature" } });
     await expect(w.service.judge("w1")).rejects.toThrow("nothing to check");
     w.dirty();
     w.hub.emit("agentStatus", "w1", "working");
-    await expect(w.service.judge("w1")).rejects.toThrow("wait for the turn");
-    w.hub.emit("agentStatus", "w1", "idle");
-    const settledAt = w.settled();
     await w.service.judge("w1");
-    await settledAt;
-    expect(w.wt()?.landing?.subject).toBe("add the feature");
+    await until(() => w?.started.length === 1);
+    w.end("w1");
+    await until(() => w?.wt()?.landing?.check === "pass");
+    expect(w.wt()?.landing).toMatchObject({ ready: true, subject: "add the feature" });
+    // asked again under the same turn, which this time writes a file while the check is out
+    await w.service.judge("w1");
+    await until(() => w?.started.length === 2);
+    writeFileSync(join(w.wtPath, "more.txt"), "y\n");
+    w.end("w1");
+    await until(() => w?.wt()?.landing === undefined);
   });
 
   test("recheck() runs the check quietly and keeps the words; a row with no verdict is left alone", async () => {

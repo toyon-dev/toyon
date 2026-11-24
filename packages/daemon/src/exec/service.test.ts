@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Shipping, WorktreeInfo } from "@toyon/shared";
+import type { WorktreeInfo } from "@toyon/shared";
 import { CHECK_TOOL, SHELL_TOOL } from "@toyon/shared";
 import { FakeAgent } from "../../test/helpers/fakes.ts";
 import { ensureDirs, makePaths } from "../core/paths.ts";
@@ -16,7 +16,7 @@ import { ExecService } from "./service.ts";
 const home = mkdtempSync(join(tmpdir(), "toyon-exec-"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
-function world(liveAfterMs?: number, shipping?: () => Shipping | undefined, timeoutMs?: number) {
+function world(liveAfterMs?: number, moving?: () => Promise<void> | undefined, timeoutMs?: number) {
   const dir = mkdtempSync(join(home, "wt-"));
   const paths = makePaths(mkdtempSync(join(home, "h-")));
   ensureDirs(paths);
@@ -48,7 +48,7 @@ function world(liveAfterMs?: number, shipping?: () => Shipping | undefined, time
     runtime: runtime as unknown as RuntimeRegistry,
     liveAfterMs,
     timeoutMs,
-    shipping,
+    moving,
   });
   return { exec, agent, dir, holds, ledger };
 }
@@ -97,11 +97,22 @@ function toolIdOf(agent: FakeAgent, at = 0): string {
 }
 
 describe("ExecService.run", () => {
-  test("a command typed while a landing op is out is refused before it runs", () => {
-    const { exec, agent, holds } = world(undefined, () => ({ op: "land", step: "rebasing onto main" }));
-    expect(() => exec.run("w1", "echo hi")).toThrow("a land is running here; run the command once it is done");
+  test("a command typed while git is rewriting the tree starts when that is over", async () => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const { exec, agent } = world(undefined, () => promise);
+    exec.run("w1", "echo hi");
+    await Bun.sleep(50);
     expect(agent.recorded).toEqual([]);
-    expect(holds).toEqual([]);
+    resolve();
+    await until(agent, () => agent.recorded.some((e) => e.type === "tool-end"));
+    expect(agent.recorded.at(-1)).toMatchObject({ type: "tool-end", output: expect.stringContaining("hi") });
+  });
+
+  test("a command typed with nothing rewriting the tree runs at once, a landing op out or not", async () => {
+    const { exec, agent } = world(undefined, () => undefined);
+    exec.run("w1", "echo hi");
+    expect(agent.recorded[0]).toMatchObject({ type: "tool-start" });
+    await until(agent, () => agent.recorded.some((e) => e.type === "tool-end"));
   });
 });
 

@@ -2149,6 +2149,10 @@ export class WorktreeService {
     return this.ship.shippingOf(id);
   }
 
+  movingOf(id: string) {
+    return this.ship.movingOf(id);
+  }
+
   /** The boot pane's "ask the agent to fix it", for a dev server that crashed or never answered:
    * the diagnosis, the command and the output tail, as the daemon holds them. The lead has no
    * task yet, so its fix is the worktree its box would start, with the diagnosis as its task: the

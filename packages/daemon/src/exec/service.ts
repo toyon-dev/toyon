@@ -12,8 +12,7 @@ import {
   type Fixable,
   SHELL_TOOL,
   type ShellInput,
-  type Shipping,
-  shipNoun,
+  type WorktreeInfo,
 } from "@toyon/shared";
 import type { Subprocess } from "bun";
 import type { AgentAdapter } from "../agent/adapter.ts";
@@ -70,9 +69,9 @@ export class ExecService {
       runtime: RuntimeRegistry;
       liveAfterMs?: number;
       timeoutMs?: number;
-      /** the landing op out on a worktree, if any: a command typed while one runs is refused,
-       * since it would run in a tree git is rewriting */
-      shipping?: (worktreeId: string) => Shipping | undefined;
+      /** settles when git is done rewriting the worktree's files, nothing when it is not at
+       * them: a command typed in that stretch starts after it */
+      moving?: (worktreeId: string) => Promise<void> | undefined;
     },
   ) {}
 
@@ -85,14 +84,34 @@ export class ExecService {
     return agent;
   }
 
-  /** start the command; the result reaches the shell through the agent stream, not a reply.
-   * Refused while a landing op is out here: a chat sent as the op rewrites the tree waits in the
-   * queue for that step, but a command has no queue, and the line under the box says when to
-   * send it again. */
+  /** start the command; the result reaches the shell through the agent stream, not a reply. It
+   * runs under a landing op as a message does: a commit hook, a fetch and a push move no file.
+   * Typed in the stretch where git is rewriting the tree (a rebase, a merge, a sync's carry) it
+   * starts when that is over, as a chat sent then does, rather than read a tree that is half one
+   * commit and half another. */
   run(worktreeId: string, command: string): void {
-    const op = this.deps.shipping?.(worktreeId);
-    if (op) throw new UserError(`${shipNoun(op.op)} is running here; run the command once it is done`);
-    fireAndForget(worktreeId, this.exec(worktreeId, command), `exec ${command}`);
+    const moving = this.deps.moving?.(worktreeId);
+    if (!moving) {
+      fireAndForget(worktreeId, this.exec(worktreeId, command), `exec ${command}`);
+      return;
+    }
+    // refused at the press, as a toast, and not after a wait nobody is reading the end of
+    this.runnable(worktreeId);
+    fireAndForget(
+      worktreeId,
+      moving.then(() => this.exec(worktreeId, command)),
+      `exec ${command}`,
+    );
+  }
+
+  /** the worktree a command may run in and the agent whose transcript takes its rows, or the
+   * refusal the caller reads as a toast */
+  private runnable(worktreeId: string): { wt: WorktreeInfo; agent: AgentAdapter } {
+    const wt = this.deps.state.requireWorktree(worktreeId);
+    // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
+    // main checkout, which nothing else is allowed to do
+    if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
+    return { wt, agent: this.agentFor(worktreeId) };
   }
 
   /** the same run, for a caller that needs the answer too: the repo's check after a turn reads
@@ -102,11 +121,7 @@ export class ExecService {
    * is the shell's: it comes back when the shell exits, even where something the shell started
    * runs on and keeps the row open (collect). */
   exec(worktreeId: string, command: string, name: string = SHELL_TOOL, opts: ExecOpts = {}): Promise<ExecResult> {
-    const wt = this.deps.state.requireWorktree(worktreeId);
-    // the lead's `!` runs in its terminal pane; a command sent for main by name would run in the
-    // main checkout, which nothing else is allowed to do
-    if (wt.kind === "main") throw new UserError("nothing runs on main: the plus starts a worktree for it");
-    const agent = this.agentFor(worktreeId);
+    const { wt, agent } = this.runnable(worktreeId);
     const toolId = `${name}-${Date.now().toString(36)}-${++this.n}`;
     // a quiet run (the check again after a discard) is on the transcript only when it fails: the
     // rows are what lets "fix it" work, and a pass has nothing to fix

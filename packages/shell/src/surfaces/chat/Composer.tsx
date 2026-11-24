@@ -27,7 +27,6 @@ import {
   ownedBy,
   prStanding,
   pullStep,
-  shipNoun,
   standingOf,
 } from "@toyon/shared";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -1199,7 +1198,6 @@ export function Composer({
     }
     if (name === "check") {
       if (spawning || !canLand(active.worktree)) refuse("nothing to check from here");
-      else if (midTurn) refuse("wait for the turn to end");
       else if (landCount === 0) refuse("nothing to check: no changes here");
       else judge(args || undefined);
       return;
@@ -1208,7 +1206,8 @@ export function Composer({
     if (spawning || !canLand(active.worktree)) refuse("nothing to land from here");
     else if (hasLanded) refuse(`already landed on ${repo?.defaultBranch ?? "main"}`);
     else if (stuck) refuse(stuck);
-    else if (midTurn && (!verdict || verdict.stale)) refuse("wait for the turn to end");
+    // mid-turn the word needs a check that saw this tree: one can be asked for beside the turn
+    else if (midTurn && !verdict) refuse("check first, or wait for the turn to end");
     else if (verdict?.stale) refuse("the work changed since this was checked; check again first");
     else land();
   };
@@ -1323,14 +1322,6 @@ export function Composer({
     }
     if (!active || !id) return;
     if (shellCmd !== null) {
-      // A command has no queue to wait in while a landing op rewrites the tree, so the daemon
-      // refuses it; refused here instead, before the box clears, the words stay typed and Enter
-      // sends them again once the op is done. The daemon's own refusal stays for the race where
-      // the op starts between this press and the frame landing.
-      if (shellCmd && op && !drafting) {
-        refuse(`${shipNoun(op)} is running here; run the command once it is done`);
-        return;
-      }
       // a command runs where it was typed: in the worktree's own transcript, or for a draft, which
       // has none, in the lead's terminal. Attachments are for the agent and stay for the next message.
       if (shellCmd && drafting) dispatch({ a: "term-run", id, command: shellCmd });

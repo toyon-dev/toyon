@@ -16,7 +16,6 @@ import {
   installCommand,
   installMethod,
   previewsLine,
-  type Shipping,
 } from "@toyon/shared";
 import { installOnPath } from "@toyon/shared/install-path";
 import { loadManaged } from "@toyon/shared/managed-load";
@@ -269,7 +268,7 @@ const runs = new RunService({
   memory: { short: () => idle.short(), eased: () => idle.eased() },
 });
 // typed, since the two services name each other
-const exec = new ExecService({ state, runtime, shipping: (id): Shipping | undefined => worktrees.shippingOf(id) });
+const exec = new ExecService({ state, runtime, moving: (id): Promise<void> | undefined => worktrees.movingOf(id) });
 // what a worktree built to pass the check, kept for the next one; it publishes on the hub's
 // checkPassed and restores from inside the service's setup
 const cache = new ArtifactCache({ paths, state, hub });

@@ -7,7 +7,10 @@
 // the word where it was. A turn Toyon itself sent to fix a failure is the one kind that is sure
 // to move the tree, so it takes the verdict with it as it starts, before a file has moved: a
 // press on the word while the agent rebases would meet the same conflict, or tear the agent's
-// rebase down. A tree that changes under it goes stale (service.gitStatus), and the
+// rebase down. A run still out when a turn starts goes on beside it by the same rule: the check
+// and the message are about the tree the run started on, and they are kept if the tree is still
+// that one when the answer comes, dropped the moment a file moves under the turn.
+// A tree that changes under a verdict goes stale (service.gitStatus), and the
 // same question can be asked again by hand, or the check alone re-run after a discard, which
 // narrows the work without changing what the sentence and the message say about it. A message the
 // question never came back with is asked for alone, by the land that needs it. The sentence
@@ -72,6 +75,21 @@ const CONTEXT_CHARS = 800;
  * looking at one project. */
 export const CHECK_SLOTS = 2;
 
+/** A run of the verdict that is still out. The check reads the tree for as long as it runs, so
+ * its answer is about the tree only if nothing else wrote there meanwhile. At rest nothing does
+ * but the person's own hand; a turn might. */
+interface Flight {
+  /** the run's stamp, the one `judging` holds while it is the newest */
+  at: number;
+  /** the tree's fingerprint as the run started */
+  before: string;
+  /** a turn is running beside the run, or ended with no reading of the tree yet: the answer
+   * counts only if the tree is still the one the run started on */
+  turning: boolean;
+  /** the turn that was the last one as the run started: the sentence the answer carries is its */
+  turn: number | undefined;
+}
+
 /** one run of the verdict: what it is for, and whether the model is asked or only the check runs */
 interface Run {
   /** the moment this run was asked for; a run stamped later supersedes it */
@@ -87,7 +105,10 @@ interface Run {
 export class LandingService {
   /** the run each worktree's verdict is being written by, so a slower answer to an older run is dropped */
   private judging = new Map<string, number>();
-  /** worktrees whose agent is mid-turn: a verdict by hand waits for it to end */
+  /** the runs still out, by worktree */
+  private flights = new Map<string, Flight>();
+  /** worktrees whose agent is mid-turn: a run started or still out then answers only for a tree
+   * the turn left alone */
   private busy = new Set<string>();
   /** the daemon is going down: a run in flight writes nothing more, and its pending mark is left
    * for the next daemon to finish, since the check it was killed under and the question its agent
@@ -111,16 +132,34 @@ export class LandingService {
     // the fix turn is sent to change the tree, so no verdict about it stands; the check after
     // the turn decides again
     d.hub.on("fixAsked", (id) => this.clear(id));
+    // a file moved under a check that a turn is running beside: nothing will read its answer
+    d.hub.on("treeLeftCheck", (id) => {
+      if (this.flying(id)?.turning) this.clear(id);
+    });
   }
 
   /** A new turn may be new work or none. A verdict that says the work can land stays: the
-   * fingerprint retires it the moment a file moves, and the turn's end reads the tree again.
-   * Anything else goes: a run in flight is about a tree that may be changing under it, and a
-   * failed check is what the turn is most likely here to fix. */
+   * fingerprint retires it the moment a file moves, and the turn's end reads the tree again. A
+   * run still out stays the same way: a message that only asks should not cost the person the
+   * suite's minutes and the message already written, and the run is dropped when a file moves
+   * (treeLeftCheck) or when its answer finds a different tree. A failed check goes: it is what
+   * the turn is most likely here to fix. */
   private turnStarts(worktreeId: string) {
-    if (!this.d.state.worktree(worktreeId)?.landing?.ready) return this.clear(worktreeId);
+    const landing = this.d.state.worktree(worktreeId)?.landing;
+    const flight = this.flying(worktreeId);
+    if (flight && landing?.check === "pending") {
+      flight.turning = true;
+      return;
+    }
+    if (!landing?.ready) return this.clear(worktreeId);
     // the words being refreshed behind a standing verdict were about the turn before this one
     this.judging.delete(worktreeId);
+  }
+
+  /** the run still out on a worktree, when it is the newest one asked for */
+  private flying(worktreeId: string): Flight | undefined {
+    const flight = this.flights.get(worktreeId);
+    return flight && this.judging.get(worktreeId) === flight.at ? flight : undefined;
   }
 
   private note(worktreeId: string, status: AgentStatus) {
@@ -130,6 +169,7 @@ export class LandingService {
 
   private clear(worktreeId: string) {
     this.judging.delete(worktreeId);
+    this.flights.delete(worktreeId);
     // a check still running is about a tree that is changing: killed, since nothing will read its
     // answer, and a suite that takes twenty minutes is not left to run for nobody
     this.d.runs.drop(worktreeId, "check");
@@ -154,9 +194,18 @@ export class LandingService {
   private async settle(worktreeId: string, turn: LastTurn) {
     const wt = this.d.state.worktree(worktreeId);
     if (!wt || !canLand(wt)) return;
-    const held = await this.standing(wt);
+    const tree = await treeFingerprint(wt.path);
+    const l = wt.landing;
+    // what is already said about the tree this turn left: a verdict written about these bytes, or
+    // a run still out that started on them
+    const settled = l && l.check !== "pending" && l.fingerprint === tree ? l : undefined;
+    const held = settled?.ready ? settled : undefined;
+    const flight = l?.check === "pending" ? this.flying(worktreeId) : undefined;
+    const flying = flight?.before === tree ? flight : undefined;
+    // read at rest and found as the run saw it: what moves the tree from here is the person's hand
+    if (flying) flying.turning = false;
     if (turn.end !== "done") {
-      if (!held) this.clear(worktreeId);
+      if (!held && !flying) this.clear(worktreeId);
       return;
     }
     if (!(await this.hasWork(wt))) {
@@ -165,14 +214,11 @@ export class LandingService {
       return this.recapAnswer(wt, turn);
     }
     if (held) return this.reword(wt, turn, held);
+    // The turn changed nothing, and the check is running on these bytes or has failed on them
+    // while the turn ran: neither is run again for a turn that only answered. The turn is owed
+    // its sentence, asked for beside the run, whose own answer is about the turn before.
+    if (flying || settled) return this.recapAnswer(wt, turn, true);
     await this.run(wt, { at: turn.at, ask: true, quiet: false });
-  }
-
-  /** the verdict that says the work can land, when the tree is still the one it was written about */
-  private async standing(wt: WorktreeInfo): Promise<Landing | undefined> {
-    const l = wt.landing;
-    if (!l?.ready) return undefined;
-    return l.fingerprint === (await treeFingerprint(wt.path)) ? l : undefined;
   }
 
   /** A finished turn that left the tree as the verdict saw it. The check's answer was about these
@@ -222,15 +268,17 @@ export class LandingService {
 
   /** The sentence for a turn that answered rather than changed anything. It is stamped only while
    * the turn it describes is still the last one: a new turn drops the question with the verdict's
-   * own bookkeeping, and a slower answer to an older turn is left out. */
-  private async recapAnswer(wt: WorktreeInfo, turn: LastTurn) {
+   * own bookkeeping, and a slower answer to an older turn is left out. `beside` is the same
+   * sentence asked while a run of the verdict is out or its answer stands: the bookkeeping is
+   * the run's and stays untouched, and the turn's own stamp alone decides. */
+  private async recapAnswer(wt: WorktreeInfo, turn: LastTurn, beside = false) {
     if (!this.d.recap) return;
     const worktreeId = wt.id;
     const entries = this.d.transcript(worktreeId);
     const turns = turnsSince(entries, 0);
     // a turn with no words, tools alone or an empty reply, has nothing to recap
     if (!turns.at(-1)?.reply.trim()) return;
-    this.judging.set(worktreeId, turn.at);
+    if (!beside) this.judging.set(worktreeId, turn.at);
     const started = Date.now();
     let text: string | null = null;
     try {
@@ -238,8 +286,10 @@ export class LandingService {
     } catch (e) {
       log.warn(worktreeId, "answer recap failed", e);
     }
-    if (this.judging.get(worktreeId) !== turn.at) return;
-    this.judging.delete(worktreeId);
+    if (!beside) {
+      if (this.judging.get(worktreeId) !== turn.at) return;
+      this.judging.delete(worktreeId);
+    }
     const record = this.d.state.worktree(worktreeId)?.lastTurn;
     if (!text || !record || record.at !== turn.at) return;
     record.recap = { at: Date.now(), text };
@@ -249,14 +299,14 @@ export class LandingService {
   }
 
   /** The verdict by hand: the same check and the same question, for a tree that moved under the
-   * last one, a turn that stopped short of one, or a row that never had one. Refused while the
-   * agent is mid-turn, since the tree is changing, and with nothing to land. The run goes on in the
-   * background; the box reads pending from the first frame. A note typed after the verb goes to
-   * the model with the question, so the message can say what the diff alone does not. */
+   * last one, a turn that stopped short of one, or a row that never had one. Refused with nothing
+   * to land. Asked mid-turn it runs beside the turn, and its answer stands if the turn leaves the
+   * tree alone; otherwise the turn's end asks again. The run goes on in the background; the box
+   * reads pending from the first frame. A note typed after the verb goes to the model with the
+   * question, so the message can say what the diff alone does not. */
   async judge(worktreeId: string, note?: string): Promise<void> {
     const wt = this.d.state.requireWorktree(worktreeId);
     if (!canLand(wt)) throw new UserError("nothing to land from here");
-    if (this.busy.has(worktreeId)) throw new UserError("wait for the turn to end");
     if (!(await this.hasWork(wt))) throw new UserError("nothing to check: no changes here");
     const trimmed = note?.trim();
     fireAndForget(
@@ -342,6 +392,7 @@ export class LandingService {
     const worktreeId = wt.id;
     const repo = this.d.state.requireRepo(wt.repoId);
     if (!(await this.hasWork(wt))) return this.clear(worktreeId);
+    const before = await treeFingerprint(wt.path);
     // what the verdict keeps when only the check runs again: the words, never the old check's result
     const held = opts.ask ? undefined : wt.landing;
     const kept = {
@@ -352,10 +403,15 @@ export class LandingService {
     };
 
     this.judging.set(worktreeId, opts.at);
+    // a run asked for under a turn (by hand, or by a turn's end that the next send overtook) is
+    // beside it from the start
+    const flight: Flight = { at: opts.at, before, turning: this.busy.has(worktreeId), turn: wt.lastTurn?.at };
+    this.flights.set(worktreeId, flight);
     const started = Date.now();
     // the box says the check is running rather than going back to its plain placeholder: the gap
-    // between the agent's last word and the verdict is where a person is reading
-    const pending: Landing = { at: opts.at, check: "pending", ready: false, fingerprint: "", ...kept };
+    // between the agent's last word and the verdict is where a person is reading. The fingerprint
+    // is the tree the run started on, so a file moving under a turn beside it can be told.
+    const pending: Landing = { at: opts.at, check: "pending", ready: false, fingerprint: before, ...kept };
     this.d.worktrees.setLanding(worktreeId, pending);
     // still the run being judged: a newer run, or a new turn since, means this answer is stale,
     // and a daemon on its way down means the answer is not one
@@ -371,6 +427,8 @@ export class LandingService {
     const { config } = configFor(wt, repo);
     const command = config.check?.trim();
     let checkDone = false;
+    // the pass was announced as the check ended
+    let passed = false;
     const checked = async (): Promise<Checked | undefined> => {
       if (!command) return { check: "none" };
       const ceiling = timeoutFor(config, "check");
@@ -405,8 +463,12 @@ export class LandingService {
         // the first line of the tail is what the placeholder says, so the ceiling goes first
         checkTail = [`gave up after ${describeDuration(ceiling)}`, tail(r.text)].filter(Boolean).join("\n");
       } else if (check === "fail") checkTail = tail(r.text) || `exit ${r.exit}`;
-      // still live, so no turn has started since: the tree that passed is the tree as it stands
-      else this.d.hub.emit("checkPassed", worktreeId);
+      // still live and no turn beside it: the tree that passed is the tree as it stands. Beside
+      // a turn that is known only once the tree is read, below.
+      else if (!flight.turning) {
+        passed = true;
+        this.d.hub.emit("checkPassed", worktreeId);
+      }
       return { check, ran: r, waited, ...(checkTail ? { checkTail } : {}) };
     };
     const asked = async (): Promise<Asked | undefined> => {
@@ -428,7 +490,7 @@ export class LandingService {
       // the check is still out: the message and the sentence go on the row now, under the
       // pending mark, rather than waiting on it
       if (!checkDone && verdict) {
-        this.recapTurn(worktreeId, verdict);
+        this.recapTurn(worktreeId, verdict, flight);
         this.d.worktrees.setLanding(worktreeId, { ...pending, ...messageOf(verdict) });
       }
       return { verdict, unanswered };
@@ -442,6 +504,16 @@ export class LandingService {
     if (!checkResult || !askResult || !live()) return;
     const { check, checkTail, ran, waited = 0 } = checkResult;
     const { verdict, unanswered } = askResult;
+    const fingerprint = await treeFingerprint(wt.path);
+    if (!live()) return;
+    // A turn ran beside the check and the tree is not the one the run started on: the answer is
+    // about bytes that are gone, pass or fail, and so is the message. The turn's end asks again
+    // about what it leaves.
+    if (flight.turning && fingerprint !== flight.before) {
+      log.info(worktreeId, `landing: check ${check} dropped, the tree moved under a turn beside it`);
+      return this.clear(worktreeId);
+    }
+    if (check === "pass" && !passed) this.d.hub.emit("checkPassed", worktreeId);
 
     const landing: Landing = {
       at: opts.at,
@@ -452,7 +524,7 @@ export class LandingService {
       ...kept,
       ...(verdict ? messageOf(verdict) : {}),
       ...(unanswered ? { unanswered: true as const } : {}),
-      fingerprint: await treeFingerprint(wt.path),
+      fingerprint,
     };
     // a migration on a branch whose settings keep no worktree apart lands on the database every
     // other worktree is using: said beside the word, where the doubt is read, never as a toast
@@ -460,8 +532,9 @@ export class LandingService {
     if (caveat) landing.why = landing.why ? `${landing.why}. ${caveat}` : caveat;
     if (!live()) return;
     this.judging.delete(worktreeId);
+    this.flights.delete(worktreeId);
     // the sentence goes on the turn it describes; setLanding saves and broadcasts the record with it
-    if (verdict) this.recapTurn(worktreeId, verdict);
+    if (verdict) this.recapTurn(worktreeId, verdict, flight);
     // how long the word took to appear: the check and the side question are the two costs here,
     // and a wait to start, behind the repo's other checks or for memory, is named so a slow
     // verdict has a reason
@@ -478,10 +551,11 @@ export class LandingService {
       this.d.hub.emit("checkFailed", worktreeId, { toolId: ran.toolId, command, text: ran.text });
   }
 
-  /** the sentence goes on the turn it describes, when the answer carried one */
-  private recapTurn(worktreeId: string, verdict: LandVerdict) {
+  /** the sentence goes on the turn it describes, when the answer carried one: the turn that was
+   * the last one as the run started, and not one that ended beside the run since */
+  private recapTurn(worktreeId: string, verdict: LandVerdict, flight: Flight) {
     const record = this.d.state.worktree(worktreeId)?.lastTurn;
-    if (record && verdict.recap) record.recap = { at: Date.now(), text: verdict.recap };
+    if (record && record.at === flight.turn && verdict.recap) record.recap = { at: Date.now(), text: verdict.recap };
   }
 
   /** whether the work touches a migration while the tree names a shared database or stack and

@@ -138,6 +138,9 @@ export class Ship {
    * row's `shipping`, and what refuses a second press. In memory only: an op does not
    * outlive the daemon, and what git was left mid-way is git's to report on the next press. */
   private ops = new Map<string, Shipping>();
+  /** worktrees whose files git is rewriting right now (moving), with how many steps deep and the
+   * promise that settles when the last of them is over */
+  private moves = new Map<string, { depth: number; done: Promise<void>; end: () => void }>();
   /** worktrees whose sync from main was pressed mid-turn on a dirty tree: it runs when the turn
    * ends, and a press meanwhile takes it back. In memory, like the ops: a turn does not outlive
    * the daemon either. */
@@ -506,15 +509,21 @@ export class Ship {
     return this.ops.get(id);
   }
 
+  /** Settles when git is done rewriting the worktree's files; nothing when it is not rewriting
+   * them. What has no queue to wait in (a command typed in the box) waits on this. */
+  movingOf(id: string): Promise<void> | undefined {
+    return this.moves.get(id)?.done;
+  }
+
   /** Run a landing op as the one out on the row: on every frame while it runs, and a second press
    * refused. The refusal is by id, so a found row and a trunk count too. The chat goes on under
    * the op: a commit hook, a fetch, a push and gh take seconds to minutes and move no file, so a
-   * message sent meanwhile reaches the agent as at any other time, and only the steps that
-   * rewrite the tree hold it back (moving). A press is a hand on the row, so the row goes to
-   * the top of the rail like a send's, at the press and whatever comes of it: a commit hook can
-   * hold the op for minutes, and the row should not wait for it. Landed, it reads as the next
-   * thing to archive; refused, it is the row whose failure is being fixed. An op nobody pressed
-   * (a sync that waited for the turn, the trunk's pull) moves nothing. */
+   * message sent meanwhile reaches the agent as at any other time, a command typed in the box
+   * runs, and only the steps that rewrite the tree hold either back (moving). A press is a hand on
+   * the row, so the row goes to the top of the rail like a send's, at the press and whatever comes
+   * of it: a commit hook can hold the op for minutes, and the row should not wait for it. Landed, it
+   * reads as the next thing to archive; refused, it is the row whose failure is being fixed. An op
+   * nobody pressed (a sync that waited for the turn, the trunk's pull) moves nothing. */
   private async ship<T>(id: string, op: ShipOp, by: "press" | "auto", run: () => Promise<T>): Promise<T> {
     const out = this.ops.get(id);
     if (out) throw new UserError(`${shipNoun(out.op)} is already running here`);
@@ -550,12 +559,24 @@ export class Ship {
    * queued, rather than start a turn or steer one into a tree that is half one commit and half
    * another. The release sends what waited. A turn already running is not stopped by this; the
    * steps refuse a tree it has dirtied, and the carry waits for it (sync). A row with no agent
-   * (a found worktree, main) has nothing to hold. */
+   * (a found worktree, main) has nothing to hold. A command typed in the box waits out the same
+   * stretch (movingOf). */
   private async moving<T>(id: string, run: () => Promise<T>): Promise<T> {
     const release = this.d.runtime.agentFor(id)?.hold();
+    let move = this.moves.get(id);
+    if (!move) {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      move = { depth: 0, done: promise, end: resolve };
+      this.moves.set(id, move);
+    }
+    move.depth++;
     try {
       return await run();
     } finally {
+      if (--move.depth === 0) {
+        this.moves.delete(id);
+        move.end();
+      }
       release?.();
     }
   }
@@ -1253,6 +1274,12 @@ export class Ship {
     // the composer keeps the sentence and the message but withholds the word until the check
     // runs again. A tree that comes back to what the verdict saw (an edit undone) clears the mark.
     const landing = wt.landing;
+    // A check still out carries the tree it started on. At rest a hand's edit under it is the
+    // person's to judge; under a turn it is the agent's work arriving, and the check is told so
+    // it stops reading a tree nobody will ask about.
+    if (landing?.check === "pending" && landing.fingerprint && isBusy(this.d.runtime.agentFor(wt.id)?.status)) {
+      if (landing.fingerprint !== (await this.fingerprint(r.path))) this.d.hub.emit("treeLeftCheck", wt.id);
+    }
     if (landing && landing.check !== "pending") {
       const moved = landing.fingerprint !== (await this.fingerprint(r.path));
       // the verdict moved or went while the tree was being read: the next poll judges the new one

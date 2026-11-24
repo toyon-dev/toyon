@@ -35,6 +35,9 @@ export interface HubEvents {
    * it judged, so the failure is the agent's to fix. `run` is the check as its row holds it: the
    * row, the command and what it printed. */
   checkFailed: (worktreeId: string, run: { toolId: string; command: string; text: string }) => void;
+  /** a file moved in the worktree under a turn while the repo's check was still running there:
+   * the check is reading a tree that is no longer the one it was started for */
+  treeLeftCheck: (worktreeId: string) => void;
   /** Toyon sent the worktree's agent a turn to fix a failure (a conflict, a hook, the check): the
    * turn is there to change the tree, so what was decided about the tree as it stands is over */
   fixAsked: (worktreeId: string) => void;

@@ -34,7 +34,7 @@ Each copy uses the settings file from its own branch, plus your local overrides.
 | `teardown` | Commands run once, in order, when a copy is removed or archived. A restored copy runs `setup` again. |
 | `run` | Long-running commands, each with a name and a terminal tab. See [`run`](#run). |
 | `preview` | The `run` command the preview shows. Default: `web`, or the first one. |
-| `check` | A command that must exit 0 before a copy can land. It runs after every finished turn. Its output shows in the chat. It does not run again if no file changed since it passed. |
+| `check` | A command that must exit 0 before a copy can land. It runs after every finished turn. Its output shows in the chat. It does not run again if no file changed since it passed. A message sent while it runs does not stop it. If the agent then changes a file, it stops and runs again when the turn ends. |
 | `land` | How work lands. See [`land`](#land). |
 | `afterLand` | Commands run in the main checkout after work lands. See [`afterLand`](#afterland). |
 | `timeouts` | How long a run may take. See [`timeouts`](#timeouts). |

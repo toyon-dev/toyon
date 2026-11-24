@@ -513,10 +513,15 @@ describe("landing", () => {
     const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
     // what each frame would carry, and whether the queue was held when it went out
     const seen: Array<{ step?: string; held: boolean }> = [];
+    // the same steps as a command typed in the box meets them: whether it would wait
+    const waits: boolean[] = [];
     w.hub.on("worktreesChanged", () => {
       const out = w.worktrees.shippingOf(wt.id);
       const last = seen.at(-1);
-      if (out && (!last || last.step !== out.step)) seen.push({ step: out.step, held: agent.held });
+      if (out && (!last || last.step !== out.step)) {
+        seen.push({ step: out.step, held: agent.held });
+        waits.push(!!w.worktrees.movingOf(wt.id));
+      }
     });
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     sh(w.repo, "git", "commit", "-q", "--allow-empty", "-m", "main moved");
@@ -532,8 +537,11 @@ describe("landing", () => {
       { step: "rebasing onto main", held: true },
       { step: "moving main onto the branch", held: false },
     ]);
+    // a command typed in the box waits out the same one step and no other
+    expect(waits).toEqual([false, false, true, false]);
     // over: off the frame, and the queue goes again
     expect(w.worktrees.shippingOf(wt.id)).toBeUndefined();
+    expect(w.worktrees.movingOf(wt.id)).toBeUndefined();
     expect(agent.held).toBe(false);
     expect((await w.worktrees.rows()).find((r) => r.id === wt.id)?.shipping).toBeUndefined();
     // steps that passed at once left no rows behind: the transcript holds the word on the land alone
@@ -831,6 +839,34 @@ describe("landing", () => {
     writeFileSync(join(wt.path, "feature.txt"), "x\n");
     await w.worktrees.gitStatus(wt.id);
     expect(w.state.worktree(wt.id)?.landing?.stale).toBeUndefined();
+  });
+
+  test("a status read under a turn tells a check still out that the tree left it; at rest it says nothing", async () => {
+    const repoId = await registered();
+    const wt = await w.worktrees.create(repoId, "feature");
+    const agent = w.runtime.agentFor(wt.id) as unknown as FakeAgent;
+    writeFileSync(join(wt.path, "feature.txt"), "x\n");
+    w.worktrees.setLanding(wt.id, {
+      at: 1,
+      check: "pending",
+      ready: false,
+      fingerprint: await treeFingerprint(wt.path),
+    });
+    const left: string[] = [];
+    w.hub.on("treeLeftCheck", (id) => left.push(id));
+    agent.status = "working";
+    await w.worktrees.gitStatus(wt.id);
+    expect(left).toEqual([]);
+    agent.status = "idle";
+    writeFileSync(join(wt.path, "feature.txt"), "x\ny\n");
+    await w.worktrees.gitStatus(wt.id);
+    // a hand's edit under a check at rest
+    expect(left).toEqual([]);
+    agent.status = "working";
+    writeFileSync(join(wt.path, "feature.txt"), "x\ny\nz\n");
+    await w.worktrees.gitStatus(wt.id);
+    expect(left).toEqual([wt.id]);
+    agent.status = "idle";
   });
 
   test("land is refused from main, and with nothing to land", async () => {

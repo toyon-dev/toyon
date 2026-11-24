@@ -786,7 +786,12 @@ export const ToolRow = memo(
     const text = toolLabel(head, roots);
     // the agent is still typing the call: the row says what it is typing, in the slot the path or
     // command will take, and the glyph alone names the kind, as on every row that has its detail
-    const writing = streaming ? composing(head) : "";
+    // the mode as the call is written, which is the only time the phrase shows; asked only of
+    // the one kind of row whose phrase turns on it
+    const planning = useStore(
+      (s) => streaming && head.name === HANDOFF_TOOL && worktreeById(s, worktreeId)?.worktree.mode === "plan",
+    );
+    const writing = streaming ? composing(head, planning) : "";
     const { label, icon } = text;
     // a guardian review's line is its verdict, read off the report it printed (toolCall.ts)
     const guardian = isGuardian(head);

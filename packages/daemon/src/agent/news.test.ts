@@ -197,9 +197,15 @@ describe("what starts the agent and what rides", () => {
     const closed = notNow({ reason: "handed over again" });
     expect(starts(one(list(), closed))).toBe(false);
     expect(sentence(one(list(), closed))).toBeUndefined();
-    // a plan sent back took the list with it, which the agent was told with the no
+    // a plan sent back took the list with it: the no ended the agent's turn, so the word starts
+    // none and is said behind the person's next message
     expect(starts(one(list(true), notNow()))).toBe(false);
-    expect(sentence(one(list(true), notNow()))).toBeUndefined();
+    expect(sentence(one(list(true), notNow()))).toContain("went back with the plan");
+    // a list Toyon read off the plan was never the agent's to hand over again
+    const read = { ...list(true), by: "toyon" } as AgentEvent;
+    expect(sentence(one(read, notNow()))).toBeUndefined();
+    // an agent without Toyon's tools handed nothing over
+    expect(sentence(one(list(true), notNow()), { cards: false })).toBeUndefined();
   });
 
   test("a failure that is the agent's to fix starts it, with what was printed behind the message", () => {

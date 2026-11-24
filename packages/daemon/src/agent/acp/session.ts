@@ -1957,11 +1957,9 @@ export class AcpSession implements AgentAdapter {
             .then(() => res);
         }
         if (says) return this.sayHandoffActed(says).then(() => res);
-        // the no took the agent's list with it, and the agent heard only that the hand-over went
-        // through; a list Toyon read for the card was never the agent's to hand over again
-        if (plan && !approved && decided && decided.by !== "toyon") {
-          return this.sayHandoffDeclined().then(() => res);
-        }
+        // A no says nothing here. It ends the agent's turn so the person can say what to change,
+        // and that the list went back with the plan is said behind their next message (news.ts);
+        // a message sent now would start the agent on the plan it was just told to hold.
         return res;
       },
       undefined,
@@ -1984,21 +1982,6 @@ export class AcpSession implements AgentAdapter {
     } catch (e) {
       // the approval still goes back; a reply that fails would read to the agent as a refusal
       log.warn(this.d.worktreeId, "what the list started was not sent", e);
-    }
-  }
-
-  /** A plan sent back with the agent's own list beside it. The rejection is an option id, and the
-   * handoff tool's result still reads as a hand-over that stands, so the agent would send the next
-   * plan up without a list; the word that the list went too goes in as a message, awaited ahead
-   * of the answer as `sayPlanEdited` is. */
-  private async sayHandoffDeclined() {
-    try {
-      await this.deliver(
-        "The pieces list you handed over went back with the plan. Hand over a list again with `handoff` before you ask for approval. Where the person put each piece carries over to the new list by piece title, so keep the title of a piece that stands.",
-      );
-    } catch (e) {
-      // the no still goes back; a reply that fails would read to the agent as a refusal
-      log.warn(this.d.worktreeId, "the declined list was not sent", e);
     }
   }
 

@@ -4395,14 +4395,21 @@ describe("AcpSession cards", () => {
     );
   });
 
-  test("an answer a plan card gave, or no answer at all, adds nothing", async () => {
+  test("a plan card's yes, or no answer at all, adds nothing; its no says the list went back", async () => {
     // the agent handed over again, which closes its earlier list
     expect(
       await heard([list(), { type: "handoff-declined", id: "h1", reason: "handed over again", ts: 2 }]),
     ).toBeUndefined();
     // a held list is answered by its plan card: what it starts was said ahead of the plan's reply
     expect(await heard([list(true), { type: "handoff-go", id: "h1", ts: 2 }, went])).toBeUndefined();
-    expect(await heard([list(true), { type: "handoff-declined", id: "h1", ts: 2 }])).toBeUndefined();
+    // the no ended the agent's turn with nothing said of the list
+    expect(await heard([list(true), { type: "handoff-declined", id: "h1", ts: 2 }])).toBe(
+      "[Attached by Toyon:\nThe pieces list you handed over went back with the plan, and nothing on it was started. Once the plan is revised, hand over a list again with `handoff` before you ask for approval. Where the person put each piece carries over to the new list by piece title, so keep the title of a piece that stands.]",
+    );
+    // a list Toyon read off the plan was never the agent's to hand over again
+    expect(
+      await heard([{ ...list(true), by: "toyon" } as AgentEvent, { type: "handoff-declined", id: "h1", ts: 2 }]),
+    ).toBeUndefined();
     // an agent without the tool handed nothing over: the list was the person's own
     expect(await heard([list(), { type: "handoff-go", id: "h1", ts: 2 }, went], false)).toBeUndefined();
   });
@@ -4910,7 +4917,7 @@ describe("AcpSession handoff", () => {
   ];
   const held: AgentEvent = { type: "handoff-proposed", id: "l1", pieces: [], mode: "plan", held: true, ts: 1 };
   /** an agent that asks for plan approval once a test lets it, then ends its turn */
-  function planner() {
+  function planner(opts: { mcpHttp?: boolean } = {}) {
     let release = () => {};
     const gate = new Promise<void>((r) => {
       release = r;
@@ -4928,7 +4935,7 @@ describe("AcpSession handoff", () => {
         options: PLAN_OPTIONS,
       });
       return { stopReason: "end_turn" };
-    });
+    }, opts);
     return { fake, release };
   }
   const card = (events: AgentEvent[]) =>
@@ -5072,31 +5079,44 @@ describe("AcpSession handoff", () => {
     await w.session.close();
   });
 
-  test("the plan sent back tells the agent its list went with it, ahead of the no", async () => {
+  test("the plan sent back starts no turn, and words typed with the no carry that the list went too", async () => {
     const { fake, release } = planner();
-    const w = world(fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onHandoff: () => {} });
+    const w = world(fake, claudeSpec, 60_000, undefined, {
+      mode: () => "plan",
+      onHandoff: acts(() => w.session, []),
+    });
     w.session.note(held);
     w.session.send("plan it");
     release();
     await waitFor(() => !!openAsk(w.events));
     w.session.answer(card(w.events).id, { kind: "choice", choiceId: "cancel" });
-    await waitFor(() => fake.prompts.length > 1);
-    expect((fake.prompts.at(-1)!.prompt[0] as { text: string }).text).toContain("went back with the plan");
-    // recorded once the card is closed and before the no reaches the agent
-    const types = w.types();
-    expect(types.indexOf("agent-ask-end")).toBeLessThan(types.lastIndexOf("user-message"));
+    await w.idle();
+    // the no is the agent's to stop on: a message of Toyon's here would have it hand the same
+    // list over and ask for approval of the same plan
+    expect(fake.prompts).toHaveLength(1);
+    expect(w.types().filter((t) => t === "user-message")).toHaveLength(1);
     await w.session.close();
-    // a list Toyon read off the plan was never the agent's hand-over: nothing to say about it
-    const second = planner();
-    const w2 = world(second.fake, claudeSpec, 60_000, undefined, { mode: () => "plan", onHandoff: () => {} });
-    w2.session.note({ ...held, by: "toyon" } as AgentEvent);
-    w2.session.send("plan it");
-    second.release();
-    await waitFor(() => !!openAsk(w2.events));
-    w2.session.answer(card(w2.events).id, { kind: "choice", choiceId: "cancel" });
-    await w2.idle();
-    expect(second.fake.prompts).toHaveLength(1);
-    await w2.session.close();
+    // typed with the no, the words are the next message: the list is closed before they go, so
+    // they are the first to carry it
+    const typed = planner({ mcpHttp: true });
+    const w1 = world(typed.fake, claudeSpec, 60_000, undefined, {
+      mode: () => "plan",
+      onHandoff: acts(() => w1.session, []),
+      mcp: {
+        open: () => ({ type: "http", name: "toyon", url: "http://127.0.0.1:4141/mcp/w", headers: [] }),
+        close: () => {},
+      },
+    });
+    w1.session.note(held);
+    w1.session.send("plan it");
+    typed.release();
+    await waitFor(() => !!openAsk(w1.events));
+    w1.session.answer(card(w1.events).id, { kind: "choice", choiceId: "cancel", note: "add video" });
+    await waitFor(() => typed.fake.prompts.length > 1);
+    const texts = typed.fake.prompts.at(-1)!.prompt.map((b) => (b as { text?: string }).text ?? "");
+    expect(texts[0]).toBe("add video");
+    expect(texts[1]).toContain("went back with the plan");
+    await w1.session.close();
   });
 
   test("outside plan mode a held list whose plan card never comes is Toyon's own card from the turn's end, and the row waits on it", async () => {

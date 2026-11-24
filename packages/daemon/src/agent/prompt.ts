@@ -363,6 +363,16 @@ export function handoffDeclinedContext(pieces: ReadonlyArray<{ title: string }>,
   return `Toyon could not finish acting on the list you handed over (${titles}): ${failed.replace(/\.$/, "")}. A piece may not have started; say so, and hand it over again if the split still fits.`;
 }
 
+/** A plan sent back with the agent's own list beside it, as the agent's next prompt says it. The
+ * no is an option id, and the handoff tool's reply still reads as a hand-over that stands, so the
+ * agent would send its next plan up with no list. Said behind the person's next message and
+ * never as a message of its own: the no ends the agent's turn so the person can say what to
+ * change, and a turn begun on this word hands the same list over and asks for approval of the
+ * same plan. */
+export function handoffSentBackContext(): string {
+  return "The pieces list you handed over went back with the plan, and nothing on it was started. Once the plan is revised, hand over a list again with `handoff` before you ask for approval. Where the person put each piece carries over to the new list by piece title, so keep the title of a piece that stands.";
+}
+
 /** What rides behind a message sent with `toyon send` from a terminal: where the person was
  * standing, and that an agent was at the keyboard when the terminal said so, since text an agent
  * wrote is read as a task description rather than the person's own word. The directory is named

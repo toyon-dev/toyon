@@ -18,6 +18,7 @@ import {
   handoffActedPrompt,
   handoffDeclinedContext,
   handoffDeclinedPrompt,
+  handoffSentBackContext,
   type OwnFailure,
   pieceDroppedContext,
   pieceGoneContext,
@@ -35,8 +36,10 @@ type Gone = Extract<AgentEvent, { type: "piece-gone" }>;
 type Dropped = Extract<AgentEvent, { type: "piece-dropped" }>;
 type Woke = Parameters<typeof pieceWakePrompt>[0][number];
 
-/** `withPlan`: the list was answered by the plan card it rode beside, whose own reply and the
- * word sent ahead of it told the agent; `note` is what the person typed with go. `failure` is
+/** `withPlan`: the list was answered by the plan card it rode beside. A yes told the agent in the
+ * card's own reply and the word sent ahead of it; a no ends the agent's turn, and that the list
+ * went back with the plan is said behind the next message. `note` is what the person typed with
+ * go. `failure` is
  * the record with what its row printed. `again`: the check failed straight after a message of
  * Toyon's own that was about the check, so the turn sent to fix it ended in the same failure.
  * `title` is the dropped piece's, when its list is still on the transcript. */
@@ -154,8 +157,10 @@ export function starts(n: News): boolean {
 }
 
 /** The news as the sentence a message carries behind its text. Nothing for an answer the agent
- * heard another way (a plan card's, unless a piece then failed to start) or a list Toyon closed
- * itself, which is no answer. `cards` is false for an agent without Toyon's tools: it handed
+ * heard another way (a plan card's yes, unless a piece then failed to start) or a list Toyon
+ * closed itself, which is no answer. A plan card's no is said here and nowhere else: the agent's
+ * own list went back with the plan, and one Toyon read off the plan was never the agent's to
+ * hand over again. `cards` is false for an agent without Toyon's tools: it handed
  * nothing over, so the list was the person's own and "the pieces you handed over" would be untrue.
  * `said`: the message is Toyon's own for this news and its text says it, so what rides behind is
  * only what the text leaves out. A landing is said both ways: the text names the pieces to do,
@@ -180,7 +185,8 @@ export function sentence(
   if (n.kind === "declined") {
     if (n.event.outcome === "failed") return handoffDeclinedContext(pieces, n.event.reason ?? "");
     // a reason is Toyon's own closing (handed over again, a card that went away), not an answer
-    if (n.withPlan || n.event.reason) return undefined;
+    if (n.event.reason) return undefined;
+    if (n.withPlan) return n.list.by === "toyon" ? undefined : handoffSentBackContext();
     return n.event.note ? handoffDeclinedPrompt(pieces, n.event.note) : handoffDeclinedContext(pieces);
   }
   if (!n.withPlan) return handoffActedPrompt(pieces, n.event.outcomes, "card", n.note);

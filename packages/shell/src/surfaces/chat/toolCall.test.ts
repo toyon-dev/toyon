@@ -421,6 +421,11 @@ describe("toolLabel", () => {
     const handoff = { name: "handoff", title: "handoff", input: {} };
     expect(composing(handoff)).toBe("splitting off work");
     expect(composing({ ...handoff, input: { locations: [] } })).toBe("splitting off work");
+    // in plan mode the call splits nothing off: the pieces sit beside the plan until its yes
+    expect(composing(handoff, true)).toBe("splitting the plan");
+    expect(composing({ name: "Bash", title: "Terminal", toolKind: "execute" as const, input: {} }, true)).toBe(
+      "writing the command",
+    );
     // a minute of writing with nothing to take the slot: the phrase is on the line, where a
     // command's is the mark's tip because the command replaces it a beat later
     expect(composingOnLine(handoff)).toBe(true);

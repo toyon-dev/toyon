@@ -494,8 +494,8 @@ const WRITING: Record<WrittenKind, string> = {
  * happening instead. The input lands whole (the daemon holds back the field-by-field refines), so
  * a long script stays here for as long as it takes to write. A call the agent never finished
  * writing (a message sent mid-turn cuts the generation off) ends with no input, which is what
- * `cutOff` in group.ts reads it by. */
-export function composing(call: ToolCall): string {
+ * `cutOff` in group.ts reads it by. `planning`: the worktree is in plan mode as the call is written. */
+export function composing(call: ToolCall, planning = false): string {
   const kind = call.toolKind;
   // a spawn's kind is "think", which is whole on arrival for every other call of that kind; the
   // brief is what the agent writes here, and until it lands the row would say "Task" with a
@@ -511,8 +511,11 @@ export function composing(call: ToolCall): string {
   // that hung rather than as the agent writing. The phrase is what the feature is called, not
   // "writing the handoff": the glyph already says handoff, and the count is not known yet, so it
   // names no piece or pieces. Read here and not through writingCall: that one also tells the
-  // daemon which calls to end as cut off, and a steer already marks this one.
-  if (call.name === HANDOFF_TOOL) return "splitting off work";
+  // daemon which calls to end as cut off, and a steer already marks this one. In plan mode
+  // (`planning`) nothing is split off by the call: the list is held beside the plan, its pieces
+  // open as tabs of the plan, and the plan's yes is what starts them, so the row says what is
+  // being done to the plan.
+  if (call.name === HANDOFF_TOOL) return planning ? "splitting the plan" : "splitting off work";
   if (!writingCall({ name: call.name, kind }, call.input)) return "";
   // an ask has no kind, and its question is the longest input an agent types that nobody sees
   // arrive: the adapter's placeholder ("Asking for your input") says the person is being waited

@@ -57,6 +57,7 @@ import { netOfCalls } from "./mergeDiffs.ts";
 import { Painted } from "./Painted.tsx";
 import { PasteChip } from "./PasteChip.tsx";
 import { PickChip } from "./PickChip.tsx";
+import { type PeerWorktree, peerKey } from "./peer.ts";
 import { ranClean } from "./shellMode.ts";
 import { languageOf, linkLines, openTail, paintCode, paintDiff, paintPlain, pathInDiff } from "./syntax.ts";
 import { normalizeThoughtMarkdown, thoughtLine, thoughtSteps } from "./thought.ts";
@@ -68,6 +69,9 @@ import {
   guardianHint,
   isGuardian,
   type OutputBlock,
+  peerLead,
+  peerMessage,
+  peerTail,
   relPath,
   toolBlocks,
   toolLabel,
@@ -514,8 +518,9 @@ function Fold({
  * hint measures its own box as `--line` while it shines, and the sweep reads that instead
  * (chat.css), so a long command shines as a hint of the line's width would. The shine rides a span
  * inside the one that truncates because the ellipsis is painted with the truncating box's fill,
- * and `.live-text` clears that fill to show its band. */
-function LiveHint({ text, live }: { text: string; live: boolean }) {
+ * and `.live-text` clears that fill to show its band. A worktree's chip in the hint rides the same
+ * span, so one band crosses the words and the title alike. */
+function LiveHint({ live, children }: { live: boolean; children: ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -531,7 +536,7 @@ function LiveHint({ text, live }: { text: string; live: boolean }) {
   }, [live]);
   return (
     <span ref={ref} className="tool-hint">
-      {live ? <span className="live-text">{text}</span> : text}
+      {live ? <span className="live-text">{children}</span> : children}
     </span>
   );
 }
@@ -641,7 +646,7 @@ export const ThoughtRow = memo(function ThoughtRow({
         summary={
           <>
             <Icon name="bulb" className="tool-icon" />
-            <LiveHint text={line} live={!!streaming} />
+            <LiveHint live={!!streaming}>{line}</LiveHint>
           </>
         }
       >
@@ -802,7 +807,20 @@ export const ToolRow = memo(
     // the words the line carries while the call is written, where it carries any: a spawn's
     // description, or the phrase itself for a call that is a long time in the writing
     const said = briefed || (writing && composingOnLine(head) ? writing : "");
-    const hint = briefed || writing || (guardian ? guardianHint(head.output ?? "") : text.hint);
+    // a message the agent sent another session names where it went by that session's directory;
+    // where that is a worktree Toyon holds, the row names it as every other row names one
+    const sent = useMemo(() => peerMessage(head), [head]);
+    const peerAt = useStore((s) => (sent ? peerKey(s, sent.to, worktreeId) : ""));
+    const peer = useMemo(() => (peerAt ? (JSON.parse(peerAt) as PeerWorktree) : null), [peerAt]);
+    const to = sent && peer && !writing ? { ...sent, ...peer } : null;
+    const hint =
+      briefed ||
+      writing ||
+      (guardian
+        ? guardianHint(head.output ?? "")
+        : to
+          ? `${peerLead(to)} ${to.title}${to.project ? ` in ${to.project}` : ""}${peerTail(to)}`
+          : text.hint);
     // nothing under the line: no subagent rows, no net change, and no call that ran a command or
     // printed a block (ToolPart draws nothing for those). Read the same way ToolPart does, so the
     // row is a leaf exactly when opening it would show nothing.
@@ -897,7 +915,19 @@ export const ToolRow = memo(
                 <Spinner />
               </span>
             ) : (
-              hint && <LiveHint text={hint} live={running} />
+              hint && (
+                <LiveHint live={running}>
+                  {to ? (
+                    <>
+                      {peerLead(to)} <WorktreeChip id={to.id} title={to.title} />
+                      {to.project ? ` in ${to.project}` : ""}
+                      {peerTail(to)}
+                    </>
+                  ) : (
+                    hint
+                  )}
+                </LiveHint>
+              )
             )}
             {status && <span className="tool-status">{status}</span>}
             {/* the row is faint and still (chat.css), and the word says what the faintness means */}

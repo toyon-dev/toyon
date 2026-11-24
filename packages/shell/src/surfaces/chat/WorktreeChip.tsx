@@ -1,10 +1,10 @@
 // A worktree named on a row Toyon draws (a handoff row, the plan's worktrees section, the line
-// under the box, a sibling's landing), as the mention a message draws it: the chip with the row's
-// dot and tip, a press opening the row, an archived one its page. One drawing for every place a
-// worktree is named, so the agent's prose, the person's mentions and Toyon's own rows agree on
-// what a worktree looks like. Toyon names a worktree by id, so the chip reaches one in another
-// project too, and the press switches to that project. A worktree that is gone from both lists is
-// named in plain words, since there is nothing to open.
+// under the box, a sibling's landing, a message the agent sent it), as the mention a message
+// draws it: the chip with the row's dot and tip, a press opening the row, an archived one its
+// page. One drawing for every place a worktree is named, so the agent's prose, the person's
+// mentions and Toyon's own rows agree on what a worktree looks like. Toyon names a worktree by
+// id, so the chip reaches one in another project too, and the press switches to that project. A
+// worktree that is gone from both lists is named in plain words, since there is nothing to open.
 
 import { useMemo } from "react";
 import { linkOpener } from "../../state/actions/message.ts";
@@ -44,7 +44,9 @@ export function WorktreeChip({ id, title, inert }: { id: string; title?: string;
         inert
           ? undefined
           : (e) => {
-              // the log routes a press on a mention too; one open is enough
+              // the log routes a press on a mention too; one open is enough. On a tool row the
+              // chip sits in the fold's summary, where a press left to the browser folds the row
+              e.preventDefault();
               e.stopPropagation();
               open?.();
             }

@@ -9,6 +9,10 @@ import {
   isGuardian,
   loadedTool,
   parseToolOutput,
+  peerDir,
+  peerLead,
+  peerMessage,
+  peerTail,
   relPath,
   toolBlocks,
   toolLabel,
@@ -507,6 +511,17 @@ describe("toolLabel", () => {
     ).toBe("sent to a subagent: Shell fixes from the code review");
     // until the input is in, the name is all there is
     expect(toolLabel({ ...peer, input: {} })).toMatchObject({ name: "SendMessage", icon: "outgoing", hint: "" });
+    // the row's line in parts, for the row that draws the address as a worktree's chip
+    const sent = peerMessage({
+      ...peer,
+      input: { to: "wt-60d5-d0 [c11451]", summary: "keep home_cell", message: "x" },
+    });
+    expect(sent).toEqual({ to: "wt-60d5-d0", waiting: false, about: "keep home_cell" });
+    expect(`${peerLead(sent!)} Featured media${peerTail(sent!)}`).toBe("sent to Featured media: keep home_cell");
+    const heard = peerMessage({ ...peer, input: { to: "wt-60d5-d0", notify_when_idle: true } });
+    expect(`${peerLead(heard!)} Featured media${peerTail(heard!)}`).toBe("waiting to hear from Featured media");
+    expect(peerMessage({ ...peer, input: {} })).toBeNull();
+    expect(peerMessage({ name: "Bash", input: { to: "wt-60d5-d0" } })).toBeNull();
     // the worktrees tool reads its query, and with none says what the bare call lists
     expect(toolLabel({ name: "worktrees", title: "worktrees", input: {} })).toMatchObject({
       name: "",
@@ -604,6 +619,21 @@ describe("toolLabel", () => {
   test("a file path is shown relative to the worktree", () => {
     const call = { name: "edit", title: "edit", toolKind: "edit" as const, input: { file_path: `${wt}/PLAN.md` } };
     expect(toolLabel(call, [wt])).toEqual({ label: "edit", name: "", icon: "edit", hint: "PLAN.md", command: "" });
+  });
+});
+
+describe("peerDir", () => {
+  test("a session's name is its directory, a dash and two hex digits", () => {
+    expect(peerDir("wt-60d5-d0")).toBe("wt-60d5");
+    expect(peerDir("toyon-mono-font-1a")).toBe("toyon-mono-font");
+  });
+  test("any other address names no directory", () => {
+    // the directory alone, a name someone chose, a subagent's id, a suffix of another length
+    expect(peerDir("wt-60d5")).toBe("");
+    expect(peerDir("worker")).toBe("");
+    expect(peerDir("a1cf47df67232752f")).toBe("");
+    expect(peerDir("wt-60d5-d0e")).toBe("");
+    expect(peerDir("wt-60d5-zz")).toBe("");
   });
 });
 

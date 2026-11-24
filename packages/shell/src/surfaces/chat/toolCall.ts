@@ -308,6 +308,45 @@ function worktreesScope(call: ToolCall): string {
 /** the id a spawn returns for its subagent, which is its address until it is given a name */
 const AGENT_ID = /^a[0-9a-f]{8,}(?:-[0-9a-f]+)*$/i;
 
+/** a message the agent sent with its own tool, in the parts its row says */
+export interface PeerMessage {
+  /** the address as the agent wrote it, less its ref */
+  to: string;
+  /** the call carries no message and asks to hear when the other session goes quiet */
+  waiting: boolean;
+  /** what the message was about, where it has one yet */
+  about: string;
+}
+
+export function peerMessage(call: ToolCall): PeerMessage | null {
+  if (call.name !== PEER_TOOL) return null;
+  const to = field(call, "to")
+    .replace(/\s*\[[0-9a-f]+\]\s*$/i, "")
+    .trim();
+  if (!to) return null;
+  const message = field(call, "message").trim();
+  const input = call.input as Record<string, unknown> | null;
+  if (!message && input?.notify_when_idle === true) return { to, waiting: true, about: "" };
+  return { to, waiting: false, about: field(call, "summary").trim() || (message.split("\n")[0] ?? "").trim() };
+}
+
+/** the words before the address, and the ones after it */
+export function peerLead(m: PeerMessage): string {
+  return m.waiting ? "waiting to hear from" : "sent to";
+}
+
+export function peerTail(m: PeerMessage): string {
+  return m.about ? `: ${m.about}` : "";
+}
+
+/** Claude Code names a session after the directory it runs in, with a dash and two hex digits to
+ * tell that directory's sessions apart: `wt-60d5-d0` in a worktree, `toyon-1f` in a checkout. The
+ * directory is what is left without them, or "" for an address of any other shape (a subagent's
+ * name or id, a session someone renamed). */
+export function peerDir(to: string): string {
+  return /^(.+)-[0-9a-f]{2}$/.exec(to)?.[1] ?? "";
+}
+
 /** A message the agent sent with its own tool says who it went to and what it was about. The row
  * is the only trace of it in Toyon: the call arrives with no kind and no description, so without
  * this the row was a dot beside the tool's name, and nothing in either chat said a message had
@@ -318,17 +357,9 @@ const AGENT_ID = /^a[0-9a-f]{8,}(?:-[0-9a-f]+)*$/i;
  * no message yet says only where it is going. One that asks to hear back and carries no message
  * sends nothing: it waits for the other session to go quiet. */
 function sentTo(call: ToolCall): string {
-  if (call.name !== PEER_TOOL) return "";
-  const named = field(call, "to")
-    .replace(/\s*\[[0-9a-f]+\]\s*$/i, "")
-    .trim();
-  if (!named) return "";
-  const to = AGENT_ID.test(named) ? "a subagent" : named;
-  const message = field(call, "message").trim();
-  const input = call.input as Record<string, unknown> | null;
-  if (!message && input?.notify_when_idle === true) return `waiting to hear from ${to}`;
-  const about = field(call, "summary").trim() || (message.split("\n")[0] ?? "").trim();
-  return about ? `sent to ${to}: ${about}` : `sent to ${to}`;
+  const m = peerMessage(call);
+  if (!m) return "";
+  return `${peerLead(m)} ${AGENT_ID.test(m.to) ? "a subagent" : m.to}${peerTail(m)}`;
 }
 
 export interface ToolRowText {

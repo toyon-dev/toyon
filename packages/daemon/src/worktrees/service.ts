@@ -75,7 +75,7 @@ import { excludeBlock } from "../git/exclude.ts";
 import { GIT, git, gitOrThrow, gitRaw, isGitRepo, NO_PROMPT, nulSplit, run } from "../git/exec.ts";
 import { withRepoLock } from "../git/lock.ts";
 import { logCommits, rangeSubjects, commitFiles as readCommitFiles } from "../git/log.ts";
-import { statusFiles, treeEmpty } from "../git/status.ts";
+import { type StatusRead, statusFiles, treeEmpty } from "../git/status.ts";
 import { dropTurnRefs, markTurn } from "../git/turn.ts";
 import { listWorktrees } from "../git/worktrees.ts";
 import { configFor, settingsLines } from "../repos/config.ts";
@@ -104,7 +104,7 @@ import { type FillJob, fillLandMarks, unfilled } from "./landSubjects.ts";
 import { branchSlug, cleanTitle, freeSlot, shortId, titleFrom } from "./naming.ts";
 import { Ship } from "./ship.ts";
 import { type ClaimStamps, SparePool } from "./spare.ts";
-import { type TreeCore, TreeState } from "./treeState.ts";
+import { type CoreRead, TreeState } from "./treeState.ts";
 import { mainOf, Trunk } from "./trunk.ts";
 import { isUnseen } from "./turns.ts";
 import type { WatchmanWatches } from "./watchman.ts";
@@ -260,8 +260,9 @@ export interface WorktreeServiceDeps {
   /** task → short kebab-case name (the worktree's own agent by default; tests inject a stub) */
   namer?: (prompt: string, wt: WorktreeInfo) => Promise<string | null>;
   /** the bytes a verdict was written about, as one string (git/status.ts treeFingerprint by
-   * default; tests inject one they can hold) */
-  fingerprint?: (path: string) => Promise<string>;
+   * default; tests inject one they can hold). `read` is a status the caller has just taken of
+   * that tree, so the fingerprint does not take one of its own. */
+  fingerprint?: (path: string, read?: Pick<StatusRead, "files" | "folded">) => Promise<string>;
   /** a shell is subscribed to the worktree (server/interest.ts): the tree-state owner reads the
    * panel's tier for it and sends it frames */
   interested?: (id: string) => boolean;
@@ -366,6 +367,7 @@ export class WorktreeService {
       interested: (id) => d.interested?.(id) ?? false,
       shown: (id) => d.shown?.(id) ?? false,
       live: (id) => d.runtime.busy(id),
+      opOut: (id) => !!this.ship.shippingOf(id),
       trunkBehind: (mainId, path) => this.trunk.behind(mainId, path),
       prOpen: (id) => d.state.worktree(id)?.pr?.state === "open",
       afterCore: (r, core) => this.afterCore(r, core),
@@ -2426,7 +2428,7 @@ export class WorktreeService {
   /** The record side effects of a tree read the owner accepted (worktrees/treeState.ts): the
    * landing record's (Ship.afterRead) and main's empty flag. True when they moved the tree, so
    * the owner reads it once more before anything is published. */
-  private async afterCore(r: ReadableWorktree, core: TreeCore): Promise<boolean> {
+  private async afterCore(r: ReadableWorktree, core: CoreRead): Promise<boolean> {
     const wt = r.wt;
     if (!wt) return false;
     // an op out on the row (a land, a sync) reads the tree between its own git steps, with the

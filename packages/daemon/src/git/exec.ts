@@ -104,6 +104,14 @@ export const NO_PROMPT: Record<string, string> = {
 const SPAWN_ENV: Record<string, string> = { GIT_OPTIONAL_LOCKS: "0" };
 
 /**
+ * Env for the one read that may take the lock. A status that never writes the index never saves
+ * what it worked out: the refreshed stat data, the untracked cache, the fsmonitor token. On a
+ * large tree the next read then pays for all of it again, and a checkout nobody types `git status`
+ * in pays every time. The caller decides which read this is, and keeps it rare.
+ */
+export const SAVES_INDEX: Record<string, string> = { GIT_OPTIONAL_LOCKS: "1" };
+
+/**
  * The environment a spawn starts from: the daemon's own with messages pinned to English. Landing
  * reads git's stderr for what went wrong ("CONFLICT", "would be overwritten", "stale info"), and a
  * translated git says none of those words, so a conflicted merge was never aborted. Only the

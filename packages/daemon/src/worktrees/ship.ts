@@ -66,6 +66,7 @@ import {
   aheadUpstream,
   reaches,
   remoteHead,
+  type StatusRead,
   statusFiles,
   treeFingerprint,
 } from "../git/status.ts";
@@ -73,7 +74,7 @@ import type { RunService } from "../runs/service.ts";
 import type { RuntimeRegistry } from "../runtime/registry.ts";
 import type { FixService } from "./fix.ts";
 import type { ReadableWorktree, WorktreeServiceDeps } from "./service.ts";
-import type { TreeCore, TreeState } from "./treeState.ts";
+import type { CoreRead, TreeState } from "./treeState.ts";
 import type { Trunk } from "./trunk.ts";
 
 /** how much of what a commit-msg hook printed the next message is written against: its last
@@ -250,8 +251,8 @@ export class Ship {
 
   /** the landing verdict for a worktree, or none: written after a turn, marked stale by a tree
    * that no longer matches it, and dropped by a new turn unless it says the work can land */
-  private fingerprint(path: string): Promise<string> {
-    return (this.d.fingerprint ?? treeFingerprint)(path);
+  private fingerprint(path: string, read?: Pick<StatusRead, "files" | "folded">): Promise<string> {
+    return (this.d.fingerprint ?? treeFingerprint)(path, read);
   }
 
   setLanding(worktreeId: string, landing: Landing | undefined) {
@@ -1201,7 +1202,7 @@ export class Ship {
    * badge is cleared: new work after a merge means it is no longer landed), and the verdict's
    * fingerprint. True when they moved the tree, so the owner reads it once more before anything
    * is published. The owner calls this only with no op out on the row. */
-  async afterRead(r: ReadableWorktree, wt: WorktreeInfo, core: TreeCore): Promise<boolean> {
+  async afterRead(r: ReadableWorktree, wt: WorktreeInfo, core: CoreRead): Promise<boolean> {
     const isMain = wt.kind === "main";
     if (core.branch) await this.followBranch(wt, core.branch);
     const { files, head } = core;
@@ -1281,7 +1282,7 @@ export class Ship {
       if (landing.fingerprint !== (await this.fingerprint(r.path))) this.d.hub.emit("treeLeftCheck", wt.id);
     }
     if (landing && landing.check !== "pending") {
-      const moved = landing.fingerprint !== (await this.fingerprint(r.path));
+      const moved = landing.fingerprint !== (await this.fingerprint(r.path, core));
       // the verdict moved or went while the tree was being read: the next poll judges the new one
       if (wt.landing === landing && moved !== !!landing.stale) {
         const { stale: _was, ...rest } = landing;

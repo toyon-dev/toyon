@@ -90,10 +90,10 @@ export function world() {
       await naming.gate;
       return naming.reply;
     },
-    fingerprint: async (path) => {
+    fingerprint: async (path, read) => {
       fingerprinting.entered++;
       await fingerprinting.gate;
-      return treeFingerprint(path);
+      return treeFingerprint(path, read);
     },
     watch: (id, command, run) => exec.watch(id, command, run),
     fix,

@@ -106,6 +106,9 @@ export interface TreeStateDeps {
   shown: (id: string) => boolean;
   /** its agent is mid-turn (runtime busy): its tree is moving, and it is read like a shown one */
   live: (id: string) => boolean;
+  /** an op is out on the row (a land, a sync): its git steps write the index, so no read of the
+   * row may hold the index lock meanwhile */
+  opOut: (id: string) => boolean;
   /** main's behind against its upstream, with the trunk's own fetch cadence (Trunk.behind) */
   trunkBehind: (mainId: string, path: string) => Promise<{ behind?: number }>;
   /** whether the row's PR is open: unpushed is counted only then */
@@ -113,11 +116,11 @@ export interface TreeStateDeps {
   /** the record side effects of an accepted core read (followBranch, the hand landing, the landed
    * mark, the PR cleared, the verdict's fingerprint, main's empty flag). True when they moved the
    * tree, which reads it once more before anything is published. */
-  afterCore: (r: ReadableWorktree, core: TreeCore) => Promise<boolean>;
+  afterCore: (r: ReadableWorktree, core: CoreRead) => Promise<boolean>;
   /** every id a repoTick concerns: owned rows, found rows and the trunk of that repo */
   rowsOf: (repoId: string) => string[];
   /** test knobs: the reads themselves */
-  readCore?: (r: ReadableWorktree) => Promise<CoreRead>;
+  readCore?: (r: ReadableWorktree, opts: { save: boolean }) => Promise<CoreRead>;
   readExtras?: (r: ReadableWorktree, core: TreeCore, folded: Set<string>) => Promise<TreeExtras>;
   now?: () => number;
   editDelayMs?: number;
@@ -150,6 +153,13 @@ const RETRY_MS = [2_000, 10_000, 60_000];
 export const REST_FACTOR = 10;
 const SLOW_READ_MS = 1_000;
 const restAfter = (took: number) => (took < SLOW_READ_MS ? 0 : REST_FACTOR * took);
+/** How often a row whose reads are slow may have one of them save git's index. A read never
+ * takes the index lock otherwise, so nothing it works out is kept: on a large tree every read
+ * walks it again, and a checkout nobody types `git status` in never gets a cache at all. The
+ * saving read holds the lock for as long as it runs, and a `git commit` typed in that window
+ * fails, so it is one read in this long, for a row that is slow and has nothing else writing its
+ * index (maySave). A row whose reads are fast never takes the lock. */
+export const SAVE_GAP_MS = 10 * 60_000;
 /** the longest the floor leaves a row whose read keeps failing, having doubled up to it */
 const FAILED_REST_MAX_MS = 60 * 60_000;
 /** files stat'ed for the signature; past this the entries alone tell the states apart */
@@ -181,6 +191,9 @@ export class TreeState {
   private rest = new Map<string, number>();
   /** failed reads in a row, by row, with or without a record */
   private misses = new Map<string, number>();
+  /** rows whose last read was slow, and when each last ran a read that saves the index */
+  private slow = new Set<string>();
+  private savedAt = new Map<string, number>();
   private retries = new Map<string, ReturnType<typeof setTimeout>>();
   /** the frame the floor has booked for itself, for rows it had to pass over (comeBackAt) */
   private comeBack: { at: number; t: ReturnType<typeof setTimeout> } | null = null;
@@ -317,6 +330,8 @@ export class TreeState {
     this.own.delete(id);
     this.rest.delete(id);
     this.misses.delete(id);
+    this.slow.delete(id);
+    this.savedAt.delete(id);
     this.unwatch(id);
     const retry = this.retries.get(id);
     if (retry) {
@@ -607,8 +622,10 @@ export class TreeState {
         try {
           core = await withSlot(key, cap, async () => {
             const began = this.now();
+            const save = this.maySave(id, began);
+            if (save) this.savedAt.set(id, began);
             try {
-              return await (this.d.readCore ?? this.readCore)(r);
+              return await (this.d.readCore ?? this.readCore)(r, { save });
             } finally {
               took = this.now() - began;
             }
@@ -656,13 +673,26 @@ export class TreeState {
     return read;
   }
 
-  private readCore = async (r: ReadableWorktree): Promise<CoreRead> => {
+  /** whether the read starting now may write the index back (SAVE_GAP_MS). Not while the agent
+   * is mid-turn or an op is out: both run git commands that need the lock, and an agent's own
+   * `git status` saves the index anyway. */
+  private maySave(id: string, now: number): boolean {
+    if (!this.slow.has(id) || this.d.live(id) || this.d.opOut(id)) return false;
+    return now - (this.savedAt.get(id) ?? Number.NEGATIVE_INFINITY) >= SAVE_GAP_MS;
+  }
+
+  private noteTook(id: string, took: number): void {
+    if (took >= SLOW_READ_MS) this.slow.add(id);
+    else this.slow.delete(id);
+  }
+
+  private readCore = async (r: ReadableWorktree, opts: { save: boolean }): Promise<CoreRead> => {
     const isMain = r.wt?.kind === "main";
     // main is its own base; a found row with no branch has nothing to count against, and no
     // fetch to run on its behalf
     const countable = !isMain && (!!r.wt || !!r.branch);
     const [entries, ab, unpushed] = await Promise.all([
-      statusEntries(r.path),
+      statusEntries(r.path, opts),
       isMain ? this.d.trunkBehind(r.id, r.path) : countable ? aheadBehind(r.path, r.base) : Promise.resolve({}),
       this.d.prOpen(r.id) ? aheadUpstream(r.path, r.branch) : Promise.resolve(null),
     ]);
@@ -728,6 +758,7 @@ export class TreeState {
       this.retries.delete(id);
     }
     this.misses.delete(id);
+    this.noteTook(id, at.took);
     this.rest.set(id, now + restAfter(at.took));
     if (prev && prev.signature === signature) {
       prev.readAt = now;
@@ -763,6 +794,7 @@ export class TreeState {
     const rec = this.records.get(id);
     const misses = (this.misses.get(id) ?? 0) + 1;
     this.misses.set(id, misses);
+    this.noteTook(id, took);
     // a failure answers the floor the way a read does: the next ask comes from a signal, a retry
     // while someone looks, or the floor coming round again, later each time it fails, and never
     // sooner than a read that slow rests

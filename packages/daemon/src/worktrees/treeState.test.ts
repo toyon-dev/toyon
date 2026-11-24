@@ -7,7 +7,7 @@ import { waitingFor } from "../core/limiter.ts";
 import { gitSpawns } from "../core/metrics.ts";
 import { GIT } from "../git/exec.ts";
 import type { ReadableWorktree } from "./service.ts";
-import { type CoreRead, FLOOR_MS, REST_FACTOR, TreeState, type TreeStateDeps } from "./treeState.ts";
+import { type CoreRead, FLOOR_MS, REST_FACTOR, SAVE_GAP_MS, TreeState, type TreeStateDeps } from "./treeState.ts";
 
 /** a core read answered by hand, so a test can mark the tree while a read is out */
 function gated() {
@@ -66,6 +66,7 @@ function world(over: Partial<TreeStateDeps> = {}) {
     interested: (id) => interested.has(id),
     shown: (id) => shown.has(id),
     live: () => false,
+    opOut: () => false,
     trunkBehind: async () => ({}),
     prOpen: () => false,
     afterCore: async () => false,
@@ -500,6 +501,57 @@ describe("TreeState", () => {
   });
 });
 
+describe("which read may save git's index", () => {
+  /** reads that each take `cost` on the clock, with whether each was let to save */
+  function timed(cost: number, over: Partial<TreeStateDeps> = {}) {
+    const saves: boolean[] = [];
+    const w = world({
+      readCore: async (_r, opts) => {
+        saves.push(opts.save);
+        w.tick(cost);
+        return core(`s${saves.length}`);
+      },
+      ...over,
+    });
+    return { w, saves, read: () => w.tree.refresh("a") };
+  }
+
+  test("a slow read lets the next one save, and then none until the gap has passed", async () => {
+    const { w, saves, read } = timed(2_000);
+    await read();
+    await read();
+    await read();
+    expect(saves).toEqual([false, true, false]);
+    w.tick(SAVE_GAP_MS);
+    await read();
+    expect(saves).toEqual([false, true, false, true]);
+  });
+
+  test("a row whose reads are fast never saves", async () => {
+    const { w, saves, read } = timed(200);
+    await read();
+    w.tick(SAVE_GAP_MS);
+    await read();
+    await read();
+    expect(saves).toEqual([false, false, false]);
+  });
+
+  test("not while the agent is mid-turn, and not while an op is out on the row", async () => {
+    let live = true;
+    let opOut = false;
+    const { saves, read } = timed(2_000, { live: () => live, opOut: () => opOut });
+    await read();
+    await read();
+    live = false;
+    opOut = true;
+    await read();
+    expect(saves).toEqual([false, false, false]);
+    opOut = false;
+    await read();
+    expect(saves).toEqual([false, false, false, true]);
+  });
+});
+
 describe("the core read, against a real repo", () => {
   const { repo, cleanup } = tmpRepo();
   afterAll(cleanup);
@@ -512,6 +564,7 @@ describe("the core read, against a real repo", () => {
       interested: () => false,
       shown: () => false,
       live: () => false,
+      opOut: () => false,
       trunkBehind: async () => ({}),
       prOpen: () => false,
       afterCore: async () => false,
@@ -534,7 +587,11 @@ describe("the core read, against a real repo", () => {
     sh(repo, GIT, "add", "-A");
     sh(repo, GIT, "commit", "-q", "-m", "one");
     writeFileSync(join(repo, "b.txt"), "two\n");
-    const { core, spawned } = await reader(repo)();
+    const read = reader(repo);
+    // the first read of a tree also asks how the repo shows untracked files, and that answer is
+    // kept: every read after it is the three
+    expect((await read()).spawned).toEqual({ "config --get": 1, "status --porcelain=v2": 1, "rev-list --count": 2 });
+    const { core, spawned } = await read();
     expect(core).toEqual({
       files: [{ path: "b.txt", xy: "??" }],
       ahead: 1,

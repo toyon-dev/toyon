@@ -3,20 +3,25 @@
 
 import { join } from "node:path";
 import type { GitFileStatus } from "@toyon/shared";
-import { git, gitRaw, nulSplit } from "./exec.ts";
+import { GIT, git, gitRaw, nulSplit, run, SAVES_INDEX } from "./exec.ts";
 
 /** The tree's content in one string: HEAD, a hash of the whole diff against it, and a hash of
  * each untracked file. A landing verdict is written against this and retired when it no longer
  * matches. Exact, since the verdict and the message were written about these bytes, and cheap
  * enough to take on every status read: the diff is what the changes panel already draws. */
-export async function treeFingerprint(worktreePath: string): Promise<string> {
-  const [head, diff, untracked] = await Promise.all([
+export async function treeFingerprint(
+  worktreePath: string,
+  read?: Pick<StatusRead, "files" | "folded">,
+): Promise<string> {
+  // the untracked files come from a status, the caller's own when it has just read one: a listing
+  // of its own (`ls-files --others`) walks every directory of the tree each time it is asked
+  const [head, diff, entries] = await Promise.all([
     git(worktreePath, "rev-parse", "HEAD"),
     gitRaw(worktreePath, "diff", "HEAD", "--no-renames"),
-    gitRaw(worktreePath, "ls-files", "-z", "--others", "--exclude-standard"),
+    read ?? statusEntries(worktreePath),
   ]);
   const others = await Promise.all(
-    nulSplit(untracked.out).map(async (p) => {
+    untrackedOnDisk(entries).map(async (p) => {
       try {
         const f = Bun.file(join(worktreePath, p));
         // a dumped database or a video is its size, not its bytes
@@ -52,22 +57,88 @@ export interface StatusRead extends Head {
   folded: Set<string>;
 }
 
-/** -uall, because the default collapses a wholly-untracked directory into a single `dir/` entry:
- * not a path the panel can diff, count lines for, or discard. .gitignore still applies, so the
- * set of files this adds is the set a commit would have taken anyway. */
-export const STATUS_ARGS = ["status", "--porcelain=v2", "-z", "-uall"];
+/** every file on disk that the index does not hold, sorted: the untracked entries and the paths
+ * the fold took out of them */
+function untrackedOnDisk(read: Pick<StatusRead, "files" | "folded">): string[] {
+  return [...read.files.filter((f) => f.xy === "??").map((f) => f.path), ...read.folded].sort();
+}
 
-async function readStatus(worktreePath: string, only: string[]): Promise<StatusRead> {
+/**
+ * How a whole-tree status asks for untracked files. Every reader here needs each file by its own
+ * path: the default answer folds a wholly untracked directory into one `dir/` entry, which is not
+ * a path the panel can diff, count lines for or discard. `-uall` says each file, but git keeps its
+ * untracked cache in the mode `status.showUntrackedFiles` names and walks every directory of the
+ * tree, matching each path against the ignore rules, for a request in any other mode. On a tree of
+ * 660k files that walk is the whole cost of a read. So the status asks in the repo's own mode,
+ * the one the cache was saved in by the person's own `git status`, and the directories a default
+ * answer folds are listed on their own afterwards (expandDirs). Forcing the mode with `-c` would
+ * not do: the cache would be rebuilt for it on every read, and thrown away again by the next
+ * plain `git status` in a terminal.
+ */
+async function untrackedFlag(worktreePath: string): Promise<"-uall" | "-unormal"> {
+  const known = modes.get(worktreePath);
+  if (known && Date.now() - known.at < MODE_TTL_MS) return known.flag;
+  // git compares the value as written, so `All` is not `all` to the cache either
+  const flag = git(worktreePath, "config", "--get", "status.showUntrackedFiles").then((r) =>
+    r.out === "all" ? "-uall" : "-unormal",
+  );
+  modes.set(worktreePath, { flag, at: Date.now() });
+  return flag;
+}
+
+/** How long a repo's mode is taken as read, so a status is one process and not two. A setting
+ * changed inside the window costs slow reads until it lapses, never a wrong one: both modes end in
+ * the same list. */
+const MODE_TTL_MS = 60_000;
+const modes = new Map<string, { flag: Promise<"-uall" | "-unormal">; at: number }>();
+
+/** Past this many untracked directories one listing of the whole tree is asked for instead: each
+ * is an argument, and a tree with thousands of them would outgrow what a command line may carry. */
+const EXPAND_DIRS_MAX = 100;
+
+/** The entries with each untracked directory replaced by the files in it, in the order `-uall`
+ * gives them. The listing is confined to those directories, so it costs what they hold and not
+ * what the tree holds. A repository nested in the tree stays the one `dir/` entry git gives it
+ * either way. */
+async function expandDirs(worktreePath: string, entries: GitFileStatus[]): Promise<GitFileStatus[]> {
+  const dirs = entries.filter((f) => f.xy === "??" && f.path.endsWith("/")).map((f) => f.path);
+  if (dirs.length === 0) return entries;
+  const scoped = dirs.length <= EXPAND_DIRS_MAX;
+  const list = ["ls-files", "-z", "--others", "--exclude-standard"];
+  const r = scoped
+    ? await gitRaw(worktreePath, "--literal-pathspecs", ...list, "--", ...dirs)
+    : await gitRaw(worktreePath, ...list);
+  if (!r.ok) throw new Error(`git ls-files failed: ${r.err}`);
+  const listed = nulSplit(r.out);
+  // the whole tree's listing is every untracked entry, and a status writes those last
+  if (!scoped) return [...entries.filter((f) => f.xy !== "??"), ...listed.map((path) => ({ xy: "??", path }))];
+  const under = new Map<string, GitFileStatus[]>(dirs.map((d) => [d, []]));
+  for (const path of listed) {
+    for (let i = path.indexOf("/"); i !== -1; i = path.indexOf("/", i + 1)) {
+      const dir = under.get(path.slice(0, i + 1));
+      if (!dir) continue;
+      dir.push({ xy: "??", path });
+      break;
+    }
+  }
+  return entries.flatMap((f) => (f.xy === "??" ? (under.get(f.path) ?? [f]) : [f]));
+}
+
+async function readStatus(worktreePath: string, only: string[], save = false): Promise<StatusRead> {
   // --branch, so the process that reads the tree also says the commit and the branch: a core read
   // wants both every time, and each asked on its own is a process of its own. --no-ahead-behind,
   // because the branch header otherwise walks the history to count against the upstream, a number
   // nobody here reads. Literal pathspecs, so a file named with a `*` is that file and not a glob.
-  const args = [...STATUS_ARGS, "--branch", "--no-ahead-behind"];
+  const args = (flag: string) => ["status", "--porcelain=v2", "-z", flag, "--branch", "--no-ahead-behind"];
+  // a status of named paths never reads the untracked cache and walks no further than they reach,
+  // so it can ask for every file outright
+  const flag = only.length ? "-uall" : await untrackedFlag(worktreePath);
   const r = only.length
-    ? await gitRaw(worktreePath, "--literal-pathspecs", ...args, "--", ...only)
-    : await gitRaw(worktreePath, ...args);
+    ? await run(GIT, ["--literal-pathspecs", ...args(flag), "--", ...only], worktreePath)
+    : await run(GIT, args(flag), worktreePath, save ? SAVES_INDEX : undefined);
   if (!r.ok) throw new Error(`git status failed: ${r.err}`);
-  const { files: entries, ...at } = parsePorcelain(r.out);
+  const { files: read, ...at } = parsePorcelain(r.rawOut);
+  const entries = flag === "-uall" ? read : await expandDirs(worktreePath, read);
   const { files, dropped } = foldDropped(entries);
   if (dropped.length === 0) return { files, folded: new Set(), ...at };
   const counts = new Map(
@@ -252,9 +323,11 @@ const MAX_UNTRACKED_COUNTED = 500;
 export const UNTRACKED_BYTES_MAX = 16 * 1024 * 1024;
 
 /** the uncommitted files as path and status, the paths folded against HEAD and where HEAD stands
- * (readStatus), for a reader that counts their lines later or not at all */
-export function statusEntries(worktreePath: string): Promise<StatusRead> {
-  return readStatus(worktreePath, []);
+ * (readStatus), for a reader that counts their lines later or not at all. `save` lets git write
+ * the index back when the read is done, holding `.git/index.lock` for as long as the read takes
+ * (git/exec.ts SAVES_INDEX). */
+export function statusEntries(worktreePath: string, opts: { save?: boolean } = {}): Promise<StatusRead> {
+  return readStatus(worktreePath, [], opts.save);
 }
 
 /** The +/- counts for a status already read, by path. A folded path carries its counts on the

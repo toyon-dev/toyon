@@ -4,7 +4,7 @@
 
 import { rmSync } from "node:fs";
 import { GIT, git, gitOrThrow, gitRaw, nulSplit, run } from "./exec.ts";
-import { parsePorcelain, STATUS_ARGS } from "./status.ts";
+import { statusEntries } from "./status.ts";
 
 /** outside refs/heads, so no branch list, ref picker or push ever shows it */
 export const archiveRef = (worktreeId: string) => `refs/toyon/archive/${worktreeId}`;
@@ -36,10 +36,12 @@ export async function keepState(
 ): Promise<KeptState | null> {
   const head = await git(wtPath, "rev-parse", "--verify", "HEAD");
   if (!head.ok) return null;
-  // the status the rail read, so the count is the one it showed this worktree while it was live
-  const status = await gitRaw(wtPath, ...STATUS_ARGS);
-  // a status that failed is treated as dirty: a snapshot of a clean tree costs one commit object
-  const files = status.ok ? parsePorcelain(status.out).files.length : null;
+  // the status the rail read, so the count is the one it showed this worktree while it was live.
+  // One that failed is treated as dirty: a snapshot of a clean tree costs one commit object.
+  const files = await statusEntries(wtPath).then(
+    (s) => s.files.length,
+    () => null,
+  );
   const dirty = files === null || files > 0;
   const snapshot = dirty ? await snapshotCommit(wtPath, head.out, indexFile) : null;
   if (!(await git(repoPath, "update-ref", ref, snapshot ?? head.out)).ok) return null;

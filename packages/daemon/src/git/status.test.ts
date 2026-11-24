@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { sh, tmpRepo } from "../../test/helpers/tmp-repo.ts";
 import { GIT } from "./exec.ts";
@@ -37,6 +37,18 @@ describe("statusFiles", () => {
     expect(await statusFiles(repo)).toEqual([]);
     expect(existsSync(join(repo, ".git", "index.lock"))).toBe(false);
     expect(statSync(index).mtimeMs).toBe(before);
+  });
+
+  test("the one read told to save writes it back, and leaves no lock behind", async () => {
+    const index = join(repo, ".git", "index");
+    const before = statSync(index).mtimeMs;
+    expect((await statusEntries(repo, { save: true })).files).toEqual([]);
+    expect(statSync(index).mtimeMs).toBeGreaterThan(before);
+    expect(existsSync(join(repo, ".git", "index.lock"))).toBe(false);
+    // what it saved: the next read finds the stat data fresh and has nothing to write
+    const saved = statSync(index).mtimeMs;
+    expect((await statusEntries(repo, { save: true })).files).toEqual([]);
+    expect(statSync(index).mtimeMs).toBe(saved);
   });
 });
 
@@ -251,6 +263,101 @@ describe("a file the index dropped but the disk still holds", () => {
     expect(await statusFiles(repo)).toEqual([]);
     expect(await statusFilesWithCounts(repo)).toEqual([]);
   });
+});
+
+describe("untracked files, each by its own path", () => {
+  // what `-uall` says, which is the list every reader here is owed
+  const everyFile = (repo: string) =>
+    foldDropped(parsePorcelain(sh(repo, GIT, "status", "--porcelain=v2", "-z", "-uall")).files).files;
+  const listed = async (repo: string) => (await statusFiles(repo)).map(({ xy, path }) => ({ xy, path }));
+
+  /** a tree with every kind of untracked directory in it */
+  function messy(mode?: string): { repo: string; cleanup: () => void } {
+    const { repo, cleanup } = tmpRepo();
+    if (mode) sh(repo, GIT, "config", "status.showUntrackedFiles", mode);
+    const put = (path: string, body = "one\n") => {
+      mkdirSync(dirname(join(repo, path)), { recursive: true });
+      writeFileSync(join(repo, path), body);
+    };
+    put("src/tracked.ts");
+    put("only/one.txt");
+    sh(repo, GIT, "add", "-A");
+    sh(repo, GIT, "commit", "-q", "-m", "tree");
+    put("loose.txt");
+    // beside a tracked file: git lists it by name in either mode
+    put("src/new.ts");
+    put("new dir/a.txt");
+    put("new dir/sub/b.txt");
+    // a name that is pathspec magic and a glob when it is not taken literally
+    put(":odd*[dir]/z.txt");
+    put("café/é.txt");
+    // an ignored file inside an untracked directory stays out
+    put("ign/.gitignore", "*.log\n");
+    put("ign/a.log");
+    // a repository inside the tree is one entry, at the top or inside an untracked directory
+    sh(repo, GIT, "init", "-q", join(repo, "nested"));
+    put("nested/in.txt");
+    sh(repo, GIT, "init", "-q", join(repo, "new dir", "vendored"));
+    put("new dir/vendored/in.txt");
+    // the index dropped the only file of a directory, which is then wholly untracked
+    sh(repo, GIT, "rm", "-q", "--cached", "only/one.txt");
+    put("only/one.txt", "one\ntwo\n");
+    return { repo, cleanup };
+  }
+
+  for (const mode of [undefined, "normal", "all", "no"]) {
+    test(`reads every file whatever the repo shows by default (${mode ?? "unset"})`, async () => {
+      const { repo, cleanup } = messy(mode);
+      try {
+        const files = await listed(repo);
+        expect(files).toEqual(everyFile(repo));
+        expect(files).toContainEqual({ xy: "??", path: "new dir/sub/b.txt" });
+        expect(files).toContainEqual({ xy: "??", path: "new dir/vendored/" });
+        expect(files).toContainEqual({ xy: " M", path: "only/one.txt" });
+        // the fingerprint a read hands over is the one taken without it
+        expect(await treeFingerprint(repo, await statusEntries(repo))).toBe(await treeFingerprint(repo));
+      } finally {
+        cleanup();
+      }
+    });
+  }
+
+  test("more untracked directories than one command line should carry", async () => {
+    const { repo, cleanup } = tmpRepo();
+    try {
+      for (let i = 0; i < 120; i++) {
+        mkdirSync(join(repo, `d${i}`, "in"), { recursive: true });
+        writeFileSync(join(repo, `d${i}`, "in", "f.txt"), "one\n");
+      }
+      writeFileSync(join(repo, "README.md"), "changed\n");
+      const files = await listed(repo);
+      expect(files).toHaveLength(121);
+      expect(files).toEqual(everyFile(repo));
+    } finally {
+      cleanup();
+    }
+  });
+
+  // git reports how it walked the tree, and names the cache's own counters only when the cache
+  // answered: a request in a mode the cache is not kept in walks every directory without it
+  for (const mode of [undefined, "all"]) {
+    test(`a whole-tree read is answered from git's untracked cache (${mode ?? "unset"})`, async () => {
+      const { repo, cleanup } = messy(mode);
+      const trace = join(dirname(repo), "trace.txt");
+      try {
+        sh(repo, GIT, "config", "core.untrackedCache", "true");
+        // the person's own status, which is what saves the cache
+        sh(repo, GIT, "status");
+        process.env.GIT_TRACE2_PERF = trace;
+        await statusEntries(repo);
+        delete process.env.GIT_TRACE2_PERF;
+        expect(readFileSync(trace, "utf8")).toMatch(/read_directo.*opendir/);
+      } finally {
+        delete process.env.GIT_TRACE2_PERF;
+        cleanup();
+      }
+    });
+  }
 });
 
 describe("statusFilesWithCounts", () => {

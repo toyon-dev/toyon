@@ -150,6 +150,13 @@ export function prPending(wt: Landed): boolean {
   return !!wt.pr && wt.pr.state !== "closed" && !prTaken(wt);
 }
 
+/** The step that brings main here up to origin's, as the row's line names it: the daemon says it
+ * on a press, and the shell says it for a merged PR landed with nobody pressing, where the op
+ * names no steps and this is the one that takes the time. */
+export function pullStep(defaultBranch: string): string {
+  return `pulling ${defaultBranch} from origin`;
+}
+
 /** a landing op as a sentence names it: "a land is already running here" */
 export function shipNoun(op: ShipOp): string {
   return { land: "a land", commit: "a commit", "sync-main": "a sync", "pull-main": "a pull" }[op];

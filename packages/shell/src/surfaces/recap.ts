@@ -168,7 +168,7 @@ export function prCanMerge(pr: PrState): boolean {
   );
 }
 
-const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+export const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 /** Why the verdict has no commit message, when it has none and the work needs one to land:
  * `unwritten` when no verdict has been written, or the tree moved under the one there is, so the

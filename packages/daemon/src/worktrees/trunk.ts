@@ -3,7 +3,7 @@
 // it was left where it was when origin moved) ride beside the rows as one TrunkStatus per repo,
 // under main's own record id, which the pull, a carry and the setup pane's log still address.
 
-import type { TrunkStatus, WorktreeInfo } from "@toyon/shared";
+import { pullStep, type TrunkStatus, type WorktreeInfo } from "@toyon/shared";
 import type { Hub } from "../core/hub.ts";
 import { fireAndForget, log } from "../core/log.ts";
 import type { StateStore } from "../core/state.ts";
@@ -118,7 +118,7 @@ export class Trunk {
     const main = mainOf(this.d.state, repoId);
     if (!repo || !main) return { ok: false, message: "no main checkout to pull" };
     this.lastFetch.set(repo.path, Date.now());
-    w.step(`pulling ${repo.defaultBranch} from origin`);
+    w.step(pullStep(repo.defaultBranch));
     const f = await withFetchLock(repo.path, () => w.git(repo.path, ["fetch", "--quiet"]));
     this.noteFetch(repo.id, f);
     if (!f.ok) return { ok: false, message: refused("fetch failed", f) };

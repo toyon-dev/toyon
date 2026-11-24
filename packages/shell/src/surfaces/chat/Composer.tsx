@@ -26,6 +26,7 @@ import {
   numbersAfter,
   ownedBy,
   prStanding,
+  pullStep,
   shipNoun,
   standingOf,
 } from "@toyon/shared";
@@ -79,6 +80,7 @@ import { fileRow } from "../overlays/QuickOpen.tsx";
 import { rankMentions } from "../overlays/quickOpen.ts";
 import {
   behindFact,
+  capital,
   checkTip,
   ended,
   filesLine,
@@ -1059,6 +1061,15 @@ export function Composer({
     : landing.check === "pending" && checkRun && shownRun === checkRun
       ? runLine("Checking the work", checkRun, runSecs)
       : landingLine(landing, dirty, quick, agentInfo?.name);
+  // A merged PR is landed here with no word pressed in the box: by the daemon when the poll hears
+  // of the merge, or by the pull in the changes foot. The merge is a fact and stays still; what
+  // is still running is main here following origin and the branch restarting from it, so the
+  // line names that after the fact and the step is what shines. "Merged" lit alone reads as a
+  // finished thing still going. The poll's op names no steps, and the pull is the one that takes
+  // the time. Only on the PR route, where every landing of such a row is that pull, and not over
+  // a verdict's line, which is about the work the PR is missing.
+  const prLanding = !verb && !blocked && op === "land" && policy.land === "pr" && pr?.state === "merged";
+  const prStep = prLanding ? (heldStep ?? pullStep(repo?.defaultBranch ?? "main")) : null;
   // the same words in the same places as before the press, so nothing shifts under the shine; the
   // colon comes only with a step's name, which replaces the line anyway
   const landLine = verb && landingNow ? (heldStep ? `${verb.word}: ${heldStep}` : `${verb.word} ${verb.line}`) : null;
@@ -1902,7 +1913,7 @@ export function Composer({
               }
             }}
             // the ghost draws the placeholder itself when it has a line to put under it
-            placeholder={subline || verb ? "" : placeholderText}
+            placeholder={subline || verb || prLanding ? "" : placeholderText}
             disabled={project ? project.busy : !active && !takes}
           />
           {ghost && (
@@ -1935,7 +1946,7 @@ export function Composer({
               close takes the row at once and brings it back, the reason on its chat, if the daemon
               refuses, the way any remove does. Not aria-hidden while it holds the word, which is a
               control. */}
-          {(subline || verb) && (
+          {(subline || verb || prLanding) && (
             <div className="composer-ghost composer-standing" aria-hidden={verb ? undefined : "true"}>
               <span className={cx("composer-placeholder", landingNow && "live-text")}>
                 {landingText ? (
@@ -2006,6 +2017,10 @@ export function Composer({
                           )
                         : verb.line}
                     </span>
+                  </>
+                ) : prStep ? (
+                  <>
+                    {placeholderText} <span className="live-text">{capital(prStep)}</span>
                   </>
                 ) : (
                   placeholderText

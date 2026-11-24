@@ -8,6 +8,7 @@ import {
   landPolicy,
   landWord as landWordOf,
   prStanding,
+  pullStep,
   standingOf,
   type WorktreeStatus,
 } from "@toyon/shared";
@@ -154,8 +155,17 @@ export function CommitBox({
   const repo = useStore((s) => s.repos.find((r) => r.id === active.repoId) ?? null);
   const policy = landPolicy(repo?.config ?? {});
   const landTip = describeLand(policy, repo?.defaultBranch);
+  // GitHub merged the PR and no landing has taken it: the work is on the base already, and what a
+  // landing does here is bring main up to origin's and restart the branch from it. That is a
+  // pull, on the button and on the op's line: "land" beside a merged PR reads as the work
+  // landing a second time. Only on the PR route, where a press on such a row does exactly that.
+  const prPull = policy.land === "pr" && pr?.state === "merged";
   // the button's word: land, or create PR for the one press that lands nothing yet
-  const routeWord = landWordOf(policy, standing ?? {});
+  const routeWord = prPull ? "pull" : landWordOf(policy, standing ?? {});
+  const routeTip =
+    prPull && pr
+      ? `PR #${pr.number} merged on GitHub. Pull ${repo?.defaultBranch ?? "main"} from origin and restart this branch from it`
+      : landTip;
   // what the counts here are against: main here, or origin's main where the route lands there
   const base = repo ? baseOf(repo) : "main";
   const behindLine = canSync(active) ? behindNote(base, behind) : null;
@@ -173,27 +183,23 @@ export function CommitBox({
       : `Merge ${base} into this worktree${dirty ? ", uncommitted changes kept" : ""}`;
   const canMerge = prOpen && !prMissing && prCanMerge(pr);
   // the word a land runs under here: the one the row offered, since what the row can do does not
-  // change while the op runs. Pull is the composer's word for the same op on a merged PR.
-  const landWord = canLand
-    ? routeWord
-    : canUpdate
-      ? "update"
-      : canMerge
-        ? "land"
-        : pr?.state === "merged"
-          ? "pull"
-          : "land";
+  // change while the op runs
+  const landWord = canLand ? routeWord : canUpdate ? "update" : "land";
   // the op's line, standing where its button was: the word lit is the press taken, and the step
   // follows it once held, the way the composer's line reads. A commit's step is its own word's,
-  // so there the step stands alone. Prose and not a busy button: the band already says busy, and
-  // a spinner beside a shining word was two marks for one wait.
+  // so there the step stands alone, and so does a merged PR's pull: the daemon lands one on its
+  // own when it hears of the merge, with no steps named, so the line names the one that takes
+  // the time and the composer's line says the same words. Prose and not a busy button: the band
+  // already says busy, and a spinner beside a shining word was two marks for one wait.
   const pressed =
     op === "commit"
       ? (heldStep ?? "commit")
       : op === "land"
-        ? heldStep
-          ? `${landWord}: ${heldStep}`
-          : landWord
+        ? prPull
+          ? (heldStep ?? pullStep(repo?.defaultBranch ?? "main"))
+          : heldStep
+            ? `${landWord}: ${heldStep}`
+            : landWord
         : null;
   // the op's whole line: the run behind the word rides after it once it has lasted, its stage,
   // its time against the ceiling and its status ("update: committing · pre-commit hook · 4m 13s
@@ -310,7 +316,7 @@ export function CommitBox({
                 </Button>
               )}
               {owned && canLand && (
-                <Button tone="primary" disabled={!!op} data-tip={landTip} onClick={land}>
+                <Button tone="primary" disabled={!!op} data-tip={routeTip} onClick={land}>
                   {routeWord}
                 </Button>
               )}

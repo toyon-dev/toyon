@@ -60,8 +60,9 @@ export function HandedRow({
   return (
     <DaemonRow
       // a plan came with a worktree made for it, the branch that left the origin; a message made
-      // none, and wears the glyph its row in the origin's chat does
-      icon={plan ? "handoff" : "relay"}
+      // none, and wears the arrow coming in, the other half of the one its row in the origin's
+      // chat wears going out
+      icon={plan ? "handoff" : "incoming"}
       word={plan ? "plan" : "message"}
       tone="accent"
       at={item.ts}
@@ -102,7 +103,7 @@ export function NewsRow({
   const from = item.from ?? [];
   return (
     <DaemonRow
-      icon="relay"
+      icon="incoming"
       word="message"
       tone="accent"
       at={item.ts}

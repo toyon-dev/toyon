@@ -104,8 +104,9 @@ const NAME_ICON = new Map<string, IconName>([
   [STOP_TOOL, "stop"],
   // the other half of ExitPlanMode, which the adapter kinds as a mode switch
   ["EnterPlanMode", "swap"],
-  // a message that left this chat, by the glyph the composer's own send wears
-  [PEER_TOOL, "send"],
+  // a message that left this chat for another agent's: the glyph Toyon's own "sent" row wears.
+  // Not the composer's arrow, which in a transcript points at the row above
+  [PEER_TOOL, "outgoing"],
 ]);
 
 /** The kind Claude's adapter gives each of its own tools, for the one call the shell shapes before

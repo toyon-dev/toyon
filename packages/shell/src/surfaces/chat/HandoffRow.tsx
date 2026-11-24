@@ -134,9 +134,9 @@ export function HandoffRow({ item, worktreeId }: { item: HandoffItem; worktreeId
   }
   return (
     // the glyph is what moved: a branch leaving for a worktree, or, where the list made none, a
-    // message put into a chat
+    // message going out to a chat
     <DaemonRow
-      icon={word === "sent" ? "relay" : "handoff"}
+      icon={word === "sent" ? "outgoing" : "handoff"}
       word={word}
       tone="accent"
       at={item.ts}

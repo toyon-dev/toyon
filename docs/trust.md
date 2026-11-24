@@ -54,6 +54,7 @@ Each chat has a permission mode: auto, ask or plan. The mode is per chat, so one
 A copy's commits are written to the main repository's `.git`, so the sandbox has to allow writes there. The sandbox cannot distinguish a commit from a push.
 
 - **Claude Code and OpenCode.** `git push`, branch deletion, `git worktree` and `gh pr` are refused by rules in the configuration Toyon writes. The rules are checked before a command runs.
+- **Claude Code.** Its `EnterWorktree` and `ExitWorktree` tools are denied by name in the same configuration.
 - **Codex.** There are no such rules.
 - **All agents** are instructed not to push.
 

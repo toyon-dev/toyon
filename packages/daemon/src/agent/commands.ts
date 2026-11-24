@@ -20,8 +20,14 @@ export const DENIED_COMMANDS = [
   "gh pr merge",
 ] as const;
 
+/** Claude Code's own tools that change the worktree list without a shell command, so no command
+ * rule sees them. EnterWorktree makes a worktree under `.claude/worktrees` and moves the session
+ * into it: the chat would stay on this row while the edits went to one the daemon has no port,
+ * check or landing for. A bare tool name in a deny rule takes the tool away from the model. */
+export const CLAUDE_DENIED_TOOLS = ["EnterWorktree", "ExitWorktree"] as const;
+
 /** Claude Code's form. Deny rules win over every allow in every settings scope and are checked even
  * when the sandbox auto-allows Bash; a compound command is split and each part matched. */
 export function claudeDenyRules(): string[] {
-  return DENIED_COMMANDS.map((c) => `Bash(${c}:*)`);
+  return [...DENIED_COMMANDS.map((c) => `Bash(${c}:*)`), ...CLAUDE_DENIED_TOOLS];
 }

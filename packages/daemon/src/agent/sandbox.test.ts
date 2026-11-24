@@ -155,6 +155,15 @@ describe("sandbox", () => {
     for (const r of claudeDenyRules()) expect(deny).toContain(r);
   });
 
+  test("Claude's own worktree tools are denied by name, beside the command rules", async () => {
+    const { wt } = linkedWorktree();
+    await writeClaudeLocalSettings(wt, await worktreeBounds(wt));
+    const deny: string[] = JSON.parse(readFileSync(join(wt, SETTINGS_REL), "utf8")).permissions.deny;
+    expect(deny).toContain("EnterWorktree");
+    expect(deny).toContain("ExitWorktree");
+    expect(deny).toContain("Bash(git worktree add:*)");
+  });
+
   test("an unparsable existing file is kept as .bak and replaced", async () => {
     const { wt } = linkedWorktree();
     const file = join(wt, SETTINGS_REL);

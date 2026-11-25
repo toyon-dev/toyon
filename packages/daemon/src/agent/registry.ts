@@ -378,6 +378,7 @@ export class AgentRegistry {
   private installedIn(base: string, spec: AgentSpec): string | null {
     const name = this.packageName(spec);
     if (!name || spec.run.kind === "command") return null;
+    if (!resolvedFor(join(base, spec.id), name)) return null;
     const pkgDir = join(base, spec.id, "node_modules", name);
     if (spec.run.kind === "npm-native") {
       const bin = join(pkgDir, spec.run.bin);
@@ -494,8 +495,10 @@ export class AgentRegistry {
         // a link left from a borrow would carry this install into the other daemon's dir
         disown(dir);
         mkdirSync(dir, { recursive: true });
+        const manifest = join(dir, "package.json");
+        const before = existsSync(manifest) ? readFileSync(manifest, "utf8") : null;
         writeFileSync(
-          join(dir, "package.json"),
+          manifest,
           `${JSON.stringify({ name: `toyon-agent-${id}`, private: true, dependencies: { [pkg]: version } }, null, 2)}\n`,
         );
         log.info("agents", `installing ${pkg}@${version} for ${id}`);
@@ -530,6 +533,10 @@ export class AgentRegistry {
           log.info("agents", `${id} ready`);
           return;
         }
+        // node_modules is still what the manifest before this one resolved, and `resolvedFor`
+        // reads the manifest: left naming this package, it would pass another package's
+        // dependencies off as this one's at the next look
+        if (before !== null) writeFileSync(manifest, before);
         this.fail(id, why?.text || "no bin after install", why?.held === true);
       } catch (e) {
         // a directory that cannot be written is a failure the shell shows like any other, and
@@ -762,6 +769,23 @@ export function loadAgentRegistry(
     undefined,
     agentsFrom,
   );
+}
+
+/** Whether the tree in an agent's install directory was resolved for `pkg`. bun hoists an adapter's
+ * dependencies beside it and prunes nothing, so a Toyon that pins another package for the same
+ * agent (a fork and its upstream) swaps those dependencies and leaves this package's folder in
+ * place, at its version, to start against them and exit. The manifest names whose tree it is. A
+ * directory with no manifest was filled by another route and is taken as it stands. */
+function resolvedFor(dir: string, pkg: string): boolean {
+  try {
+    const { dependencies } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+    return dependencies === undefined || pkg in dependencies;
+  } catch {
+    // no manifest, or one cut short mid-write: neither says the tree is another package's
+    return true;
+  }
 }
 
 /** remove <dir>/<id> when it is a link, never what it points at; a real dir or nothing stays.

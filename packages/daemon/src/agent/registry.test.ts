@@ -458,6 +458,46 @@ describe("agent registry", () => {
     expect(reg.adapters()[0]).toEqual({ id: "claude", installed: "0.106.0-toyon.1", pinned: "0.106.0-toyon.1" });
   });
 
+  test("a directory another Toyon resolved for a different package is fetched again, never run as it stands", async () => {
+    const dir = tmp();
+    const FORK = "@toyon-dev/claude-agent-acp";
+    const UPSTREAM = "@agentclientprotocol/claude-agent-acp";
+    const manifest = () => JSON.parse(readFileSync(join(dir, "claude", "package.json"), "utf8")).dependencies;
+    // a Toyon from before the fork: same agent id, the upstream package
+    const older = () =>
+      new AgentRegistry(
+        BUILTIN_AGENTS.map((a) =>
+          a.id === "claude" ? { ...a, run: { ...a.run, pkg: UPSTREAM, version: "0.84.0" } } : a,
+        ) as AgentSpec[],
+        dir,
+        fakeInstaller().installer,
+      ).install("claude");
+    await new AgentRegistry(BUILTIN_AGENTS, dir, fakeInstaller().installer).install("claude");
+    await older();
+    // the fork's folder is still there at the pinned version, over the upstream's dependencies
+    expect(existsSync(join(dir, "claude", "node_modules", FORK, "dist", "index.js"))).toBe(true);
+    expect(manifest()).toEqual({ [UPSTREAM]: "0.84.0" });
+
+    const { installer, calls } = fakeInstaller();
+    const reg = new AgentRegistry(BUILTIN_AGENTS, dir, installer);
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: false, reason: "not installed yet" });
+    expect(() => reg.require("claude")).toThrow(/not ready/);
+    await reg.install("claude");
+    expect(calls).toEqual([`${FORK}@0.106.0-toyon.1`]);
+    expect(manifest()).toEqual({ [FORK]: "0.106.0-toyon.1" });
+    expect(reg.infos()[0]).toMatchObject({ id: "claude", available: true });
+
+    // a fetch that fails leaves the directory saying whose tree it holds, so the next daemon
+    // does not launch the fork over it either
+    await older();
+    const offline = () => new AgentRegistry(BUILTIN_AGENTS, dir, fakeInstaller(new Set([FORK])).installer);
+    const failed = offline();
+    await failed.install("claude");
+    expect(failed.infos()[0]).toMatchObject({ available: false, reason: "install failed: registry unreachable" });
+    expect(manifest()).toEqual({ [UPSTREAM]: "0.84.0" });
+    expect(offline().infos()[0]).toMatchObject({ available: false, reason: "not installed yet" });
+  });
+
   describe("borrowing another daemon's adapters", () => {
     const CLAUDE = "@toyon-dev/claude-agent-acp";
     const PIN = "0.106.0-toyon.1";

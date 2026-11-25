@@ -153,11 +153,16 @@ Toyon runs `git status` in each copy to list its changes. In a repository with h
 
 ```json
 {
-  "setup": ["git config core.untrackedCache true", "npm install"]
+  "setup": [
+    "git config --get core.untrackedCache >/dev/null || git config core.untrackedCache true",
+    "npm install"
+  ]
 }
 ```
 
 - The command writes the repository's git config. Main and every copy share it.
+- It writes only when the value is unset. A value you chose stays, in any git config file.
+- The cache needs a filesystem that updates a folder's modification time. To test yours, run `git update-index --test-untracked-cache`.
 - `status.showUntrackedFiles` can stay at any value.
 
 ## Sleep

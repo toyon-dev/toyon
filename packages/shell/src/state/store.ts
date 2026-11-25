@@ -324,6 +324,8 @@ export interface CardDraft {
   id: string;
   draft: AskAnswer[];
   current: number;
+  /** by question, the option a multi-select's note was opened on (ask.ts `notedOption`) */
+  noteOn?: Readonly<Record<number, string>>;
 }
 
 /** where up-arrow has walked the composer back to (surfaces/chat/recall.ts) */

@@ -12,6 +12,7 @@ import { useDispatch, useSock, useStore, useStoreInstance } from "../../state/co
 import type { HeldFrame } from "../../state/outbox.ts";
 import { isUploading } from "../../state/pending.ts";
 import { useLocalField, useSendsRefused } from "../../state/selectors.ts";
+import type { CardDraft } from "../../state/store.ts";
 import { Button, IconButton } from "../../ui/Button.tsx";
 import { type Choice, type ChoiceField, Choices } from "../../ui/Choices.tsx";
 import { handleChoiceKey } from "../../ui/choiceKeys.ts";
@@ -33,6 +34,10 @@ import {
   enterMovesOn,
   enterSends,
   isOwnRow,
+  type NoteOn,
+  notedOption,
+  noteOnAt,
+  noteTarget,
   openNote,
   ownChosen,
   pageCount,
@@ -77,16 +82,16 @@ export function QuestionCard({
   // parking keep them; the cursor is this mount's own and lands on the question's pick
   const stored = useLocalField(worktreeId, "card");
   const held = useMemo(
-    () => (stored?.id === item.id ? stored : { id: item.id, draft: emptyDraft(questions), current: 0 }),
+    (): CardDraft => (stored?.id === item.id ? stored : { id: item.id, draft: emptyDraft(questions), current: 0 }),
     [stored, item.id, questions],
   );
-  const { draft, current } = held;
+  const { draft, current, noteOn } = held;
   // the page after the questions, where they read back before they go; no question is open there
   const review = current === sendPage(questions);
   const q = questions[current];
   const answer = draft[current];
   const multi = !!q?.multi;
-  const [cursor, setCursor] = useState(() => cursorFor(q, answer));
+  const [cursor, setCursor] = useState(() => cursorFor(q, answer, noteOn?.[current]));
   const own = useRef<HTMLTextAreaElement>(null);
   // the caret goes into the field before the on-screen keyboard is up; the keyboard then takes
   // half the window, the pages shrink to what is left, and the field is below their new foot
@@ -99,8 +104,12 @@ export function QuestionCard({
     view.addEventListener("resize", show);
     return () => view.removeEventListener("resize", show);
   }, []);
-  const write = (next: AskAnswer[], at: number) =>
-    dispatch({ a: "card-draft", id: worktreeId, card: { id: item.id, draft: next, current: at } });
+  const write = (next: AskAnswer[], at: number, on: NoteOn | undefined = noteOn) =>
+    dispatch({
+      a: "card-draft",
+      id: worktreeId,
+      card: { id: item.id, draft: next, current: at, ...(on ? { noteOn: on } : {}) },
+    });
 
   // the daemon found down or unreachable: an answer sent now would wait in the socket's queue for a
   // card the agent may have moved past, so every way of answering waits for the daemon
@@ -137,32 +146,43 @@ export function QuestionCard({
   };
   /** a question by index: the cursor on its pick, or its first option */
   const go = (at: number) => {
-    setCursor(cursorFor(questions[at], draft[at]));
+    setCursor(cursorFor(questions[at], draft[at], noteOn?.[at]));
     write(draft, at);
   };
-  /** the typed answer's field, opened as the "other" row or as a note on the pick; the caret goes
-   * in once the field is painted, which is the commit after this one */
-  const type = (asOwn: boolean) => {
+  /** the caret goes into the typed answer's field once it is painted, which is the commit after
+   * the one that opens it */
+  const toField = () => requestAnimationFrame(() => own.current?.focus());
+  /** the "other" row's field: what is typed there is the answer itself, on no option */
+  const typeOwn = () => {
     if (!q?.note) return;
-    write(openNote(draft, current, asOwn, multi), current);
-    requestAnimationFrame(() => own.current?.focus());
+    write(openNote(draft, current, true, multi), current, noteOnAt(noteOn, current, undefined));
+    toField();
   };
   /** a note on a row: `n` on the row the cursor is on, or a slide on a row on touch. The row
-   * becomes the pick without moving on, since the note is still to be written; with nothing
-   * picked the field read as the "other" row's answer, which is not what the key says. On the
-   * "other" row the field is the answer itself. */
+   * becomes a pick without moving on, since the note is still to be written; with nothing
+   * picked the field read as the "other" row's answer, which is not what the key says. A
+   * multi-select's row is ticked by it and holds the field under itself the same way: opened on
+   * the "other" row instead, the note ticked a row the hand was not on and read as one more
+   * answer. On the "other" row the field is the answer itself. */
   const noteAt = (oi: number) => {
     if (!q?.note) return;
     const option = q.options[oi];
     setCursor(oi);
-    if (!option || multi) return type(!option);
-    write(openNote(choose(draft, current, option.value, false), current, false, false), current);
-    requestAnimationFrame(() => own.current?.focus());
+    if (!option) return typeOwn();
+    const ticked = multi && answer?.selected.includes(option.value);
+    const picked = ticked ? draft : choose(draft, current, option.value, multi);
+    write(openNote(picked, current, false, multi), current, noteOnAt(noteOn, current, option.value));
+    toField();
   };
   const note = () => noteAt(cursor);
+  /** the foot's note, on what is already picked */
+  const notePick = () => {
+    const at = q ? noteTarget(q, answer, cursor) : -1;
+    if (at !== -1) noteAt(at);
+  };
   /** the question is answered: on to what is still open, or the send when nothing is */
   const moveOn = (next: AskAnswer[]) => {
-    const to = advance(questions, next, current);
+    const to = advance(questions, next, current, noteOn);
     setCursor(to.cursor);
     write(next, to.current);
     if (to.send && canSubmit(questions, next)) send(next);
@@ -170,7 +190,7 @@ export function QuestionCard({
   const pick = (oi: number) => {
     if (isOwnRow(q, oi)) {
       setCursor(oi);
-      return type(true);
+      return typeOwn();
     }
     const option = q?.options[oi];
     if (!q || !option) return;
@@ -198,7 +218,7 @@ export function QuestionCard({
     const next = dropBlankNote(draft, current);
     if (next !== draft) {
       write(next, current);
-      setCursor(cursorFor(q, next[current]));
+      setCursor(cursorFor(q, next[current], noteOn?.[current]));
     }
     root.current?.focus();
   };
@@ -212,7 +232,7 @@ export function QuestionCard({
     if (!answered(next[current])) {
       if (next !== draft) {
         write(next, current);
-        setCursor(cursorFor(q, next[current]));
+        setCursor(cursorFor(q, next[current], noteOn?.[current]));
       }
       return;
     }
@@ -277,7 +297,7 @@ export function QuestionCard({
         </Button>
       )}
       {qq?.note && a && a.selected.length > 0 && a.note === undefined && (
-        <Button tone="quiet" size="md" onClick={() => type(false)}>
+        <Button tone="quiet" size="md" onClick={notePick}>
           <Kbd k="n" chip />
           add a note
         </Button>
@@ -322,7 +342,8 @@ export function QuestionCard({
   const page = (qq: AskQuestion, i: number) => {
     const open = i === current;
     const a = draft[i];
-    const owning = ownChosen(a, !!qq.multi);
+    const noted = notedOption(qq, a, noteOn?.[i]);
+    const owning = ownChosen(qq, a, noteOn?.[i]);
     /* the field a row holds once something is typed against it. The on-screen keyboard's return
        key is named for what enter does from here: on a lone question the answer is the send, with
        several it walks on (to a question still open, or the send page). Decided by the shape of
@@ -349,12 +370,11 @@ export function QuestionCard({
         ),
         description: o.description,
         sample: o.preview,
-        // a multi-select's `n` is the typed answer, not a note
-        hint:
-          qq.note && !qq.multi ? { k: "n", label: "add a note", icon: "edit", on: a?.note === undefined } : undefined,
+        hint: qq.note ? { k: "n", label: "add a note", icon: "edit", on: a?.note === undefined } : undefined,
         checked: on,
         // the pick with a note open on it holds the note's field
-        field: on && !owning && a?.note !== undefined ? field("a note for the agent, sent with your pick") : undefined,
+        field:
+          o.value === noted ? field(`a note for the agent, sent with your ${qq.multi ? "picks" : "pick"}`) : undefined,
       };
     });
     // the typed answer as one more row, numbered after the options so it lines up with them and

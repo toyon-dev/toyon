@@ -19,6 +19,9 @@ import {
   enterSends,
   isOwnRow,
   nextUnanswered,
+  notedOption,
+  noteOnAt,
+  noteTarget,
   openAsk,
   openNote,
   ownChosen,
@@ -162,13 +165,49 @@ describe("the typed answer", () => {
   });
 
   test("the other row is the pick while the field is open with nothing else chosen", () => {
-    expect(ownChosen({ selected: [], note: "" }, false)).toBe(true);
-    expect(ownChosen({ selected: ["jwt"], note: "" }, false)).toBe(false);
-    expect(ownChosen({ selected: ["jwt"], note: "" }, true)).toBe(true);
-    expect(ownChosen({ selected: [] }, false)).toBe(false);
-    expect(ownChosen(undefined, false)).toBe(false);
+    expect(ownChosen(noted, { selected: [], note: "" })).toBe(true);
+    expect(ownChosen(noted, { selected: ["jwt"], note: "" })).toBe(false);
+    expect(ownChosen(noted, { selected: [] })).toBe(false);
+    expect(ownChosen(noted, undefined)).toBe(false);
     expect(cursorFor(noted, { selected: [], note: "" })).toBe(2);
-    expect(cursorFor(multi, { selected: ["jwt"], note: "x" })).toBe(2);
+  });
+
+  test("a multi-select's note sits under the option it was opened on, while that stays ticked", () => {
+    const a = { selected: ["cookies", "jwt"], note: "x" };
+    expect(notedOption(multi, a, "jwt")).toBe("jwt");
+    expect(ownChosen(multi, a, "jwt")).toBe(false);
+    expect(cursorFor(multi, a, "jwt")).toBe(1);
+    // opened on the "other" row, the ticks do not claim it
+    expect(notedOption(multi, a)).toBeUndefined();
+    expect(ownChosen(multi, a)).toBe(true);
+    expect(cursorFor(multi, a)).toBe(2);
+    // unticked, what was typed is the "other" row's
+    expect(notedOption(multi, { selected: ["cookies"], note: "x" }, "jwt")).toBeUndefined();
+    expect(ownChosen(multi, { selected: ["cookies"], note: "x" }, "jwt")).toBe(true);
+    // no field open: nothing is noted, whatever the option remembered
+    expect(notedOption(multi, { selected: ["jwt"] }, "jwt")).toBeUndefined();
+    expect(ownChosen(multi, { selected: ["jwt"] }, "jwt")).toBe(false);
+    // a single-select's note is on its pick, with nothing to remember
+    expect(notedOption(noted, { selected: ["jwt"], note: "" })).toBe("jwt");
+    expect(notedOption(noted, { selected: [], note: "" })).toBeUndefined();
+  });
+
+  test("the noted option is kept by question, and taken off again", () => {
+    const on = noteOnAt(undefined, 1, "jwt");
+    expect(on).toEqual({ 1: "jwt" });
+    expect(noteOnAt(on, 0, "cookies")).toEqual({ 0: "cookies", 1: "jwt" });
+    expect(noteOnAt(on, 1, undefined)).toEqual({});
+    expect(noteOnAt(undefined, 0, undefined)).toEqual({});
+  });
+
+  test("the foot's note opens on the pick: a multi-select's cursor row when ticked, else its first tick", () => {
+    expect(noteTarget(noted, { selected: ["jwt"] }, 0)).toBe(1);
+    expect(noteTarget(noted, { selected: [] }, 0)).toBe(-1);
+    expect(noteTarget(multi, { selected: ["cookies", "jwt"] }, 1)).toBe(1);
+    expect(noteTarget(multi, { selected: ["jwt"] }, 0)).toBe(1);
+    // the cursor on the "other" row is on no option
+    expect(noteTarget(multi, { selected: ["cookies", "jwt"] }, 2)).toBe(0);
+    expect(noteTarget(multi, { selected: [] }, 0)).toBe(-1);
   });
 
   test("a field left blank closes; one written in stays", () => {

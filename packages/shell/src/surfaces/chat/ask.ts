@@ -65,7 +65,8 @@ export function setNote(draft: AskAnswer[], q: number, note: string | undefined)
 /** The typed answer is reached two ways, and both open the same field, since the wire has one
  * free-text slot per question: the agent reads it as the answer when nothing is picked and as a
  * caveat on the pick when something is. `own` is the "other" row, so a single pick is dropped for
- * it; a note (`n`) keeps the pick and rides with it. A multi-select keeps its picks either way. */
+ * it; a note (`n`) keeps the pick and rides with it. A multi-select keeps its picks either way,
+ * and which row holds the field there is `notedOption`'s to say. */
 export function openNote(draft: AskAnswer[], q: number, own: boolean, multi: boolean): AskAnswer[] {
   return draft.map((a, i) => {
     if (i !== q) return a;
@@ -88,10 +89,40 @@ export function isOwnRow(q: AskQuestion | undefined, i: number): boolean {
   return !!q?.note && i === q.options.length;
 }
 
+/** where the note on each question's multi-select sits, by the question's index: the option `n`
+ * was pressed on. The box's own, never sent: the wire has the one text a question. */
+export type NoteOn = Readonly<Record<number, string>>;
+
+/** `on` with question `q`'s note set on an option, or taken off it */
+export function noteOnAt(on: NoteOn | undefined, q: number, value: string | undefined): NoteOn {
+  const { [q]: _, ...rest } = on ?? {};
+  return value === undefined ? rest : { ...rest, [q]: value };
+}
+
+/** The option the typed text sits under as a note, or undefined when it is the "other" row's
+ * answer or nothing is typed. A single-select's note is on its pick. A multi-select keeps its
+ * ticks whichever row the field was opened on, so the ticks cannot say where it sits: `on` is the
+ * option `n` was pressed on, and it holds the field for as long as it stays ticked. Unticked, the
+ * text is the "other" row's, so nothing typed goes with the tick. */
+export function notedOption(q: AskQuestion, a: AskAnswer | undefined, on?: string): string | undefined {
+  if (!a || a.note === undefined) return undefined;
+  if (!q.multi) return a.selected[0];
+  return on !== undefined && a.selected.includes(on) ? on : undefined;
+}
+
 /** the "other" row wears the check while the typed answer stands in for a pick: the field is open
- * and, in a single-select, nothing else is chosen */
-export function ownChosen(a: AskAnswer | undefined, multi: boolean): boolean {
-  return !!a && a.note !== undefined && (multi || a.selected.length === 0);
+ * and no option holds it as a note */
+export function ownChosen(q: AskQuestion, a: AskAnswer | undefined, on?: string): boolean {
+  return !!a && a.note !== undefined && notedOption(q, a, on) === undefined;
+}
+
+/** The row the foot's "add a note" opens the field on, or -1 with nothing picked: the pick, and
+ * on a multi-select the cursor's row when it is ticked, else the first tick. The press comes from
+ * under the list, so the cursor is only where the pointer last crossed, and a note opened on an
+ * unticked row there would tick it. */
+export function noteTarget(q: AskQuestion, a: AskAnswer | undefined, cursor: number): number {
+  const ticked = (o: AskQuestion["options"][number] | undefined) => !!o && !!a?.selected.includes(o.value);
+  return q.multi && ticked(q.options[cursor]) ? cursor : q.options.findIndex(ticked);
 }
 
 /** a pick, or something typed as the person's own answer */
@@ -218,12 +249,13 @@ export function decidedPlan(item: AskItem): { file: string | null; text: string;
   return { file, text: file ? "" : (item.ask.detail ?? ""), choice: choice.name };
 }
 
-/** where the cursor lands on arriving at a question: its pick, the "other" row when the typed
- * answer is the pick, else its first option */
-export function cursorFor(q: AskQuestion | undefined, a: AskAnswer | undefined): number {
+/** where the cursor lands on arriving at a question: the "other" row when the typed answer is the
+ * pick, the row holding a note, its pick, else its first option */
+export function cursorFor(q: AskQuestion | undefined, a: AskAnswer | undefined, on?: string): number {
   if (!q) return 0;
-  if (ownChosen(a, !!q.multi) && q.note) return q.options.length;
-  const at = a?.selected[0] ? q.options.findIndex((o) => o.value === a.selected[0]) : -1;
+  if (ownChosen(q, a, on) && q.note) return q.options.length;
+  const lead = notedOption(q, a, on) ?? a?.selected[0];
+  const at = lead ? q.options.findIndex((o) => o.value === lead) : -1;
   return at === -1 ? 0 : at;
 }
 
@@ -264,12 +296,13 @@ export function advance(
   questions: AskQuestion[],
   draft: AskAnswer[],
   from: number,
+  on?: NoteOn,
 ): { current: number; cursor: number; send: boolean } {
   const next = nextUnanswered(questions, draft, from);
-  if (next !== -1) return { current: next, cursor: cursorFor(questions[next], draft[next]), send: false };
+  if (next !== -1) return { current: next, cursor: cursorFor(questions[next], draft[next], on?.[next]), send: false };
   const review = sendPage(questions);
   if (review !== -1) return { current: review, cursor: 0, send: false };
-  return { current: from, cursor: cursorFor(questions[from], draft[from]), send: true };
+  return { current: from, cursor: cursorFor(questions[from], draft[from], on?.[from]), send: true };
 }
 
 const RECOMMENDED = /\s*\(recommended\)\s*$/i;

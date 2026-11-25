@@ -147,6 +147,19 @@ export default defineConfig({
 });
 ```
 
+## Large repositories
+
+Toyon runs `git status` in each copy to list its changes. In a repository with hundreds of thousands of files, git's untracked cache makes that faster. Git leaves the cache off by default. To turn it on, add the command to `setup`:
+
+```json
+{
+  "setup": ["git config core.untrackedCache true", "npm install"]
+}
+```
+
+- The command writes the repository's git config. Main and every copy share it.
+- `status.showUntrackedFiles` can stay at any value.
+
 ## Sleep
 
 A copy's servers start when you open it.

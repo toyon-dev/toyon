@@ -696,8 +696,8 @@ export function ChangesDock({ width, placement = "dock" }: { width?: number; pla
       className={cx("changes-dock", onScreen && "changes-screen", !onScreen && (!changesOpen || bare) && "collapsed")}
       style={onScreen ? undefined : { width }}
     >
-      {/* the strip holds words and a key, so a tab never shifts as the work moves; what the working
-          tree holds is said on the changes tab's hover. On a screen it is the quiet
+      {/* the strip holds words alone, so a tab never shifts as the work moves; what the working
+          tree holds is said on the changes tab's hover, where its key shows too. On a screen it is the quiet
           form: the bar over it already holds a control, and a second recess under that read as a
           band heavier than the one above it */}
       {!archived && (

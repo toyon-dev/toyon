@@ -94,12 +94,25 @@
   .tabs-fill .tab-btn {
     justify-content: center;
   }
-  /* the tab's key, in the quietest tier whichever tab is open: it is there to be found, not read
-   each time. It keeps its own width, and a strip that can run out of room for it drops it whole
-   (the changes dock does, by its strip's width). */
+  /* the tab's key, in the quietest tier whichever tab is open, and only under the pointer: it is
+   there to be found, not read each time. It hangs off the end of the label it belongs to and is
+   out of the flow, so the label is centred as a tab with no key is and the key arriving moves
+   nothing. The button clips it at the tab's edge, so a strip that can run out of room for it
+   drops it whole (the changes dock does, by its strip's width). */
+  .tab-keyed {
+    position: relative;
+  }
   .tab-key {
-    flex-shrink: 0;
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    translate: 0 -50%;
+    margin-left: 6px;
     color: var(--text2);
+    visibility: hidden;
+  }
+  :where([data-hover]) .tab:hover .tab-key {
+    visibility: visible;
   }
   /* the trail is the open tab's alone, so the tab grows by the slot when it opens. It floats over
    the button's end rather than sitting beside it, so the button is the whole tab and the slot is

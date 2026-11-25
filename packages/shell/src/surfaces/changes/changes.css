@@ -68,14 +68,15 @@
   .changes-screen .tab-fit {
     --tab-inset: 18px;
   }
-  /* The changes tab says its key beside its word while the strip has room for both at an inset the
-     eye still reads as one. Under that the key goes whole: the word is what the tab is, and a key
-     cut at the tab's edge is noise. The strip is the container, since it takes its width from the
-     dock and never from its tabs. */
+  /* The changes tab hangs its key off the end of its word under the pointer, in the half of the
+     tab the centred word leaves free, while that half holds it at an inset the eye still reads as
+     one. Under that the key goes whole: the word is what the tab is, and a key cut at the tab's
+     edge is noise. The strip is the container, since it takes its width from the dock and never
+     from its tabs. */
   .changes-dock:not(.changes-screen) > .tabs {
     container-type: inline-size;
   }
-  @container (max-width: 215px) {
+  @container (max-width: 267px) {
     .changes-dock .tab-key {
       display: none;
     }

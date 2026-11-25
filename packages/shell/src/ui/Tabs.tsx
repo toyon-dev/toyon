@@ -18,8 +18,9 @@ export type TabItem<Id extends string> = {
    * sibling of the tab's own button floated over its end rather than a child, since a button
    * cannot hold one, and the tab's button stays the whole tab. */
   trail?: ReactNode;
-  /** the key that opens this tab, after its label in the quiet tier: a tab that is a word has the
-   * room to say its own key, and a hover that only named the word it stands on said nothing else */
+  /** the key that opens this tab, after its label in the quiet tier while the tab is hovered. It
+   * hangs off the label's end and takes no room, so the label stands where it would without one
+   * and nothing moves when the key shows. */
   chord?: string;
   tip?: ReturnType<typeof tip>;
   /** what a right-click on the tab offers */
@@ -148,8 +149,14 @@ export function Tabs<Id extends string>({
                 {...(it.ariaLabel ? { "aria-label": it.ariaLabel } : {})}
               >
                 {it.lead}
-                {it.label}
-                {it.chord && <Kbd k={it.chord} className="tab-key" />}
+                {it.chord ? (
+                  <span className="tab-keyed">
+                    {it.label}
+                    <Kbd k={it.chord} className="tab-key" />
+                  </span>
+                ) : (
+                  it.label
+                )}
               </button>
               {open && it.trail && <span className="tab-trail">{it.trail}</span>}
             </div>
